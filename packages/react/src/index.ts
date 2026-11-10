@@ -16,3 +16,4 @@ export {
   matchesSymbol,
   type SymbolPaletteProps,
 } from './SymbolPalette';
+export { ViewportControls, type ViewportControlsProps } from './ViewportControls';
