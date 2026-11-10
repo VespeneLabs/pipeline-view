@@ -6,3 +6,7 @@ export { SymbolRegistry, globalSymbols, registerSymbol } from './symbols/registr
 export { Diagram, type InternalEvents } from './diagram/diagram';
 export { Emitter } from './diagram/emitter';
 export { ModelStore, validateModel } from './model/store';
+export * from './diagram/geometry';
+export * from './viewport/math';
+export type { View, ViewLayers } from './viewport/view';
+export { DRAG_THRESHOLD } from './viewport/controller';
