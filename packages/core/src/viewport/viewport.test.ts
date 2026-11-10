@@ -131,7 +131,10 @@ describe('viewport API', () => {
     expect(d.view!.overlay.style.transform.replace(/,\s+/g, ',')).toBe(
       'translate(10px,20px) scale(2)',
     );
-    expect(onChange).toHaveBeenCalledExactlyOnceWith({ viewport: { x: 10, y: 20, zoom: 2 } });
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({
+      viewport: { x: 10, y: 20, zoom: 2 },
+      final: true,
+    });
     d.setViewport({ x: 10, y: 20, zoom: 2 });
     expect(onChange).toHaveBeenCalledTimes(1);
   });

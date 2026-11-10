@@ -73,8 +73,13 @@ export interface PipelineViewProps {
   options?: Omit<DiagramOptions, 'mode' | 'theme' | 'symbols' | 'htmlRenderers'>;
   /** Editor options (guides, port snap). The editor attaches itself whenever mode is 'edit'. Read once. */
   editor?: EditorControllerOptions;
-  /** Zoom to fit after each model load. Default true. */
-  fitOnLoad?: boolean;
+  /**
+   * Zoom to fit after a model load, once HTML/React content has been measured (FR-47). `true` (the
+   * default) fits unless `initialViewport` is set; `'always'` also overrides it; `false` never fits.
+   */
+  fitOnLoad?: boolean | 'always' | 'if-no-viewport' | 'never';
+  /** The viewport to start with, for example one saved from `onViewportChange` when `final` is true. */
+  initialViewport?: DiagramOptions['initialViewport'];
   onReady?: (diagram: Diagram) => void;
   onNodeClick?: Handler<'nodeClick'>;
   onNodeDoubleClick?: Handler<'nodeDoubleClick'>;
@@ -142,8 +147,11 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
         const render = portals.htmlRenderer(`node:${type}`);
         nodeRenderers[type] = isComponent(entry) ? render : { render, sizing: entry.sizing };
       }
+      const fit = p.fitOnLoad ?? true;
       const d = new Diagram({
         ...p.options,
+        initialViewport: p.initialViewport ?? p.options?.initialViewport,
+        fitOnLoad: fit === true ? 'if-no-viewport' : fit === false ? 'never' : fit,
         mode: p.mode,
         theme: p.theme,
         symbols: p.symbols,
@@ -175,7 +183,7 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
       };
     }, [portals]);
 
-    const { model, mode, theme, compareWith, issues, symbols, fitOnLoad = true } = props;
+    const { model, mode, theme, compareWith, issues, symbols } = props;
 
     useEffect(() => {
       if (!diagram || !model || model === loaded.current || model === lastEmitted.current) return;
@@ -188,9 +196,8 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
         diagram.patch(model);
         return;
       }
-      diagram.load(model);
-      if (fitOnLoad) diagram.zoomToFit();
-    }, [diagram, model, fitOnLoad]);
+      diagram.load(model); // the diagram fits on load per fitOnLoad, after content is measured
+    }, [diagram, model]);
 
     useEffect(() => {
       if (diagram && mode) diagram.setMode(mode);
