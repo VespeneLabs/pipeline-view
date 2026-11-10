@@ -24,6 +24,8 @@ export interface SearchParams {
   /** The search never leaves this box. */
   region: Box;
   bendPenalty: number;
+  /** Give up (return null) when the grid would exceed this many points. Default: unlimited. */
+  maxCells?: number;
 }
 
 /** Minimal binary min-heap of (priority, value) pairs. */
@@ -112,6 +114,7 @@ export function searchGrid(p: SearchParams): Point[] | null {
   const ys = uniqueSorted(rawY.filter((y) => y >= region.t && y <= region.b));
   const X = xs.length;
   const Y = ys.length;
+  if (p.maxCells !== undefined && X * Y > p.maxCells) return null;
   const si = indexOf(xs, start.x);
   const sj = indexOf(ys, start.y);
   const gi = indexOf(xs, goal.x);

@@ -28,6 +28,8 @@ import type {
 const CELL = 256;
 /** Lanes tried on each side of a shared corridor before giving up on spreading a segment. */
 const MAX_LANES = 4;
+/** Grid-point cap for the whole-diagram search attempt (about 6 MB of search state). */
+const MAX_WORLD_CELLS = 150_000;
 
 interface StoredRoute {
   from: string;
@@ -177,10 +179,8 @@ export class OrthogonalRouter implements Router {
       const a = stops[k]!;
       const b = stops[k + 1]!;
       const last = k + 2 === stops.length;
-      // Legs after a waypoint may leave it in any direction.
-      const leg =
-        this.searchLeg(a, k === 0 ? dir : -1, b, last ? opposite(toDir) : -1) ??
-        fallbackLeg(a, dir, b);
+      // Legs after a waypoint continue in the arrival direction or turn, but never double back.
+      const leg = this.searchLeg(a, dir, b, last ? opposite(toDir) : -1) ?? fallbackLeg(a, dir, b);
       for (let i = 1; i < leg.length; i++) pts.push(leg[i]!);
       dir = lastDir(leg) ?? dir;
     }
@@ -216,6 +216,9 @@ export class OrthogonalRouter implements Router {
         boxes,
         region,
         bendPenalty: this.bendPenalty,
+        // The whole-diagram attempt is a last resort; cap it so an unreachable goal can't allocate
+        // tens of MB per search (the leg then falls back to an L-shape).
+        maxCells: m === Infinity ? MAX_WORLD_CELLS : undefined,
       });
       if (path) return path;
     }
