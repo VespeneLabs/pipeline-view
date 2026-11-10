@@ -39,3 +39,15 @@ export {
   type SidePortsOptions,
 } from './symbols/resolve';
 export { migrateModel } from './model/migrate';
+export {
+  upstreamOf,
+  downstreamOf,
+  topologicalOrder,
+  findCycles,
+  connectedComponents,
+  flowPath,
+  type GraphSource,
+  type GraphFilter,
+  type WalkOptions,
+} from './graph/graph';
+export { validateConnect, isDirected, type ConnectCheck } from './diagram/validate';
