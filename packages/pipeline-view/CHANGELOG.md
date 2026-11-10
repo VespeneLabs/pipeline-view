@@ -1,5 +1,14 @@
 # @vespenelabs/pipeline-view
 
+## 1.4.0
+
+### Minor Changes
+
+- fd2336e: `ConnectResult`'s refusal now declares what `diagram.connect()` already returned at runtime: `from` / `to` in flow order (outlet → inlet), and `dragFrom` / `dragTo` when the arguments were passed in the other order. TypeScript hosts can read them without a cast. They share the new exported `RefusalEnds` type with the `connectRejected` event and `RefusalContext`, so the three can't drift apart. Additive: existing code compiles unchanged.
+- 9c9b612: Connect from the keyboard (FR-54). With one node selected in edit mode, press C. Choose a source port with the arrow keys or Tab, press Enter, then cycle the compatible target ports (nearest first) and press Enter to connect. Escape steps back, then cancels. A polite live region announces every step, the result and refusal reasons, including `connectRejected` from pointer drops.
+  
+  Also: host drops (`acceptDrop`) snap to the grid when `grid.snap` is on, like palette drops; `startPlacement()` warns once when no editor is attached instead of doing nothing silently; and the keyboard-connect cursor reveals a culled node. The keyboard flow also cancels, with an announcement, when a new diagram loads or the source node is removed; a full source port is explained ('already has the maximum number of links'); and C without exactly one selected node announces 'Select one node to connect from.'
+
 ## 1.3.0
 
 ### Minor Changes
