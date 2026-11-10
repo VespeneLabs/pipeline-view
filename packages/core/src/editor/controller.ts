@@ -23,6 +23,12 @@ export interface EditorControllerOptions {
   guideThreshold?: number;
   /** Screen-pixel radius within which a connection snaps onto a compatible port. Default 16. */
   portSnapRadius?: number;
+  /**
+   * Kind of links created by dragging port to port ('process', 'signal', 'pneumatic', 'electrical' or any
+   * custom kind). When the start port doesn't accept it, the port's first accepted kind is used.
+   * Default 'process'. Change it at runtime with `setLinkKind`.
+   */
+  linkKind?: string;
 }
 
 type Gesture =
@@ -30,6 +36,9 @@ type Gesture =
   | { type: 'marquee'; start: Point; current: Point; additive: boolean; base: ItemRef[] }
   | {
       type: 'connect';
+      layer?: SVGGElement;
+      layerZoom?: number;
+      hot?: SVGElement | null;
       from: LinkEnd;
       origin: Point;
       kind: string;
@@ -52,6 +61,7 @@ export class EditorController {
   private gesture: Gesture | null = null;
   private clipboard: Clipboard | null = null;
   private labelInput: HTMLInputElement | null = null;
+  private linkKind: string;
   private readonly cleanup: (() => void)[] = [];
 
   constructor(
@@ -65,6 +75,8 @@ export class EditorController {
       port: (n, id) => portPoint(n, diagram.symbols.get(n.type), id),
     };
     this.commands = new EditorCommands(diagram, geometry);
+    this.linkKind = opts.linkKind ?? 'process';
+    controllers.set(diagram, this);
     const root = view.root;
     this.listen(root, 'pointerdown', this.onDown as EventListener);
     this.listen(root, 'pointermove', this.onMove as EventListener);
@@ -78,19 +90,32 @@ export class EditorController {
       diagram.on('selectionChange', () => this.redraw()),
       diagram.internal.on('model', () => this.redraw()),
       diagram.internal.on('load', () => this.redraw()),
-      diagram.internal.on('viewport', () => this.redraw()),
+      diagram.internal.on('viewport', () => {
+        this.placeLabelEditor();
+        this.redraw();
+      }),
     );
     root.classList.add('pv-editing');
     this.redraw();
   }
 
   destroy(): void {
+    if (controllers.get(this.diagram) === this) controllers.delete(this.diagram);
     this.cancelGesture();
     this.closeLabelEditor(false);
     for (const c of this.cleanup) c();
     this.cleanup.length = 0;
     this.diagram.view?.root.classList.remove('pv-editing');
     this.diagram.view?.layers.interaction.replaceChildren();
+  }
+
+  /** Kind used for new connections (see `EditorControllerOptions.linkKind`). */
+  getLinkKind(): string {
+    return this.linkKind;
+  }
+
+  setLinkKind(kind: string): void {
+    this.linkKind = kind;
   }
 
   /** Adds a symbol at a screen position (client coordinates), e.g. from a touch palette. */
@@ -210,7 +235,8 @@ export class EditorController {
       const from = { node: hit.node, port: hit.port };
       const node = this.diagram.store.nodes.get(hit.node);
       const def = node && this.diagram.symbols.get(node.type)?.ports.find((q) => q.id === hit.port);
-      const kind = def?.accepts?.[0] ?? 'process';
+      const accepts = def?.accepts;
+      const kind = !accepts || accepts.includes(this.linkKind) ? this.linkKind : accepts[0]!;
       const origin = this.portLocation(from) ?? p;
       const targets = this.commands
         .compatiblePorts(from, kind)
@@ -316,8 +342,7 @@ export class EditorController {
 
   /** The click that ends an editor drag must not reach the public click events. */
   private suppressClick(): void {
-    const vc = this.diagram.viewportController;
-    if (vc) vc.suppressClick = true;
+    this.diagram.suppressNextClick();
   }
 
   private onCancel = (): void => {
@@ -471,14 +496,12 @@ export class EditorController {
     const node = this.diagram.store.nodes.get(nodeId);
     if (!node) return;
     this.closeLabelEditor(true);
-    const b = nodeBounds(node, this.diagram.symbols.get(node.type));
-    const at = this.diagram.diagramToScreen({ x: b.x + b.width / 2, y: b.y + b.height });
     const input = this.root.ownerDocument.createElement('input');
     input.className = 'pv-label-editor';
     input.value = node.label ?? '';
     input.dataset.nodeId = nodeId;
     input.setAttribute('aria-label', 'Label');
-    input.style.cssText = `position:absolute;left:${at.x}px;top:${at.y + 4}px;transform:translateX(-50%);z-index:2`;
+    input.style.cssText = 'position:absolute;transform:translateX(-50%);z-index:2';
     input.addEventListener('keydown', (ev) => {
       ev.stopPropagation();
       if (ev.key === 'Enter') this.closeLabelEditor(true);
@@ -486,9 +509,21 @@ export class EditorController {
     });
     input.addEventListener('blur', () => this.closeLabelEditor(true));
     this.labelInput = input;
+    this.placeLabelEditor();
     this.root.append(input);
     input.focus();
     input.select();
+  }
+
+  /** Keeps the label input under its node while the view pans or zooms. */
+  private placeLabelEditor(): void {
+    const input = this.labelInput;
+    const node = input && this.diagram.store.nodes.get(input.dataset.nodeId!);
+    if (!input || !node) return;
+    const b = nodeBounds(node, this.diagram.symbols.get(node.type));
+    const at = this.diagram.diagramToScreen({ x: b.x + b.width / 2, y: b.y + b.height });
+    input.style.left = `${at.x}px`;
+    input.style.top = `${at.y + 4}px`;
   }
 
   private closeLabelEditor(commit: boolean): void {
@@ -612,21 +647,38 @@ export class EditorController {
       const r = rectOf(g.start, g.current);
       out.push(el('rect', { class: 'pv-marquee', ...r, 'stroke-width': s }));
     } else if (g?.type === 'connect') {
-      const target = this.connectTarget(g, g.current);
-      for (const t of g.targets) {
-        const hot = target && t.node === target.node && t.port === target.port;
-        out.push(
-          el('circle', {
-            class: hot ? 'pv-port-target pv-hot' : 'pv-port-target',
-            'data-target-node': t.node,
-            'data-target-port': t.port,
-            cx: t.point.x,
-            cy: t.point.y,
-            r: (hot ? 7 : 5) * s,
-            'stroke-width': s,
-          }),
-        );
+      // Target circles are built once per gesture (and per zoom); a pointer move only moves the hot flag.
+      if (!g.layer || g.layerZoom !== s) {
+        g.layer = el('g', { class: 'pv-port-targets' }) as SVGGElement;
+        g.layerZoom = s;
+        g.hot = null;
+        for (const t of g.targets) {
+          g.layer.append(
+            el('circle', {
+              class: 'pv-port-target',
+              'data-target-node': t.node,
+              'data-target-port': t.port,
+              cx: t.point.x,
+              cy: t.point.y,
+              r: 5 * s,
+              'stroke-width': s,
+            }),
+          );
+        }
       }
+      const target = this.connectTarget(g, g.current);
+      const idx = target
+        ? g.targets.findIndex((t) => t.node === target.node && t.port === target.port)
+        : -1;
+      const hotEl = idx >= 0 ? (g.layer.children[idx] as SVGElement) : null;
+      if (hotEl !== g.hot) {
+        g.hot?.classList.remove('pv-hot');
+        g.hot?.setAttribute('r', String(5 * s));
+        hotEl?.classList.add('pv-hot');
+        hotEl?.setAttribute('r', String(7 * s));
+        g.hot = hotEl;
+      }
+      out.push(g.layer);
       out.push(
         el('path', {
           class: 'pv-connect-preview',
@@ -646,6 +698,13 @@ function rectOf(a: Point, b: Point): Rect {
     width: Math.abs(b.x - a.x),
     height: Math.abs(b.y - a.y),
   };
+}
+
+const controllers = new WeakMap<Diagram, EditorController>();
+
+/** The EditorController currently attached to `diagram`, if any (e.g. to call `setLinkKind` from a toolbar). */
+export function getEditor(diagram: Diagram): EditorController | undefined {
+  return controllers.get(diagram);
 }
 
 /**

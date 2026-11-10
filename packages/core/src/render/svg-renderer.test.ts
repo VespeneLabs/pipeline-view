@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Diagram } from '../diagram/diagram';
 import type { DiagramModel } from '../model/types';
 import type { SymbolDef } from '../symbols/types';
+import { analyzeRoutes } from '../routing/analyze';
 
 const valve: SymbolDef = {
   type: 'test/valve',
@@ -199,6 +200,34 @@ describe('SvgRenderer', () => {
       $(`[data-link-id="${id}"] .pv-link-line`)!.getAttribute('d')!,
     );
     expect(all.filter((p) => p.includes('A')).length).toBe(1);
+
+    // Deleting the crossing link alone (nothing rerouted) removes the hop.
+    d.update((tx) => tx.removeLink('v'));
+    d.renderer!.flush();
+    expect($('[data-link-id="h"] .pv-link-line')!.getAttribute('d')).not.toContain('A');
+  });
+
+  it('keeps junction dots equal to a full analysis as links are added and deleted', () => {
+    const full = () =>
+      analyzeRoutes(
+        [...d.store.links.keys()].map((id) => ({ linkId: id, points: d.getLinkPath(id)! })),
+      ).junctions.length;
+    const before = $$('.pv-junction').length;
+    d.update((tx) =>
+      tx.addLink({
+        id: 'ac',
+        from: { node: 'a', port: 'out' },
+        to: { node: 'c', port: 'in' },
+        kind: 'process',
+      }),
+    );
+    d.renderer!.flush();
+    // 'ab' and 'ac' share a's out port, so they branch.
+    expect($$('.pv-junction').length).toBeGreaterThan(before);
+    expect($$('.pv-junction').length).toBe(full());
+    d.update((tx) => tx.removeLink('ac'));
+    d.renderer!.flush();
+    expect($$('.pv-junction').length).toBe(before);
   });
 });
 

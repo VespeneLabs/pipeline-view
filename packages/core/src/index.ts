@@ -26,5 +26,6 @@ export {
   EditorController,
   SYMBOL_MIME,
   attachEditor,
+  getEditor,
   type EditorControllerOptions,
 } from './editor/controller';

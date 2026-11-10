@@ -9,6 +9,7 @@ import type { SymbolDef } from '../symbols/types';
 import type { ItemRef, ModelDiff } from '../diagram/types';
 import type { Diagram } from '../diagram/diagram';
 import type { View } from '../viewport/view';
+import { RouteAnalyzer } from '../routing/analyze';
 import { createRouter } from '../routing/router';
 import {
   localToDiagram,
@@ -51,6 +52,8 @@ export class SvgRenderer {
   private readonly nodes = new Map<string, NodeEl>();
   private readonly links = new Map<string, LinkEl>();
   private readonly routes = new Map<string, Point[]>();
+  /** Incremental line-jump / junction analysis: drag frames only re-check the links they reroute. */
+  private analyzer = new RouteAnalyzer();
   private crossings = new Map<string, Point[]>();
   private readonly junctionLayer: SVGGElement;
   private readonly router: Router;
@@ -145,6 +148,7 @@ export class SvgRenderer {
     this.nodes.clear();
     this.links.clear();
     this.routes.clear();
+    this.analyzer = new RouteAnalyzer();
     this.dirtyNodes.clear();
     this.reroute.clear();
     this.removedNodes.clear();
@@ -162,6 +166,7 @@ export class SvgRenderer {
 
   private applyIncremental(): void {
     const store = this.diagram.store;
+    const removed = [...this.removedLinks];
     for (const id of this.removedLinks) {
       this.links.get(id)?.g.remove();
       this.links.delete(id);
@@ -196,7 +201,8 @@ export class SvgRenderer {
     this.removedNodes.clear();
     this.dirtyNodes.clear();
     this.reroute.clear();
-    if (ids.length) this.routeLinks(ids);
+    // Removing links alone must still refresh jumps and junction dots.
+    if (ids.length || removed.length) this.routeLinks(ids, removed);
   }
 
   // ---- nodes ---------------------------------------------------------------
@@ -300,7 +306,8 @@ export class SvgRenderer {
     };
   }
 
-  private routeLinks(ids: string[]): void {
+  /** Routes `ids`, re-analyzes them (plus the `removed` links) incrementally and redraws what changed. */
+  private routeLinks(ids: string[], removed: string[] = []): void {
     const store = this.diagram.store;
     const requests: RouteRequest[] = [];
     const manual: string[] = [];
@@ -318,9 +325,12 @@ export class SvgRenderer {
     // A link that switched auto -> manual must not keep its stale auto route in the router's lanes.
     if (manual.length) this.router.removeRoutes(manual);
     for (const r of this.router.route(requests)) this.routes.set(r.linkId, r.points);
-    const { crossings, junctions } = this.router.analyze(
-      [...this.routes].map(([linkId, points]) => ({ linkId, points })),
-    );
+    const { crossings, junctions } = this.analyzer
+      .update([
+        ...removed.map((id) => [id, null] as const),
+        ...ids.map((id) => [id, this.routes.get(id) ?? null] as const),
+      ])
+      .result();
     const prevCrossings = this.crossings;
     this.crossings = groupCrossings(crossings);
     const redraw = new Set(ids);
