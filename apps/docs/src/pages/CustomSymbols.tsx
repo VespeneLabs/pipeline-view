@@ -21,7 +21,7 @@ const uvReactor: SymbolDef = {
   keywords: ['disinfection', 'ultraviolet'],
 };
 
-const DEF = `import { registerSymbol, type SymbolDef } from '@pipeline-view/core';
+const DEF = `import { registerSymbol, type SymbolDef } from '@vespenelabs/pipeline-view';
 
 export const uvReactor: SymbolDef = {
   type: 'water/uv-reactor',          // always namespaced: '<pack>/<name>'

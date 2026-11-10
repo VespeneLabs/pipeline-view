@@ -1,13 +1,16 @@
 import { Code } from '../components/Code';
 
-const INSTALL = `pnpm add @pipeline-view/core @pipeline-view/symbols`;
+const INSTALL = `# .npmrc: the package is on GitHub Packages (see the README for the token)
+@vespenelabs:registry=https://npm.pkg.github.com
 
-const VANILLA = `import { Diagram, type DiagramModel } from '@pipeline-view/core';
-import { gasSymbols, processSymbols } from '@pipeline-view/symbols';
-import '@pipeline-view/core/styles.css';
+pnpm add @vespenelabs/pipeline-view`;
+
+const VANILLA = `import { Diagram, type DiagramModel } from '@vespenelabs/pipeline-view';
+import { gasSymbols, processSymbols } from '@vespenelabs/pipeline-view/symbols';
+import '@vespenelabs/pipeline-view/styles.css';
 
 const model: DiagramModel = {
-  version: 1,
+  version: 2,
   nodes: [
     { id: 'P101', type: 'process/pump', position: { x: 0, y: 40 }, label: 'P101' },
     { id: 'XV1', type: 'gas/ball-valve', position: { x: 180, y: 60 }, label: 'XV-1' },
@@ -60,9 +63,11 @@ export function GettingStarted() {
       <h2>Install</h2>
       <Code>{INSTALL}</Code>
       <p>
-        <code>@pipeline-view/core</code> has no runtime dependencies.{' '}
-        <code>@pipeline-view/symbols</code> is tree-shakable, so you can import single symbols like{' '}
-        <code>gateValve</code> instead of whole packs.
+        One package with subpaths: <code>@vespenelabs/pipeline-view</code> (the core, no runtime
+        dependencies), <code>/symbols</code> (tree-shakable, so you can import single symbols like{' '}
+        <code>gateValve</code>), <code>/react</code>, <code>/testing</code> and{' '}
+        <code>/styles.css</code>. It&apos;s published privately to GitHub Packages; the README
+        explains the access token.
       </p>
 
       <h2>Your first diagram</h2>
@@ -90,8 +95,8 @@ export function GettingStarted() {
 
       <h2>Server rendering</h2>
       <p>
-        Every package is safe to import during SSR, and CI checks this by importing all three
-        packages in plain Node with no DOM. <code>new Diagram()</code>, <code>load()</code>,{' '}
+        Every entry point is safe to import during SSR, and CI checks this by importing them in
+        plain Node with no DOM. <code>new Diagram()</code>, <code>load()</code>,{' '}
         <code>update()</code> and the other model APIs run on the server too. Only{' '}
         <code>mount()</code> and export need a browser. With React,{' '}
         <code>&lt;PipelineView&gt;</code> server-renders an empty host element and creates the
@@ -110,6 +115,13 @@ export function GettingStarted() {
         </li>
         <li>
           <a href="#/theming">Theming</a>: tokens, dark mode and status styling.
+        </li>
+        <li>
+          <a href="#/controlled-guide">Controlled mode with Zustand</a>: keep the document in your
+          own store.
+        </li>
+        <li>
+          <a href="#/testing">Testing</a>: test your app&apos;s diagrams with Vitest or Jest.
         </li>
       </ul>
     </article>
