@@ -34,9 +34,13 @@ npm install $BASE/pipeline-view-core-$V.tgz $BASE/pipeline-view-symbols-$V.tgz $
 React:
 
 ```tsx
+import type { Diagram } from '@pipeline-view/core';
 import { PipelineView, type DiagramModel } from '@pipeline-view/react';
 import { gasSymbols, processSymbols } from '@pipeline-view/symbols';
+import { useEffect, useRef } from 'react';
 import '@pipeline-view/core/styles.css';
+
+const symbols = [...gasSymbols, ...processSymbols];
 
 const model: DiagramModel = {
   version: 1,
@@ -45,14 +49,22 @@ const model: DiagramModel = {
     { id: 'P1', type: 'process/pump', position: { x: 240, y: 40 }, label: 'P-101' },
   ],
   links: [{ id: 'L1', kind: 'process', from: { node: 'T1', port: 'out' }, to: { node: 'P1', port: 'suction' } }],
-} as const;
+};
 
 export function Plant() {
+  const diagram = useRef<Diagram | null>(null);
+
+  // Your data source goes here (WebSocket, MQTT, polling, ...). Clean it up on unmount.
+  useEffect(() => {
+    const id = setInterval(() => diagram.current?.setNodeData('T1', { level: Math.random() }), 1000);
+    return () => clearInterval(id);
+  }, []);
+
   return (
     <PipelineView
       model={model}
-      symbols={[...gasSymbols, ...processSymbols]}
-      onReady={(d) => setInterval(() => d.setNodeData('T1', { level: Math.random() }), 1000)}
+      symbols={symbols}
+      onReady={(d) => (diagram.current = d)}
       style={{ height: 400 }}
     />
   );
