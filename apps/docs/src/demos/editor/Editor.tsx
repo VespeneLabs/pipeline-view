@@ -228,6 +228,11 @@ export function PidEditor() {
             Drag an item from <b>Your palette</b>, or press <b>Place…</b> and place it with the
             arrow keys and <kbd>Enter</kbd>.
           </>,
+          <>
+            Connect without a mouse: select a node, press <kbd>C</kbd>, pick a port with the arrow
+            keys and <kbd>Enter</kbd>, then pick a target the same way (nearest first).{' '}
+            <kbd>Esc</kbd> steps back; a screen reader hears every step.
+          </>,
         ]}
       />
       <div className="editor-layout">

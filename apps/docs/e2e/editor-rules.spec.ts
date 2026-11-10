@@ -114,3 +114,23 @@ test('your own palette: HTML5 drag (acceptDrop) and Place… (startPlacement)', 
   await page.keyboard.press('Enter');
   await expect.poll(count).toBe(before + 2);
 });
+
+test('connect from the keyboard: C, pick a port, Enter, pick a target, Enter', async ({ page }) => {
+  const before = (await json(page)).links.length;
+  await select(page, 'P1');
+  const canvas = page.locator('[data-testid="editor-canvas"]');
+  await canvas.focus();
+  const live = canvas.locator('.pv-live');
+  await page.keyboard.press('c');
+  await expect(live).toContainText('Connect from P1');
+  // P1's ports are suction, discharge: step to discharge (the free one).
+  await page.keyboard.press('ArrowRight');
+  await expect(live).toContainText('discharge');
+  await page.keyboard.press('Enter');
+  await expect(live).toContainText('compatible ports');
+  await page.keyboard.press('Enter');
+  await expect(live).toContainText('Connected');
+  const after = await json(page);
+  expect(after.links).toHaveLength(before + 1);
+  expect(after.links.at(-1)!.from).toEqual({ node: 'P1', port: 'discharge' });
+});

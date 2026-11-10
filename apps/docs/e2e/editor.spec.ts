@@ -4,6 +4,10 @@
  */
 import { type Locator, type Page, expect, test } from '@playwright/test';
 
+// The page has a "What to try" panel and side panels above / beside the canvas: a desktop-sized
+// viewport keeps the pointer gestures on screen.
+test.use({ viewport: { width: 1600, height: 1200 } });
+
 interface Snapshot {
   nodes: { id: string; type: string; rotation?: number; position: { x: number; y: number } }[];
   links: {
