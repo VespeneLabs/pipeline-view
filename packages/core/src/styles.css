@@ -503,3 +503,26 @@
   stroke-width: 2px;
   stroke-linecap: round;
 }
+
+/* ---- port state while editing (FR-41, FR-42) ----------------------------- */
+
+.pv-root[data-mode='edit'] .pv-port[data-occupied] {
+  fill: var(--pv-symbol-stroke);
+}
+.pv-port[data-refused] {
+  opacity: 0.35;
+}
+.pv-editor .pv-port-target.pv-refused {
+  fill: none;
+  stroke: var(--pv-muted);
+  stroke-dasharray: 2 2;
+}
+.pv-editor .pv-refusal-tip {
+  fill: var(--pv-ink);
+  font-family: var(--pv-font);
+  paint-order: stroke;
+  stroke: var(--pv-bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}

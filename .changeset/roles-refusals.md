@@ -1,0 +1,5 @@
+---
+'@vespenelabs/pipeline-view': minor
+---
+
+Port roles, limits and explained refusals (FR-41, FR-42). A shared `validateConnect()` applies, in order: missing port, same port, `noSelfLoops`, `accepts`, `directed` (per kind) with outlet → inlet roles, `maxLinks` on both ends, duplicates, then the host's `canConnect`, which can run first with `canConnectOrder: 'before-builtins'`. Dragging from an inlet stores the link in flow order. Every refusal has a code, `detail` and an English reason that `refusalMessages(code, ctx)` can replace, for custom codes too. In the editor, refusing ports get `data-refused` plus the reason (also as a tooltip), the hovered one shows the reason next to the pointer, and a drop on a refusing port or node emits `connectRejected` (a drop on empty canvas is a cancel). A drop on a node's body connects to its nearest accepting port. Ports with links get `data-occupied`. `EditorCommands` gains `checkConnect` / `tryConnect` / `portChecks` and `checkDrop` / `tryDrop`, which return the reason from `canDrop`.
