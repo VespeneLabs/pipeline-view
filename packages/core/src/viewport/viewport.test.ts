@@ -56,9 +56,13 @@ describe('mount', () => {
     d.mount(container);
     const root = container.querySelector('.pv-root')!;
     expect(root.getAttribute('role')).toBe('application');
-    expect(
-      root.querySelector('.pv-scene .pv-layer-links + .pv-layer-nodes + .pv-layer-interaction'),
-    ).not.toBeNull();
+    const order = [...root.querySelector('.pv-scene')!.children].map((c) => c.getAttribute('class'));
+    expect(order).toEqual([
+      'pv-layer-links',
+      'pv-junctions',
+      'pv-layer-nodes',
+      'pv-layer-interaction',
+    ]);
     expect(root.querySelector('.pv-overlay')).not.toBeNull();
     expect(() => d.mount(container)).toThrow(/already mounted/);
     d.destroy();

@@ -4,7 +4,9 @@
   "description": "Framework-agnostic engine for interactive P&ID / process diagrams",
   "license": "MIT",
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "**/*.css"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/VespeneLabs/pipeline-view.git",
@@ -23,7 +25,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node -e \"require('fs').copyFileSync('src/styles.css','dist/styles.css')\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"
   },
