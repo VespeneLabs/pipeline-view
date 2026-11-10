@@ -1,0 +1,21 @@
+[
+  {
+    "name": "@pipeline-view/core",
+    "path": "packages/core/dist/index.js",
+    "limit": "60 kB",
+    "gzip": true
+  },
+  {
+    "name": "@pipeline-view/symbols",
+    "path": "packages/symbols/dist/index.js",
+    "limit": "40 kB",
+    "gzip": true
+  },
+  {
+    "name": "@pipeline-view/react",
+    "path": "packages/react/dist/index.js",
+    "limit": "10 kB",
+    "gzip": true,
+    "ignore": ["react", "react-dom", "@pipeline-view/core"]
+  }
+]

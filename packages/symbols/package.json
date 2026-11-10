@@ -1,0 +1,32 @@
+{
+  "name": "@pipeline-view/symbols",
+  "version": "0.0.0",
+  "description": "P&ID symbol packs for pipeline-view (gas service + process equipment)",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/VespeneLabs/pipeline-view.git",
+    "directory": "packages/symbols"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@pipeline-view/core": "workspace:*"
+  }
+}
