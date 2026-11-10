@@ -1,13 +1,25 @@
 .editor-layout {
   display: grid;
   grid-template-areas:
-    'toolbar toolbar'
-    'palette canvas'
-    'palette selection'
-    'json json';
-  grid-template-columns: 260px minmax(0, 1fr);
+    'toolbar toolbar toolbar'
+    'palette canvas side'
+    'palette selection side'
+    'json json json';
+  grid-template-columns: 240px minmax(0, 1fr) 280px;
   grid-template-rows: auto 560px auto auto;
   gap: 12px;
+}
+
+@media (max-width: 1200px) {
+  .editor-layout {
+    grid-template-areas:
+      'toolbar toolbar'
+      'palette canvas'
+      'palette selection'
+      'side side'
+      'json json';
+    grid-template-columns: 240px minmax(0, 1fr);
+  }
 }
 
 .editor-toolbar {
@@ -127,4 +139,149 @@ kbd {
     grid-template-columns: 1fr;
     grid-template-rows: auto 420px auto 320px auto;
   }
+}
+
+/* ---- round-2 editor rules: side panels, toasts, confirm dialog ---- */
+
+.editor-side {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.editor-panel {
+  padding: 10px 12px;
+  border: 1px solid var(--pv-border);
+  border-radius: 8px;
+  background: var(--pv-card-bg);
+  font-size: 13px;
+}
+.editor-panel h2 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.editor-check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 4px 0;
+  cursor: pointer;
+}
+.editor-check small {
+  display: block;
+  color: var(--pv-muted);
+  font-size: 11.5px;
+}
+
+.editor-note {
+  margin: 6px 0 0;
+  color: var(--pv-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.editor-steppers {
+  margin-bottom: 8px;
+}
+.editor-stepper {
+  display: grid;
+  grid-template-columns: 1fr 28px 28px 28px;
+  gap: 4px;
+  align-items: center;
+  margin: 4px 0;
+}
+.editor-stepper output {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.editor-stepper button,
+.editor-host-items button,
+.editor-dialog button {
+  padding: 4px 8px;
+  border: 1px solid var(--pv-border);
+  border-radius: 6px;
+  background: var(--pv-bg);
+  color: var(--pv-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.editor-host-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.editor-host-items li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.editor-host-item {
+  padding: 4px 8px;
+  border: 1px dashed var(--pv-border);
+  border-radius: 6px;
+  cursor: grab;
+}
+
+.editor-toasts {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 360px;
+}
+.editor-toast {
+  padding: 8px 12px;
+  border-left: 4px solid var(--pv-issue-warning);
+  border-radius: 6px;
+  background: var(--pv-ink);
+  color: var(--pv-bg);
+  font-size: 13px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.2);
+}
+
+.editor-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.35);
+}
+.editor-dialog {
+  max-width: 420px;
+  padding: 18px 20px;
+  border-radius: 10px;
+  background: var(--pv-bg);
+  color: var(--pv-ink);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.3);
+}
+.editor-dialog h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+.editor-dialog p {
+  margin: 0 0 14px;
+  color: var(--pv-muted);
+  font-size: 13px;
+}
+.editor-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.editor-dialog .danger {
+  border-color: var(--pv-issue-error);
+  background: var(--pv-issue-error);
+  color: #fff;
 }
