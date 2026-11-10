@@ -2,17 +2,37 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project status
+## Commands
 
-Pre-implementation. The repo holds only `PRD.md`, which is the source of truth for scope and decisions. There is no code, package.json or tooling yet, so there are no build, lint or test commands. Update this file once the monorepo is scaffolded.
+pnpm workspace + Turborepo, Node ≥ 20, TypeScript 6. TS 7 has no compiler API, which breaks tsup's dts build, so don't upgrade it.
 
-Planned tooling (PRD §6): pnpm workspaces + Turborepo, Vite library builds (ESM + .d.ts), Changesets for releases.
+```bash
+pnpm install
+pnpm build                 # all packages (tsup, ESM + .d.ts) + docs app (vite)
+pnpm dev                   # docs/demo app (apps/docs)
+pnpm test                  # vitest in every package (happy-dom)
+pnpm --filter @pipeline-view/core exec vitest run src/routing/router.test.ts   # single file
+pnpm --filter @pipeline-view/core exec vitest run -t "avoids nodes"            # single test by name
+pnpm typecheck
+pnpm lint && pnpm format:check
+pnpm size                  # bundle budgets (.size-limit.json), needs a build first
+pnpm --filter docs e2e     # Playwright e2e + visual tests (apps/docs/e2e)
+pnpm changeset             # add a changeset for any user-facing package change
+```
+
+Visual snapshot baselines must come from Linux CI, not macOS. To regenerate them, run `gh workflow run update-snapshots.yml --ref <branch>`, which commits the baselines back to the branch.
+
+## Workflow
+
+- `main` is protected. Every change goes through a PR with green CI (the `ci` and `e2e` jobs). The coordinating session (pipeline-sheepherd) reviews and squash-merges.
+- Each worker session uses its own git worktree, at `../pipeline-view-wt/<session>`, on a branch named `<type>/<short-topic>`.
+- The shared contracts are `packages/core/src/{model,symbols,routing,diagram}/types.ts`. Changing them affects every workstream, so agree on the change with the coordinator first.
 
 ## What this is
 
 `pipeline-view` is an MIT-licensed TypeScript library for interactive process / P&ID diagrams: SCADA-style live monitors and diagram editors. It is functionally modeled on the GoJS Industrial Monitor sample, with the visual design taken from the Figma reference below.
 
-## Architecture (planned, see PRD §6)
+## Architecture (see PRD §6)
 
 ```
 @pipeline-view/core      model + JSON, commands/undo, orthogonal router, viewport, SVG renderer, HTML overlay layer, events, export
