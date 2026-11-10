@@ -93,6 +93,16 @@ export class OrthogonalRouter implements Router {
     return [...affected];
   }
 
+  adoptRoutes(requests: RouteRequest[], results: RouteResult[]): void {
+    const byId = new Map(requests.map((r) => [r.linkId, r]));
+    for (const res of results) {
+      const req = byId.get(res.linkId);
+      if (!req) continue;
+      this.forget(res.linkId);
+      this.store(req, res.points);
+    }
+  }
+
   removeRoutes(linkIds: string[]): void {
     for (const id of linkIds) this.forget(id);
   }

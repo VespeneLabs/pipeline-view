@@ -72,3 +72,23 @@ Above 300 nodes, the diagram renders only what's visible (plus a margin) and def
 For React (`<PipelineView>`), theming, the editor, export and SSR, see the [repository README](https://github.com/VespeneLabs/pipeline-view#readme) and the docs app.
 
 MIT © VespeneLabs
+
+### Routing in a Web Worker
+
+`createRoutingWorker()` runs a full routing pass off the main thread. Incremental re-routes while dragging stay on the main thread, because they take about 1 ms.
+
+```ts
+import { createRoutingWorker } from '@vespenelabs/pipeline-view';
+
+const worker = createRoutingWorker();
+const results = await worker.routeAll(obstacles, requests); // a newer routeAll() aborts this one (AbortError)
+router.adoptRoutes(requests, results); // the main-thread router continues incrementally
+worker.terminate();
+```
+
+By default the worker loads with `new Worker(new URL('./routing.worker.js', import.meta.url), { type: 'module' })`. If your bundler pre-bundles dependencies and breaks that path (for example Vite's dependency optimizer), either exclude the package from pre-bundling (`optimizeDeps.exclude: ['@vespenelabs/pipeline-view']`), or create the worker yourself from the `@vespenelabs/pipeline-view/routing-worker` subpath:
+
+```ts
+import RoutingWorker from '@vespenelabs/pipeline-view/routing-worker?worker'; // Vite
+const worker = createRoutingWorker({ createWorker: () => new RoutingWorker() });
+```

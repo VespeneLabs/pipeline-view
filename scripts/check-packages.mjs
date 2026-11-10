@@ -27,7 +27,7 @@ const PACKAGES = [
       'dist/testing.js',
       'dist/testing.d.ts',
     ],
-    attwExclude: ['styles.css'],
+    attwExclude: ['styles.css', 'routing-worker'],
   },
 ];
 // CHANGELOG.md appears after `changeset version` and is always packed by npm/pnpm.

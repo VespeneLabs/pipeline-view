@@ -46,7 +46,8 @@
       "types": "./dist/testing.d.ts",
       "import": "./dist/testing.js"
     },
-    "./styles.css": "./dist/styles.css"
+    "./styles.css": "./dist/styles.css",
+    "./routing-worker": "./dist/chunks/routing.worker.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
