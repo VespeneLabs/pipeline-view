@@ -303,16 +303,20 @@ export class SvgRenderer {
   private routeLinks(ids: string[]): void {
     const store = this.diagram.store;
     const requests: RouteRequest[] = [];
+    const manual: string[] = [];
     for (const id of ids) {
       const l = store.links.get(id)!;
       const from = this.endpoint(l.from);
       const to = this.endpoint(l.to);
       if (l.routing === 'manual') {
+        manual.push(id);
         this.routes.set(id, [from.point, ...(l.waypoints ?? []), to.point]);
       } else {
         requests.push({ linkId: id, from, to, waypoints: l.waypoints });
       }
     }
+    // A link that switched auto -> manual must not keep its stale auto route in the router's lanes.
+    if (manual.length) this.router.removeRoutes(manual);
     for (const r of this.router.route(requests)) this.routes.set(r.linkId, r.points);
     const { crossings, junctions } = this.router.analyze(
       [...this.routes].map(([linkId, points]) => ({ linkId, points })),
