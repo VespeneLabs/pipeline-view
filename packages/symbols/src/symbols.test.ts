@@ -11,6 +11,10 @@ import {
   flowIndicatingController,
   gasSymbols,
   gateValve,
+  header,
+  inlineInstrument,
+  offPageInlet,
+  offPageOutlet,
   pressureTransmitter,
   processSymbols,
   pump,
@@ -53,13 +57,18 @@ function samples(def: SymbolDef): string[] {
 }
 
 describe('symbol definitions', () => {
-  it('ships 50 gas symbols numbered 01–50 in order, plus 4 process symbols', () => {
+  it('ships 50 gas symbols numbered 01–50 in order, plus 9 process symbols', () => {
     expect(gasSymbols.map((d) => d.ref)).toEqual(Array.from({ length: 50 }, (_, i) => i + 1));
     expect(processSymbols.map((d) => d.type)).toEqual([
       'process/tank',
       'process/conical-tank',
       'process/pump',
       'process/control-valve',
+      'process/off-page-inlet',
+      'process/off-page-outlet',
+      'process/inline-instrument',
+      'process/header',
+      'process/burner',
     ]);
   });
 
@@ -75,7 +84,8 @@ describe('symbol definitions', () => {
       const refs = gasSymbols.filter((d) => d.category === cat).map((d) => d.ref);
       expect(refs).toEqual(Array.from({ length: 10 }, (_, k) => i * 10 + k + 1));
     });
-    for (const d of processSymbols) expect(d.category).toBe(PROCESS);
+    for (const d of processSymbols)
+      expect([PROCESS, PIPING, INSTRUMENTATION]).toContain(d.category);
   });
 
   describe.each(all.map((d) => [d.type, d] as const))('%s', (_type, def) => {
@@ -147,12 +157,62 @@ describe('bindable parts', () => {
   });
 });
 
+describe('round-3 process symbols', () => {
+  it('off-page connectors: one port in flow direction, tag text from data, escaped', () => {
+    expect(nodePorts(offPageInlet).map((p) => [p.id, p.role])).toEqual([['out', 'out']]);
+    expect(nodePorts(offPageOutlet).map((p) => [p.id, p.role])).toEqual([['in', 'in']]);
+    expect(offPageInlet.render!({ data: {} })).toBe(offPageInlet.svg);
+    expect(offPageInlet.render!({ data: { text: 'N2' } })).toContain('>N2</text>');
+    expect(offPageOutlet.render!({ data: { text: '<b>' } })).toContain('&lt;b&gt;');
+  });
+
+  it('inline instrument: pipe ports in/out, letters and loop from data, optional flow-element bars', () => {
+    const ports = nodePorts(inlineInstrument);
+    expect(ports.filter((p) => p.role).map((p) => [p.id, p.role])).toEqual([
+      ['in', 'in'],
+      ['out', 'out'],
+    ]);
+    expect(ports[0]!.position.y).toBe(ports[1]!.position.y);
+    const svg = inlineInstrument.render!({ data: { letters: 'PT', loop: 12 } });
+    expect(svg).toContain('>PT</text>');
+    expect(svg).toContain('>12</text>');
+    expect(svg).not.toContain('M35 71V87');
+    expect(inlineInstrument.render!({ data: { flowElement: true } })).toContain('M35 71V87');
+  });
+
+  it('header: port counts and size from data, indexed labels, clamped counts', () => {
+    const node = (data: Record<string, unknown>) => ({
+      id: 'h',
+      type: 'process/header',
+      position: { x: 0, y: 0 },
+      data,
+    });
+    const ports = nodePorts(header, node({ inlets: 2, outlets: 8 }));
+    expect(ports.map((p) => p.id)).toEqual([
+      'in-1',
+      'in-2',
+      ...Array.from({ length: 8 }, (_, i) => `out-${i + 1}`),
+    ]);
+    expect(ports.find((p) => p.id === 'out-8')!.label).toBe('8');
+    const size = nodeSize(header, node({ inlets: 2, outlets: 8 }));
+    expect(size.height).toBe(9 * 24);
+    // Outlets are evenly spaced, top to bottom.
+    const ys = ports.filter((p) => p.role === 'out').map((p) => p.position.y);
+    expect(ys).toEqual([...ys].sort((a, b) => a - b));
+    expect(nodePorts(header, node({ outlets: 0 })).filter((p) => p.role === 'out')).toHaveLength(1);
+    expect(nodePorts(header, node({ outlets: 1e6 })).filter((p) => p.role === 'out')).toHaveLength(
+      32,
+    );
+    expect(header.render!({ data: { inlets: 2, outlets: 8 } })).toContain('height="212"');
+  });
+});
+
 describe('registration helpers', () => {
   it('registers every symbol into a registry', () => {
     const registry = new SymbolRegistry();
     registerGasSymbols(registry);
     registerProcessSymbols(registry);
-    expect(registry.list()).toHaveLength(54);
+    expect(registry.list()).toHaveLength(59);
     expect(registry.get('gas/ball-valve')?.ref).toBe(2);
   });
 });
