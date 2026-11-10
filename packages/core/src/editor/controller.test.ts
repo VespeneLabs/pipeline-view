@@ -284,4 +284,16 @@ describe('EditorController', () => {
     d.setMode('view');
     expect(getEditor(d)).toBeUndefined();
   });
+
+  it('draws only inside its own group and leaves other interaction-layer content alone', () => {
+    const other = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    other.setAttribute('class', 'pv-focus-ring');
+    d.view!.layers.interaction.append(other);
+    d.setSelection([{ kind: 'node', id: 'a' }]);
+    expect(d.view!.layers.interaction.querySelector('.pv-editor .pv-rotate-handle')).not.toBeNull();
+    expect(other.isConnected).toBe(true);
+    d.setMode('view');
+    expect(d.view!.layers.interaction.querySelector('.pv-editor')).toBeNull();
+    expect(other.isConnected).toBe(true);
+  });
 });

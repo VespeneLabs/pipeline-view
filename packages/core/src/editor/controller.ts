@@ -1,7 +1,8 @@
 /**
  * Edit-mode input (FR-24..29): turns pointer, keyboard and drag-and-drop input into EditorCommands, and
  * draws editor adornments (handles, guides, marquee, port highlights, connection preview) into
- * `layers.interaction`. The selection highlight itself belongs to the renderer.
+ * its own `<g class="pv-editor">` inside `layers.interaction` (other layers, like the focus ring, share it).
+ * The selection highlight itself belongs to the renderer.
  */
 import type { Diagram } from '../diagram/diagram';
 import { nodeBounds, portPoint } from '../diagram/geometry';
@@ -61,6 +62,8 @@ export class EditorController {
   private gesture: Gesture | null = null;
   private clipboard: Clipboard | null = null;
   private labelInput: HTMLInputElement | null = null;
+  /** Editor adornments, kept apart from other content of the interaction layer. */
+  private readonly layer: SVGGElement;
   private linkKind: string;
   private readonly cleanup: (() => void)[] = [];
 
@@ -78,6 +81,9 @@ export class EditorController {
     this.linkKind = opts.linkKind ?? 'process';
     controllers.set(diagram, this);
     const root = view.root;
+    this.layer = root.ownerDocument.createElementNS(SVG_NS, 'g');
+    this.layer.setAttribute('class', 'pv-editor');
+    view.layers.interaction.append(this.layer);
     this.listen(root, 'pointerdown', this.onDown as EventListener);
     this.listen(root, 'pointermove', this.onMove as EventListener);
     this.listen(root, 'pointerup', this.onUp as EventListener);
@@ -106,7 +112,7 @@ export class EditorController {
     for (const c of this.cleanup) c();
     this.cleanup.length = 0;
     this.diagram.view?.root.classList.remove('pv-editing');
-    this.diagram.view?.layers.interaction.replaceChildren();
+    this.layer.remove();
   }
 
   /** Kind used for new connections (see `EditorControllerOptions.linkKind`). */
@@ -539,8 +545,8 @@ export class EditorController {
 
   /** Redraws handles and gesture feedback. Sizes are divided by zoom so they stay constant on screen. */
   redraw(): void {
-    const layer = this.diagram.view?.layers.interaction;
-    if (!layer) return;
+    const layer = this.layer;
+    if (!layer.parentNode) return; // destroyed
     const s = 1 / this.zoom;
     const doc = layer.ownerDocument;
     const el = (tag: string, attrs: Record<string, string | number>) => {
