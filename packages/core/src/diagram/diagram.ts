@@ -18,6 +18,7 @@ import {
   type LiveState,
 } from './changes';
 import { SymbolRegistry, globalSymbols } from '../symbols/registry';
+import { ViewRegistry } from '../symbols/view-registry';
 import { ViewportController } from '../viewport/controller';
 import {
   DEFAULT_MAX_ZOOM,
@@ -67,6 +68,8 @@ export interface InternalEvents {
   /** The DOM view was created (mount). Renderer layers attach here. */
   mount: { view: View };
   viewport: { viewport: Viewport };
+  /** Node geometry changed outside the model (measured HTML node sizes): re-place and re-route. */
+  geometry: { ids: string[] };
 }
 
 const MAX_UNDO = 200;
@@ -79,6 +82,11 @@ export class Diagram implements DiagramApi {
   readonly store = new ModelStore();
   /** Instance registry layered over the global one (FR-7). */
   readonly symbols: SymbolRegistry;
+  /** Measured sizes of content-sized HTML nodes (FR-45). View state: never saved, never undone. */
+  private readonly measuredSizes = new Map<string, Size>();
+  private htmlTypesCache:
+    | { spec: DiagramOptions['nodeRenderers']; types: Record<string, 'fixed' | 'content'> }
+    | undefined;
   /** @internal */
   readonly internal = new Emitter<InternalEvents>();
 
@@ -129,7 +137,7 @@ export class Diagram implements DiagramApi {
   private pendingFit: { padding?: number } | null = null;
 
   constructor(readonly options: DiagramOptions = {}) {
-    this.symbols = new SymbolRegistry(globalSymbols);
+    this.symbols = new ViewRegistry(globalSymbols, () => this.htmlNodeTypes(), this.measuredSizes);
     if (options.symbols?.length) this.symbols.register(...options.symbols);
     this.mode = options.mode ?? 'view';
     this.theme = options.theme ?? 'auto';
@@ -685,6 +693,33 @@ export class Diagram implements DiagramApi {
   exportPNG(opts?: { viewportOnly?: boolean; padding?: number; scale?: number }): Promise<Blob> {
     if (!this.view) return Promise.reject(new Error('exportPNG() needs a mounted diagram'));
     return exportPng(this, this.view, opts);
+  }
+
+  /** Node types rendered as HTML (FR-45) and their sizing. */
+  htmlNodeTypes(): Record<string, 'fixed' | 'content'> {
+    // Hot path (every symbol lookup goes through ViewRegistry): memoized on the option's identity.
+    const spec = this.options.nodeRenderers;
+    if (this.htmlTypesCache && this.htmlTypesCache.spec === spec) return this.htmlTypesCache.types;
+    const out: Record<string, 'fixed' | 'content'> = {};
+    for (const [type, spec] of Object.entries(this.options.nodeRenderers ?? {})) {
+      out[type] = typeof spec === 'function' ? 'fixed' : (spec.sizing ?? 'fixed');
+    }
+    this.htmlTypesCache = { spec, types: out };
+    return out;
+  }
+
+  /**
+   * @internal Reports the measured content size of an HTML node (FR-45). Bounds, ports and routes
+   * follow it. It's view state, so there's no modelChange and no undo step.
+   */
+  setMeasuredSize(id: string, size: Size | null): void {
+    const prev = this.measuredSizes.get(id);
+    if (size && prev && prev.width === size.width && prev.height === size.height) return;
+    if (!size && !prev) return;
+    if (size) this.measuredSizes.set(id, { width: size.width, height: size.height });
+    else this.measuredSizes.delete(id);
+    (this.symbols as ViewRegistry).refresh();
+    this.internal.emit('geometry', { ids: [id] });
   }
 
   /** Maps a DOM element (an event target) to the diagram item it belongs to, using the data-*-id attributes. */

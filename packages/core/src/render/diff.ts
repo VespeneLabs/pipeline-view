@@ -46,6 +46,8 @@ export class DiffLayer {
     this.cleanup.push(
       i.on('load', () => this.schedule()),
       i.on('model', () => this.schedule()),
+      // Measured HTML node sizes (FR-45) move node bounds without a model change.
+      i.on('geometry', () => this.schedule()),
     );
   }
 
