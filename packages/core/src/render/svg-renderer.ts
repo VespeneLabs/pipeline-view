@@ -9,6 +9,7 @@ import type { SymbolDef } from '../symbols/types';
 import type { ItemRef, ModelDiff } from '../diagram/types';
 import type { Diagram } from '../diagram/diagram';
 import type { View } from '../viewport/view';
+import { FrameTask } from './frame';
 import { RouteAnalyzer } from '../routing/analyze';
 import { createRouter } from '../routing/router';
 import {
@@ -65,7 +66,10 @@ export class SvgRenderer {
   private readonly removedLinks = new Set<string>();
   private selectionDirty = false;
   private fullRebuild = true;
-  private frame = 0;
+  private readonly frame = new FrameTask(
+    () => this.view.root.ownerDocument.defaultView,
+    () => this.flush(),
+  );
   private readonly unsubscribe: (() => void)[] = [];
   private selected = new Set<string>();
   readonly metrics: RenderMetrics = { lastFlushMs: 0, lastDataFlushMs: 0 };
@@ -102,10 +106,7 @@ export class SvgRenderer {
   }
 
   private schedule(): void {
-    if (this.frame) return;
-    const win = this.view.root.ownerDocument.defaultView;
-    if (win?.requestAnimationFrame) this.frame = win.requestAnimationFrame(() => this.flush());
-    else this.frame = setTimeout(() => this.flush(), 0) as unknown as number;
+    this.frame.schedule();
   }
 
   private onModel(diff: ModelDiff): void {
@@ -118,12 +119,7 @@ export class SvgRenderer {
 
   /** Applies all pending changes synchronously. Normally called from rAF; tests and export call it directly. */
   flush(): void {
-    if (this.frame) {
-      const win = this.view.root.ownerDocument.defaultView;
-      win?.cancelAnimationFrame?.(this.frame);
-      clearTimeout(this.frame);
-      this.frame = 0;
-    }
+    this.frame.cancel();
     const t0 = now();
     const dataOnly =
       !this.fullRebuild &&
@@ -471,10 +467,7 @@ export class SvgRenderer {
 
   destroy(): void {
     for (const u of this.unsubscribe) u();
-    if (this.frame) {
-      this.view.root.ownerDocument.defaultView?.cancelAnimationFrame?.(this.frame);
-      clearTimeout(this.frame);
-    }
+    this.frame.cancel();
     this.junctionLayer.remove();
   }
 }
