@@ -85,6 +85,17 @@ export class EditorCommands {
     return out;
   }
 
+  /** Locked items can't be moved, deleted, transformed or re-routed in edit mode (FR-43). */
+  private isLocked(kind: 'node' | 'link', id: string): boolean {
+    return kind === 'node'
+      ? !!this.store.nodes.get(id)?.locked
+      : !!this.store.links.get(id)?.locked;
+  }
+
+  private unlockedNodes(ids: string[]): string[] {
+    return ids.filter((id) => !this.isLocked('node', id));
+  }
+
   private selectedNodeIds(): string[] {
     return this.diagram
       .getSelection()
@@ -96,6 +107,7 @@ export class EditorCommands {
 
   /** Moves nodes by `delta` as one undo step (keyboard nudge). */
   moveBy(ids: string[], delta: Point): void {
+    ids = this.unlockedNodes(ids);
     if (!ids.length) return;
     const start = new Map(ids.map((id) => [id, this.store.nodes.get(id)!.position]));
     const base = this.manualLinkBase(ids);
@@ -105,7 +117,7 @@ export class EditorCommands {
   /** Starts a drag of `ids` (defaults to the selected nodes). `lead` is the node under the pointer. */
   beginMove(ids = this.selectedNodeIds(), lead = ids[0]): void {
     if (this.move) this.cancelMove();
-    const valid = ids.filter((id) => this.store.nodes.has(id));
+    const valid = this.unlockedNodes(ids).filter((id) => this.store.nodes.has(id));
     if (!valid.length || !lead) return;
     const moving = new Set(valid);
     const others: Rect[] = [];
@@ -244,7 +256,9 @@ export class EditorCommands {
    * auto routing and lose their waypoints (in the same undo step, so undo restores them).
    */
   private transformNodes(ids: string[], patch: (n: NodeModel) => Partial<NodeModel>): void {
-    const nodes = ids.map((id) => this.store.nodes.get(id)).filter((n): n is NodeModel => !!n);
+    const nodes = this.unlockedNodes(ids)
+      .map((id) => this.store.nodes.get(id))
+      .filter((n): n is NodeModel => !!n);
     if (!nodes.length) return;
     const set = new Set(nodes.map((n) => n.id));
     this.diagram.update((tx) => {
@@ -260,6 +274,12 @@ export class EditorCommands {
   // ------------------------------------------------------------------ delete / clipboard
 
   deleteItems(items = this.diagram.getSelection()): void {
+    // Locked items stay, and so does a node whose cascade would remove a locked link.
+    items = items.filter((r) => {
+      if (r.kind === 'annotation') return true;
+      if (this.isLocked(r.kind, r.id)) return false;
+      return r.kind !== 'node' || !this.store.linksOf(r.id).some((l) => l.locked);
+    });
     if (!items.length) return;
     this.diagram.update((tx) => {
       for (const r of items)
@@ -411,14 +431,14 @@ export class EditorCommands {
 
   /** Stores a user-edited path (full polyline, ports included) and switches the link to manual routing. */
   setLinkPath(linkId: string, path: Point[]): void {
-    if (!this.store.links.has(linkId)) return;
+    if (!this.store.links.has(linkId) || this.isLocked('link', linkId)) return;
     const waypoints = toWaypoints(path);
     this.diagram.update((tx) => tx.updateLink(linkId, { routing: 'manual', waypoints }));
   }
 
   /** Previews a path while the user drags a segment. Finish with `commitLinkPath` or `cancelLinkPath`. */
   previewLinkPath(linkId: string, path: Point[]): void {
-    if (!this.store.links.has(linkId)) return;
+    if (!this.store.links.has(linkId) || this.isLocked('link', linkId)) return;
     const waypoints = toWaypoints(path);
     this.diagram.preview((tx) => tx.updateLink(linkId, { routing: 'manual', waypoints }));
   }
@@ -433,7 +453,7 @@ export class EditorCommands {
 
   /** Drops the manual waypoints and lets the router take over again. */
   resetRouting(linkId: string): void {
-    if (!this.store.links.has(linkId)) return;
+    if (!this.store.links.has(linkId) || this.isLocked('link', linkId)) return;
     this.diagram.update((tx) =>
       tx.updateLink(linkId, { routing: undefined, waypoints: undefined }),
     );

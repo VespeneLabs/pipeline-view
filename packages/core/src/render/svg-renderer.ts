@@ -258,6 +258,7 @@ export class SvgRenderer {
     hit.setAttribute('width', String(size.width));
     hit.setAttribute('height', String(size.height));
     this.setStatus(el.g, n.status);
+    el.g.toggleAttribute('data-locked', !!n.locked);
     this.setAriaLabel(el.g, n, def);
     this.renderSymbol(el, n, def);
     this.renderLabel(el, n, def);
@@ -442,6 +443,7 @@ export class SvgRenderer {
       this.links.set(l.id, el);
     }
     el.g.dataset.kind = l.kind;
+    el.g.toggleAttribute('data-locked', !!l.locked);
     this.setStatus(el.g, l.status);
     const points = this.routes.get(l.id) ?? [];
     const d = linkPath(points, this.crossings.get(l.id), this.jumpRadius());
