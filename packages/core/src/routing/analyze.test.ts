@@ -70,4 +70,28 @@ describe('RouteAnalyzer (incremental)', () => {
       { numRuns: 60 },
     );
   });
+
+  it('applies the last entry when the same link appears twice in one update', () => {
+    const { nodes, links } = generateScene(30, 50, 3);
+    const router = createRouter();
+    router.setObstacles(nodes);
+    const res = router.route(requestsFor(nodes, links));
+    const analyzer = new RouteAnalyzer().update(res.map((r) => [r.linkId, r.points] as const));
+    const a = res[0]!;
+    const b = res[1]!;
+    const moved = a.points.map((p) => ({ x: p.x + 37, y: p.y + 23 }));
+    analyzer.update([
+      [a.linkId, b.points],
+      [a.linkId, moved],
+    ]);
+    const full = analyzeRoutes(
+      res.map((r) => (r.linkId === a.linkId ? { ...r, points: moved } : r)),
+    );
+    expect(norm(analyzer.result())).toEqual(norm(full));
+    analyzer.update([
+      [b.linkId, null],
+      [b.linkId, b.points],
+    ]);
+    expect(norm(analyzer.result())).toEqual(norm(full));
+  });
 });

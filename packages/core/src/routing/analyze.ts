@@ -39,9 +39,10 @@ export class RouteAnalyzer {
   private readonly crossingsByLink = new Map<string, Set<string>>();
   private readonly junctions = new Map<string, Junction>();
 
-  /** Applies changed routes. `null` removes a link. */
+  /** Applies changed routes. `null` removes a link. If an id repeats, its last entry wins. */
   update(changes: Iterable<readonly [string, Point[] | null]>): this {
-    const list = [...changes];
+    // Last entry wins when an id appears more than once (e.g. a host batching several frames).
+    const list = [...new Map(changes)];
     const dirty = new Map<string, Point>();
     const mark = (p: Point) => dirty.set(pkey(p), p);
 
