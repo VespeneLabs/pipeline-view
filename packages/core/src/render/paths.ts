@@ -1,5 +1,5 @@
 /** Pure SVG path builders for links: polylines with line jumps (FR-12) and flow-direction chevrons (FR-14). */
-import type { Point } from '../model/types';
+import type { Point, Rect } from '../model/types';
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const pt = (p: Point) => `${r2(p.x)} ${r2(p.y)}`;
@@ -69,4 +69,32 @@ export function arrowsPath(points: readonly Point[], size = 10, minSegment = siz
     d += `M${pt(l)}L${pt(tip)}L${pt(rt)}`;
   }
   return d;
+}
+
+/**
+ * Orthogonal leader from an annotation box to its anchor node box (FR-18):
+ * a straight line when the boxes overlap on one axis, otherwise one elbow
+ * (leave the card horizontally, enter the node vertically). Empty if the boxes intersect.
+ */
+export function leaderPoints(card: Rect, node: Rect): Point[] {
+  const cx2 = card.x + card.width;
+  const cy2 = card.y + card.height;
+  const nx2 = node.x + node.width;
+  const ny2 = node.y + node.height;
+  const xOverlap = Math.min(cx2, nx2) - Math.max(card.x, node.x);
+  const yOverlap = Math.min(cy2, ny2) - Math.max(card.y, node.y);
+  if (xOverlap > 0 && yOverlap > 0) return [];
+  if (xOverlap > 0) {
+    const x = Math.max(card.x, node.x) + xOverlap / 2;
+    return card.y > node.y ? [{ x, y: card.y }, { x, y: ny2 }] : [{ x, y: cy2 }, { x, y: node.y }];
+  }
+  if (yOverlap > 0) {
+    const y = Math.max(card.y, node.y) + yOverlap / 2;
+    return card.x > node.x ? [{ x: card.x, y }, { x: nx2, y }] : [{ x: cx2, y }, { x: node.x, y }];
+  }
+  const y = card.y + card.height / 2;
+  const x = node.x + node.width / 2;
+  const startX = card.x > node.x ? card.x : cx2;
+  const endY = card.y > node.y ? ny2 : node.y;
+  return [{ x: startX, y }, { x, y }, { x, y: endY }];
 }

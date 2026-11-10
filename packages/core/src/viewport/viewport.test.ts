@@ -58,9 +58,11 @@ describe('mount', () => {
     expect(root.getAttribute('role')).toBe('application');
     const order = [...root.querySelector('.pv-scene')!.children].map((c) => c.getAttribute('class'));
     expect(order).toEqual([
+      'pv-layer-leaders',
       'pv-layer-links',
       'pv-junctions',
       'pv-layer-nodes',
+      'pv-layer-annotations',
       'pv-layer-interaction',
     ]);
     expect(root.querySelector('.pv-overlay')).not.toBeNull();
