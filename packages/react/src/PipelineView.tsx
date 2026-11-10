@@ -33,8 +33,10 @@ type Handler<K extends keyof DiagramEvents> = (payload: DiagramEvents[K]) => voi
 
 export interface PipelineViewProps {
   /**
-   * The model to show. It's loaded whenever its identity changes, except when it's the exact object this
-   * view last reported through onModelChange, so controlled usage doesn't reload on every edit.
+   * The model to show. When its identity changes, a new version of the same document (sharing node or
+   * link ids) is applied with `diagram.patch()`, keeping viewport, selection and live data; a different
+   * document is loaded from scratch. The exact object this view last reported through onModelChange is
+   * ignored, so controlled usage costs nothing on every edit.
    */
   model?: DiagramModel;
   mode?: DiagramMode;
@@ -145,7 +147,15 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
 
     useEffect(() => {
       if (!diagram || !model || model === loaded.current || model === lastEmitted.current) return;
+      const prev = loaded.current;
       loaded.current = model;
+      // Controlled mode (FR-44): a new version of the same document is applied as a patch, so the
+      // viewport, selection, live data and untouched routes survive. A different document (no shared
+      // ids) is loaded from scratch.
+      if (prev && sharesItems(prev, model)) {
+        diagram.patch(model);
+        return;
+      }
       diagram.load(model);
       if (fitOnLoad) diagram.zoomToFit();
     }, [diagram, model, fitOnLoad]);
@@ -193,6 +203,12 @@ const PortalSlot = memo(function PortalSlot({
 }) {
   return render ? createPortal(render(entry.item), entry.el) : null;
 });
+
+/** True when two models share at least one node or link id, i.e. they're versions of one document. */
+function sharesItems(a: DiagramModel, b: DiagramModel): boolean {
+  const ids = new Set([...a.nodes.map((n) => `n:${n.id}`), ...a.links.map((l) => `l:${l.id}`)]);
+  return b.nodes.some((n) => ids.has(`n:${n.id}`)) || b.links.some((l) => ids.has(`l:${l.id}`));
+}
 
 /** The Diagram of the nearest <PipelineView>, or null before it mounts. */
 export function useDiagram(): Diagram | null {
