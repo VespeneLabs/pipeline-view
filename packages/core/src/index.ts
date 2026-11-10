@@ -7,6 +7,7 @@ export { Diagram, type InternalEvents } from './diagram/diagram';
 export { Emitter } from './diagram/emitter';
 export { ModelStore, validateModel } from './model/store';
 export { OrthogonalRouter, createRouter } from './routing/router';
+export { RouteAnalyzer } from './routing/analyze';
 export {
   EditorCommands,
   uniqueId,
