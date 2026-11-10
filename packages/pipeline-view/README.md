@@ -67,7 +67,7 @@ const useDoc = create<{ model: DiagramModel; past: ModelPatch[] }>(() => ({ mode
 
 ## Large diagrams
 
-Above 300 nodes, the diagram renders only what's visible (plus a margin) and defers live-data updates for hidden nodes. Labels, cards and port dots are hidden when zoomed far out. Tune it with `culling: { threshold, margin }` and `lod: { labels, overlays, ports }` (minimum zoom per layer), or turn either off with `false`.
+Above 300 nodes, the diagram renders only what's visible (plus a margin) and defers live-data updates for hidden nodes. Labels, cards and port dots are hidden when zoomed far out. Tune it with `culling: { threshold, margin }` and `lod: { labels, overlays, ports }` (minimum zoom per layer), or turn either off with `false`. Hidden port dots can't be dragged from, so in an editor zoom in to start a connection, or raise `lod.ports` (or set it to `0`) to keep ports visible.
 
 For React (`<PipelineView>`), theming, the editor, export and SSR, see the [repository README](https://github.com/VespeneLabs/pipeline-view#readme) and the docs app.
 
