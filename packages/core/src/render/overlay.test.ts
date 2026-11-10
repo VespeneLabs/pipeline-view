@@ -30,7 +30,7 @@ beforeEach(() => {
   cleanup = vi.fn();
   card = vi.fn<HtmlRenderer>((el, item) => {
     el.textContent = `${item.id}: ${String(item.data?.value)}`;
-    return cleanup;
+    return cleanup as () => void;
   });
   d = new Diagram({ symbols: [box], htmlRenderers: { card } });
   d.load({
