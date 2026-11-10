@@ -34,12 +34,11 @@ jobs:
       - run: pnpm test
       - run: pnpm size
 
-      - name: Pack
+      # Packs core / symbols / react into release/ and verifies them: tarball contents, no workspace:
+      # ranges left, metadata, and type resolution (attw). The verified tarballs are the ones attached.
+      - name: Pack and verify
         run: |
-          mkdir -p release
-          for p in core symbols react; do
-            (cd "packages/$p" && pnpm pack --pack-destination "$GITHUB_WORKSPACE/release")
-          done
+          pnpm check:packages --out "$GITHUB_WORKSPACE/release"
           ls -l release
 
       - name: Release notes
