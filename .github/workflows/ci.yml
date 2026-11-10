@@ -25,6 +25,7 @@ jobs:
       - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm test
+      - run: pnpm test:scripts
       - run: pnpm size
       - run: pnpm check:packages
       - run: pnpm smoke:consumer
