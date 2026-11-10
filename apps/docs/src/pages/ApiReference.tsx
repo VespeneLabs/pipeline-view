@@ -328,8 +328,8 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
         doc: 'Placement mode for keyboard and touch: a preview follows the pointer (starting at the centre of the view); canDrop marks a refused spot with its reason; click, tap-lift or Enter places it, arrow keys nudge it (Shift for bigger steps), Esc cancels. Needs a mounted diagram in edit mode, and warns once otherwise.',
       },
       {
-        sig: 'connect(from, to, kind?): { ok: true, id } | { ok: false, code, reason, … }',
-        doc: 'Connects two ports from code, with every rule applied, as one undo step; the link is stored in flow order. No mount needed.',
+        sig: 'connect(from, to, kind?): { ok: true, id } | { ok: false, code, reason, detail?, from, to, dragFrom?, dragTo? }',
+        doc: 'Connects two ports from code, with every rule applied, as one undo step; the link is stored in flow order. No mount needed. A refusal carries the ends in flow order (outlet → inlet) as from / to, plus dragFrom / dragTo when they were passed the other way round.',
       },
       {
         sig: 'Keyboard: C on the selected node',
