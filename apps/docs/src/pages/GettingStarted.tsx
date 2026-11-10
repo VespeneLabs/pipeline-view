@@ -89,7 +89,15 @@ export function GettingStarted() {
       <Code>{EVENTS}</Code>
 
       <h2>Server rendering</h2>
-      <p>Every package is safe to import during SSR. Create and mount the diagram on the client.</p>
+      <p>
+        Every package is safe to import during SSR, and CI checks this by importing all three
+        packages in plain Node with no DOM. <code>new Diagram()</code>, <code>load()</code>,{' '}
+        <code>update()</code> and the other model APIs run on the server too. Only{' '}
+        <code>mount()</code> and export need a browser. With React,{' '}
+        <code>&lt;PipelineView&gt;</code> server-renders an empty host element and creates the
+        diagram in an effect on the client, so no extra guard is needed. With the vanilla API, mount
+        in an effect:
+      </p>
       <Code>{SSR}</Code>
 
       <h2>Next steps</h2>
