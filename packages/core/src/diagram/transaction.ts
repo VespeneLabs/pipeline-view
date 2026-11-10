@@ -135,6 +135,10 @@ export class TransactionImpl implements Transaction {
   addNode(node: NodeModel): void {
     this.add('nodes', node);
   }
+  /**
+   * Throws (and the transaction rolls back) when the update removes a port that carries a locked link
+   * (FR-40, FR-43); hosts calling update() with port-changing data should catch it.
+   */
   /** `data` in a patch replaces the whole record, and undo restores the previous record, including live values written in between. Use setNodeData for live values. */
   updateNode(id: string, patch: Partial<Omit<NodeModel, 'id'>>): void {
     // Per-node ports derive from type, data or the ports override (FR-40).
@@ -160,9 +164,20 @@ export class TransactionImpl implements Transaction {
     if (!after) return;
     const lost = (port: string) => before.has(port) && !after.has(port);
     for (const l of this.store.linksOf(id)) {
-      if ((l.from.node === id && lost(l.from.port)) || (l.to.node === id && lost(l.to.port))) {
-        this.remove('links', l.id);
+      const end =
+        l.from.node === id && lost(l.from.port)
+          ? l.from
+          : l.to.node === id && lost(l.to.port)
+            ? l.to
+            : null;
+      if (!end) continue;
+      // A locked link can't be removed in edit mode (FR-43): refuse the edit, the transaction rolls back.
+      if (l.locked) {
+        throw new Error(
+          `Cannot remove port "${end.port}" of node "${id}": link "${l.id}" is locked`,
+        );
       }
+      this.remove('links', l.id);
     }
   }
   /** Also removes the node's links and the annotations anchored to it. */

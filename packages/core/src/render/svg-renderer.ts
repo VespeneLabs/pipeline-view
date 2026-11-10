@@ -80,6 +80,8 @@ export class SvgRenderer {
   );
   private readonly unsubscribe: (() => void)[] = [];
   private selected = new Set<string>();
+  /** Ports with at least one link, as node/port keys; mirrored as data-occupied on port circles (FR-41). */
+  private occupied = new Set<string>();
   readonly metrics: RenderMetrics = { lastFlushMs: 0, lastDataFlushMs: 0 };
 
   constructor(
@@ -318,6 +320,7 @@ export class SvgRenderer {
       const c = this.svg('circle', { class: 'pv-port', cx: p.position.x, cy: p.position.y, r: 4 });
       c.dataset.portId = p.id;
       c.dataset.pvPortId = p.id;
+      if (this.occupied.has(`${n.id}\u0000${p.id}`)) c.setAttribute('data-occupied', '');
       el.body.append(c);
     }
   }
@@ -437,6 +440,7 @@ export class SvgRenderer {
       if (l) this.drawLink(l);
     }
     this.drawJunctions(junctions);
+    this.updateOccupied();
   }
 
   private drawLink(l: LinkModel): void {
@@ -487,6 +491,26 @@ export class SvgRenderer {
         this.svg('circle', { class: 'pv-junction', cx: j.point.x, cy: j.point.y, r }),
       ),
     );
+  }
+
+  /** Sets data-occupied on ports that have links, touching only the ports whose state changed. */
+  private updateOccupied(): void {
+    const next = new Set<string>();
+    for (const l of this.diagram.store.links.values()) {
+      next.add(`${l.from.node}\u0000${l.from.port}`);
+      next.add(`${l.to.node}\u0000${l.to.port}`);
+    }
+    const set = (key: string, on: boolean) => {
+      const [node, port] = key.split('\u0000') as [string, string];
+      const el = this.nodes.get(node);
+      if (!el) return;
+      for (const c of el.body.querySelectorAll('.pv-port')) {
+        if ((c as SVGElement).dataset.portId === port) c.toggleAttribute('data-occupied', on);
+      }
+    };
+    for (const k of this.occupied) if (!next.has(k)) set(k, false);
+    for (const k of next) if (!this.occupied.has(k)) set(k, true);
+    this.occupied = next;
   }
 
   // ---- selection -----------------------------------------------------------

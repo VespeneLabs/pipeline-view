@@ -1,0 +1,190 @@
+/**
+ * Connection validation (FR-41, FR-42): port roles, link limits, direction and the host hook, with
+ * explained refusals. DOM-free, so the editor, `connect()` and hosts' own forms share one rule set.
+ */
+import type { LinkEnd, LinkKind, NodeModel } from '../model/types';
+import type { PortDef } from '../symbols/types';
+import { findPort } from '../symbols/resolve';
+import type { Diagram } from './diagram';
+import type { RefusalCode, RefusalContext, ValidationResult } from './types';
+
+export type ConnectCheck =
+  /** Allowed. `from` / `to` are in flow order (outlet → inlet), which may swap the arguments. */
+  | { ok: true; from: LinkEnd; to: LinkEnd }
+  | { ok: false; code: RefusalCode; reason: string; detail?: Record<string, unknown> };
+
+/** Default English messages for the built-in codes. Hosts replace them with `refusalMessages`. */
+const DEFAULT_REASONS: Record<string, (ctx: RefusalContext) => string> = {
+  'missing-port': () => 'That port does not exist.',
+  'same-port': () => 'A port cannot connect to itself.',
+  'self-loop': () => 'A node cannot connect to itself.',
+  'kind-not-accepted': (c) => `This port does not accept ${c.kind} links.`,
+  direction: () => 'Links must run from an outlet to an inlet.',
+  'port-full': (c) =>
+    c.detail?.port
+      ? `Port ${String(c.detail.port)} already has the maximum number of links.`
+      : 'This port already has the maximum number of links.',
+  duplicate: () => 'These ports are already connected.',
+  'max-links-between-nodes': () => 'These nodes are already connected.',
+  cycle: () => 'This link would create a cycle.',
+  refused: () => 'This connection is not allowed.',
+};
+
+/** True when links of `kind` must run outlet → inlet (`DiagramOptions.directed`, FR-41). */
+export function isDirected(diagram: Diagram, kind: LinkKind): boolean {
+  const d = diagram.options.directed;
+  if (!d) return false;
+  if (d === true) return true;
+  return !d.kinds || d.kinds.includes(kind);
+}
+
+const role = (p: PortDef) => p.role ?? 'both';
+const portKey = (e: LinkEnd) => `${e.node}\u0000${e.port}`;
+
+/** Number of links on each port, for `maxLinks` checks. Build it once per gesture. */
+export function portLinkCounts(diagram: Diagram): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const l of diagram.store.links.values()) {
+    for (const e of [l.from, l.to]) counts.set(portKey(e), (counts.get(portKey(e)) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** Keys of linked port pairs in both directions, for the duplicate check. Build it once per gesture. */
+export function linkedPairs(diagram: Diagram): Set<string> {
+  const set = new Set<string>();
+  for (const l of diagram.store.links.values()) {
+    set.add(`${portKey(l.from)}\u0001${portKey(l.to)}`);
+    set.add(`${portKey(l.to)}\u0001${portKey(l.from)}`);
+  }
+  return set;
+}
+
+export interface ConnectIndexes {
+  counts?: Map<string, number>;
+  pairs?: Set<string>;
+}
+
+/**
+ * Validates a connection between two ports. Built-in checks run first (unless
+ * `canConnectOrder: 'before-builtins'`), in this order: missing port, same port, self-loop, kind,
+ * direction, port full (from, then to), duplicate. Then the host's `canConnect`. The first refusal wins.
+ * Pass prebuilt `indexes` when checking many candidates during one gesture.
+ */
+export function validateConnect(
+  diagram: Diagram,
+  from: LinkEnd,
+  to: LinkEnd,
+  kind: LinkKind,
+  indexes: ConnectIndexes = {},
+): ConnectCheck {
+  const opts = diagram.options;
+  const a = diagram.store.nodes.get(from.node);
+  const b = diagram.store.nodes.get(to.node);
+  const pa = a && findPort(diagram.symbols.get(a.type), a, from.port);
+  const pb = b && findPort(diagram.symbols.get(b.type), b, to.port);
+  const refuse = (code: RefusalCode, detail?: Record<string, unknown>, reason?: string) =>
+    refusal(diagram, code, { from, to, kind, ...(detail ? { detail } : {}) }, reason);
+
+  // Flow order (outlet → inlet): an inlet can start the drag, or the drag can end on an outlet, but the
+  // link, the checks below and the host hook all see source → target.
+  const swap =
+    !!pa &&
+    !!pb &&
+    ((role(pa) === 'in' && role(pb) !== 'in') || (role(pb) === 'out' && role(pa) !== 'out'));
+  const src = swap ? to : from;
+  const dst = swap ? from : to;
+  // Read only after the missing-port check below.
+  const ps = (swap ? pb : pa)!;
+  const pd = (swap ? pa : pb)!;
+
+  const runHook = (): ConnectCheck | null => {
+    if (!opts.canConnect || !a || !b) return null;
+    const na = swap ? b : a;
+    const nb = swap ? a : b;
+    const r = opts.canConnect({ node: na, port: src.port }, { node: nb, port: dst.port }, kind);
+    return fromValidation(diagram, r, { from: src, to: dst, kind });
+  };
+
+  if (opts.canConnectOrder === 'before-builtins') {
+    const h = runHook();
+    if (h && !h.ok) return h;
+  }
+
+  if (!a || !b || !pa || !pb) {
+    return refuse('missing-port', {
+      node: !pa ? from.node : to.node,
+      port: !pa ? from.port : to.port,
+    });
+  }
+  if (from.node === to.node && from.port === to.port) return refuse('same-port');
+  if (opts.noSelfLoops && from.node === to.node) return refuse('self-loop', { node: from.node });
+  for (const [end, p] of [
+    [from, pa],
+    [to, pb],
+  ] as const) {
+    if (p.accepts && !p.accepts.includes(kind)) {
+      return refuse('kind-not-accepted', { node: end.node, port: end.port, accepts: p.accepts });
+    }
+  }
+
+  const wrongWay =
+    (role(ps) === 'in' && role(pd) === 'in') || (role(ps) === 'out' && role(pd) === 'out');
+  if (wrongWay && isDirected(diagram, kind)) {
+    return refuse('direction', { fromRole: role(pa), toRole: role(pb) });
+  }
+
+  const counts = indexes.counts ?? portLinkCounts(diagram);
+  for (const [end, p] of [
+    [src, ps],
+    [dst, pd],
+  ] as const) {
+    if (p.maxLinks !== undefined && (counts.get(portKey(end)) ?? 0) >= p.maxLinks) {
+      return refuse('port-full', { node: end.node, port: end.port, maxLinks: p.maxLinks });
+    }
+  }
+  const pairs = indexes.pairs ?? linkedPairs(diagram);
+  if (pairs.has(`${portKey(src)}\u0001${portKey(dst)}`)) return refuse('duplicate');
+
+  if (opts.canConnectOrder !== 'before-builtins') {
+    const h = runHook();
+    if (h && !h.ok) return h;
+  }
+  return { ok: true, from: src, to: dst };
+}
+
+/** Builds a refusal with the final (possibly host-localized) message. */
+export function refusal(
+  diagram: Diagram,
+  code: RefusalCode,
+  ctx: RefusalContext,
+  fallbackReason?: string,
+): Extract<ConnectCheck, { ok: false }> {
+  const reason =
+    diagram.options.refusalMessages?.(code, ctx) ??
+    fallbackReason ??
+    DEFAULT_REASONS[code]?.(ctx) ??
+    DEFAULT_REASONS.refused!(ctx);
+  return { ok: false, code, reason, ...(ctx.detail ? { detail: ctx.detail } : {}) };
+}
+
+/** Turns a host hook result into a check: `true` allows, anything else refuses with a code. */
+export function fromValidation(
+  diagram: Diagram,
+  r: ValidationResult,
+  ctx: RefusalContext,
+): ConnectCheck | null {
+  if (r === true) return null;
+  if (r === false) return refusal(diagram, 'refused', ctx);
+  return refusal(
+    diagram,
+    r.code ?? 'refused',
+    { ...ctx, ...(r.detail ? { detail: r.detail } : {}) },
+    r.reason,
+  );
+}
+
+/** Resolves a node's port for callers that only have ids. */
+export function portOf(diagram: Diagram, node: NodeModel, port: string): PortDef | undefined {
+  return findPort(diagram.symbols.get(node.type), node, port);
+}

@@ -6,6 +6,7 @@
  */
 import type { Diagram } from '../diagram/diagram';
 import { findPort } from '../symbols/resolve';
+import { refusal } from '../diagram/validate';
 import { nodeBounds, portPoint } from '../diagram/geometry';
 import type { ItemRef } from '../diagram/types';
 import type { LinkEnd, Point, Rect } from '../model/types';
@@ -33,6 +34,18 @@ export interface EditorControllerOptions {
   linkKind?: string;
 }
 
+interface RefusedPort extends LinkEnd {
+  point: Point;
+  code: string;
+  reason: string;
+  detail?: Record<string, unknown>;
+}
+
+/** Where a connect drag ended: a port that accepts the link, or one that refuses it (FR-42). */
+type ConnectDrop =
+  | { ok: true; end: LinkEnd }
+  | { ok: false; end: LinkEnd; code: string; reason: string; detail?: Record<string, unknown> };
+
 type Gesture =
   | { type: 'move'; start: Point; lead: string; started: boolean; guides: Guide[] }
   | { type: 'marquee'; start: Point; current: Point; additive: boolean; base: ItemRef[] }
@@ -45,6 +58,10 @@ type Gesture =
       origin: Point;
       kind: string;
       targets: (LinkEnd & { point: Point })[];
+      /** Ports that would refuse this link, with the reason (FR-42). */
+      refused: RefusedPort[];
+      /** Renderer port elements marked with data-refused for this gesture. */
+      marked: Element[];
       current: Point;
     }
   | {
@@ -247,11 +264,23 @@ export class EditorController {
       const accepts = def?.accepts;
       const kind = !accepts || accepts.includes(this.linkKind) ? this.linkKind : accepts[0]!;
       const origin = this.portLocation(from) ?? p;
-      const targets = this.commands
-        .compatiblePorts(from, kind)
-        .map((t) => ({ ...t, point: this.portLocation(t)! }))
-        .filter((t) => t.point);
-      this.gesture = { type: 'connect', from, origin, kind, targets, current: p };
+      const targets: (LinkEnd & { point: Point })[] = [];
+      const refused: RefusedPort[] = [];
+      for (const { to, check } of this.commands.portChecks(from, kind)) {
+        const point = this.portLocation(to);
+        if (!point) continue;
+        if (check.ok) targets.push({ ...to, point });
+        else
+          refused.push({
+            ...to,
+            point,
+            code: check.code,
+            reason: check.reason,
+            detail: check.detail,
+          });
+      }
+      const marked = this.markRefused(refused);
+      this.gesture = { type: 'connect', from, origin, kind, targets, refused, marked, current: p };
     } else if (hit.kind === 'node') {
       if (shift) this.toggle(hit);
       else {
@@ -351,8 +380,24 @@ export class EditorController {
         break;
       }
       case 'connect': {
-        const target = this.connectTarget(g, p);
-        if (target) this.commands.connect(g.from, target, g.kind);
+        this.unmarkRefused(g.marked);
+        const drop = this.connectTarget(g, p) ?? this.nodeDrop(g, p);
+        // A drop on empty canvas is a cancel. A drop on a port or node either connects or is refused.
+        if (!drop) break;
+        if (drop.ok) {
+          this.commands.tryConnect(g.from, drop.end, g.kind);
+        } else {
+          this.diagram.emit('connectRejected', {
+            from: g.from,
+            to: drop.end,
+            kind: g.kind,
+            code: drop.code,
+            reason: drop.reason,
+            ...(drop.detail ? { detail: drop.detail } : {}),
+            point: p,
+          });
+        }
+        this.suppressClick();
         break;
       }
       case 'segment':
@@ -380,21 +425,74 @@ export class EditorController {
     this.gesture = null;
     if (g?.type === 'move' && g.started) this.commands.cancelMove();
     if (g?.type === 'segment' && g.started) this.commands.cancelLinkPath();
+    if (g?.type === 'connect') this.unmarkRefused(g.marked);
   }
 
-  /** The compatible port under the pointer, or the nearest one within the snap radius. */
-  private connectTarget(g: Extract<Gesture, { type: 'connect' }>, p: Point): LinkEnd | null {
-    const radius = (this.opts.portSnapRadius ?? 16) / this.zoom;
-    let best: LinkEnd | null = null;
-    let bestD = radius;
-    for (const t of g.targets) {
-      const d = Math.hypot(t.point.x - p.x, t.point.y - p.y);
-      if (d <= bestD) {
-        bestD = d;
-        best = { node: t.node, port: t.port };
-      }
+  /** Marks the renderer's port circles that would refuse the link, with the reason for a tooltip (FR-42). */
+  private markRefused(refused: RefusedPort[]): Element[] {
+    const marked: Element[] = [];
+    const nodes = this.diagram.view?.layers.nodes;
+    if (!nodes) return marked;
+    for (const r of refused) {
+      const nodeEl = [...nodes.children].find((c) => (c as SVGElement).dataset.nodeId === r.node);
+      const portEl = nodeEl
+        ? [...nodeEl.querySelectorAll('.pv-port')].find(
+            (c) => (c as SVGElement).dataset.portId === r.port,
+          )
+        : undefined;
+      if (!portEl) continue;
+      portEl.setAttribute('data-refused', r.code);
+      portEl.setAttribute('data-refused-reason', r.reason);
+      const title = portEl.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'title');
+      title.setAttribute('class', 'pv-refused-title');
+      title.textContent = r.reason;
+      portEl.append(title);
+      marked.push(portEl);
     }
-    return best;
+    return marked;
+  }
+
+  private unmarkRefused(marked: Element[]): void {
+    for (const el of marked) {
+      el.removeAttribute('data-refused');
+      el.removeAttribute('data-refused-reason');
+      el.querySelector(':scope > .pv-refused-title')?.remove();
+    }
+    marked.length = 0;
+  }
+
+  /**
+   * The port nearest the pointer within the snap radius, whether it accepts the link or refuses it.
+   * On a tie, an accepting port wins.
+   */
+  private connectTarget(g: Extract<Gesture, { type: 'connect' }>, p: Point): ConnectDrop | null {
+    const radius = (this.opts.portSnapRadius ?? 16) / this.zoom;
+    return nearestDrop(g, p, radius, () => true);
+  }
+
+  /**
+   * A drop on a node's body: its nearest accepting port, else its nearest refusing one. A node without
+   * any candidate port refuses with 'missing-port'; dropping back on the starting node is a cancel.
+   */
+  private nodeDrop(g: Extract<Gesture, { type: 'connect' }>, p: Point): ConnectDrop | null {
+    let hit: string | null = null;
+    for (const n of this.diagram.store.nodes.values()) {
+      const b = nodeBounds(n, this.diagram.symbols.get(n.type));
+      if (p.x >= b.x && p.x <= b.x + b.width && p.y >= b.y && p.y <= b.y + b.height) hit = n.id;
+    }
+    // Releasing over the starting node's own body is a cancel, not a self-link; a deliberate self-link
+    // still works by dropping onto one of its ports (snap radius).
+    if (!hit || hit === g.from.node) return null;
+    const onNode = (e: LinkEnd) => e.node === hit;
+    const drop = nearestDrop(g, p, Infinity, onNode);
+    if (drop) return drop;
+    const r = refusal(this.diagram, 'missing-port', {
+      from: g.from,
+      to: { node: hit, port: '' },
+      kind: g.kind,
+      detail: { node: hit },
+    });
+    return { ...r, end: { node: hit, port: '' } };
   }
 
   private onDoubleClick = (e: MouseEvent): void => {
@@ -691,7 +789,8 @@ export class EditorController {
           );
         }
       }
-      const target = this.connectTarget(g, g.current);
+      const drop = this.connectTarget(g, g.current);
+      const target = drop?.ok ? drop.end : null;
       const idx = target
         ? g.targets.findIndex((t) => t.node === target.node && t.port === target.port)
         : -1;
@@ -704,6 +803,28 @@ export class EditorController {
         g.hot = hotEl;
       }
       out.push(g.layer);
+      if (drop && !drop.ok) {
+        // Hovering a port that refuses the link: show why, next to the pointer (FR-42).
+        const ref = g.refused.find((r) => r.node === drop.end.node && r.port === drop.end.port)!;
+        out.push(
+          el('circle', {
+            class: 'pv-port-target pv-refused',
+            'data-refused': drop.code,
+            cx: ref.point.x,
+            cy: ref.point.y,
+            r: 7 * s,
+            'stroke-width': s,
+          }),
+        );
+        const tip = el('text', {
+          class: 'pv-refusal-tip',
+          x: g.current.x + 12 * s,
+          y: g.current.y - 10 * s,
+          'font-size': 12 * s,
+        });
+        tip.textContent = drop.reason;
+        out.push(tip);
+      }
       out.push(
         el('path', {
           class: 'pv-connect-preview',
@@ -753,4 +874,38 @@ export function attachEditor(diagram: Diagram, opts?: EditorControllerOptions): 
     ctl?.destroy();
     ctl = null;
   };
+}
+
+/** Nearest candidate port (accepting or refusing) within `radius` that passes `filter`. Accepting ports win ties. */
+function nearestDrop(
+  g: { targets: (LinkEnd & { point: Point })[]; refused: RefusedPort[] },
+  p: Point,
+  radius: number,
+  filter: (e: LinkEnd) => boolean,
+): ConnectDrop | null {
+  let best: ConnectDrop | null = null;
+  let bestD = radius;
+  for (const t of g.targets) {
+    if (!filter(t)) continue;
+    const d = Math.hypot(t.point.x - p.x, t.point.y - p.y);
+    if (d <= bestD) {
+      bestD = d;
+      best = { ok: true, end: { node: t.node, port: t.port } };
+    }
+  }
+  for (const r of g.refused) {
+    if (!filter(r)) continue;
+    const d = Math.hypot(r.point.x - p.x, r.point.y - p.y);
+    if (d < bestD) {
+      bestD = d;
+      best = {
+        ok: false,
+        end: { node: r.node, port: r.port },
+        code: r.code,
+        reason: r.reason,
+        ...(r.detail ? { detail: r.detail } : {}),
+      };
+    }
+  }
+  return best;
 }

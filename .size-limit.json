@@ -28,5 +28,25 @@
     "limit": "55 kB",
     "gzip": true,
     "ignore": ["react", "react-dom"]
+  },
+  {
+    "name": "@vespenelabs/pipeline-view (core entry \".\")",
+    "path": "packages/pipeline-view/dist/index.js",
+    "limit": "60 kB",
+    "gzip": true
+  },
+  {
+    "name": "@vespenelabs/pipeline-view/symbols (own code, without the shared core chunk)",
+    "path": "packages/pipeline-view/dist/symbols.js",
+    "limit": "40 kB",
+    "gzip": true,
+    "ignore": ["./chunks"]
+  },
+  {
+    "name": "@vespenelabs/pipeline-view/react (own code, without the shared core chunk)",
+    "path": "packages/pipeline-view/dist/react.js",
+    "limit": "10 kB",
+    "gzip": true,
+    "ignore": ["react", "react-dom", "./chunks"]
   }
 ]

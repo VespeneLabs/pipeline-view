@@ -4,8 +4,15 @@
  * `commitPreview()` for drags, which also yields exactly one undo step.
  */
 import type { Diagram } from '../diagram/diagram';
-import { findPort, nodePorts, nodeSize, previewNode } from '../symbols/resolve';
-import type { ItemRef, Transaction } from '../diagram/types';
+import { nodePorts, nodeSize, previewNode } from '../symbols/resolve';
+import type { ConnectResult, ItemRef, Transaction } from '../diagram/types';
+import {
+  type ConnectCheck,
+  type ConnectIndexes,
+  linkedPairs,
+  portLinkCounts,
+  validateConnect,
+} from '../diagram/validate';
 import type { AnnotationModel, LinkEnd, LinkModel, NodeModel, Point, Rect } from '../model/types';
 import type { PortDirection } from '../symbols/types';
 import { type Guide, alignmentSnap, snapPoint } from './guides';
@@ -18,6 +25,11 @@ export interface EditorGeometry {
   /** Port location and direction after rotation and flip, or undefined for an unknown port. */
   port(node: NodeModel, portId: string): { point: Point; direction: PortDirection } | undefined;
 }
+
+/** Result of `checkDrop`. */
+export type DropCheck =
+  | { ok: true; position: Point }
+  | { ok: false; code: string; reason: string; detail?: Record<string, unknown> };
 
 export interface Clipboard {
   nodes: NodeModel[];
@@ -371,60 +383,66 @@ export class EditorCommands {
 
   // ------------------------------------------------------------------ connect
 
-  /** True when a link of `kind` may join the two ports (port `accepts`, no duplicates, `canConnect`). */
+  /** True when a link of `kind` may join the two ports. `checkConnect` explains a refusal. */
   canConnect(from: LinkEnd, to: LinkEnd, kind = 'process'): boolean {
-    return this.canConnectWith(from, to, kind, this.connectedPairs());
+    return validateConnect(this.diagram, from, to, kind).ok;
   }
 
-  /** Keys of every linked port pair, in both directions. */
-  private connectedPairs(): Set<string> {
-    const set = new Set<string>();
-    for (const l of this.store.links.values()) {
-      set.add(pairKey(l.from, l.to));
-      set.add(pairKey(l.to, l.from));
-    }
-    return set;
+  /**
+   * Validates a connection with every rule (roles, limits, direction, host hook) and explains a refusal
+   * (FR-41, FR-42). An allowed result carries the ends in flow order.
+   */
+  checkConnect(
+    from: LinkEnd,
+    to: LinkEnd,
+    kind = 'process',
+    indexes?: ConnectIndexes,
+  ): ConnectCheck {
+    return validateConnect(this.diagram, from, to, kind, indexes);
   }
 
-  private canConnectWith(from: LinkEnd, to: LinkEnd, kind: string, pairs: Set<string>): boolean {
-    if (from.node === to.node && from.port === to.port) return false;
-    const a = this.store.nodes.get(from.node);
-    const b = this.store.nodes.get(to.node);
-    if (!a || !b) return false;
-    for (const [node, port] of [
-      [a, from.port],
-      [b, to.port],
-    ] as const) {
-      const def = findPort(this.diagram.symbols.get(node.type), node, port);
-      if (!def) return false;
-      if (def.accepts && !def.accepts.includes(kind)) return false;
-    }
-    if (pairs.has(pairKey(from, to))) return false;
-    const hook = this.diagram.options.canConnect;
-    // Only `true` allows; `false` and `{ ok: false, reason }` refuse (FR-42 reasons are surfaced by the editor).
-    return !hook || hook({ node: a, port: from.port }, { node: b, port: to.port }, kind) === true;
+  /** Indexes for checking many candidates during one gesture (see `checkConnect`). */
+  connectIndexes(): ConnectIndexes {
+    return { counts: portLinkCounts(this.diagram), pairs: linkedPairs(this.diagram) };
   }
 
   /** Every port a link of `kind` starting at `from` may connect to (for highlighting). */
   compatiblePorts(from: LinkEnd, kind = 'process'): LinkEnd[] {
-    const out: LinkEnd[] = [];
-    const pairs = this.connectedPairs();
+    return this.portChecks(from, kind)
+      .filter((c) => c.check.ok)
+      .map((c) => c.to);
+  }
+
+  /** Every other port with its check result, so refused ones can be marked with their reason. */
+  portChecks(from: LinkEnd, kind = 'process'): { to: LinkEnd; check: ConnectCheck }[] {
+    const indexes = this.connectIndexes();
+    const out: { to: LinkEnd; check: ConnectCheck }[] = [];
     for (const n of this.store.nodes.values()) {
       for (const p of nodePorts(this.diagram.symbols.get(n.type), n)) {
         const to = { node: n.id, port: p.id };
-        if (this.canConnectWith(from, to, kind, pairs)) out.push(to);
+        if (to.node === from.node && to.port === from.port) continue;
+        out.push({ to, check: validateConnect(this.diagram, from, to, kind, indexes) });
       }
     }
     return out;
   }
 
-  /** Creates a link if allowed and returns its id, or null. */
-  connect(from: LinkEnd, to: LinkEnd, kind = 'process'): string | null {
-    if (!this.canConnect(from, to, kind)) return null;
+  /** Creates a link if allowed (in flow order) and selects it. Returns its id, or the refusal (FR-54). */
+  tryConnect(from: LinkEnd, to: LinkEnd, kind = 'process'): ConnectResult {
+    const check = validateConnect(this.diagram, from, to, kind);
+    if (!check.ok) return check;
     const id = uniqueId(kind, (c) => this.store.links.has(c));
-    this.diagram.update((tx) => tx.addLink({ id, from: { ...from }, to: { ...to }, kind }));
+    this.diagram.update((tx) =>
+      tx.addLink({ id, from: { ...check.from }, to: { ...check.to }, kind }),
+    );
     this.diagram.setSelection([{ kind: 'link', id }]);
-    return id;
+    return { ok: true, id };
+  }
+
+  /** Creates a link if allowed and returns its id, or null. See `tryConnect` for the reason. */
+  connect(from: LinkEnd, to: LinkEnd, kind = 'process'): string | null {
+    const r = this.tryConnect(from, to, kind);
+    return r.ok ? r.id : null;
   }
 
   // ------------------------------------------------------------------ links
@@ -462,26 +480,55 @@ export class EditorCommands {
   // ------------------------------------------------------------------ drop / label
 
   /**
-   * Adds a node of `type` centered on `point` (palette drop). The top-left is grid-snapped when snapping is on,
-   * and `canDrop(type, topLeft)` can veto it. Returns the new id, or null.
+   * Where a node of `type` dropped at `point` would go (centred, grid-snapped), or why it can't go there:
+   * `canDrop(type, topLeft)` can refuse with a reason (FR-42). Used for drops and the placement preview.
    */
+  checkDrop(
+    type: string,
+    point: Point,
+    init: Partial<Omit<NodeModel, 'id' | 'type' | 'position'>> = {},
+  ): DropCheck {
+    const def = this.diagram.symbols.get(type);
+    if (!def) return { ok: false, code: 'unknown-symbol', reason: `Unknown symbol "${type}".` };
+    const size = nodeSize(def, { ...previewNode(def), ...init } as NodeModel);
+    let position = { x: point.x - size.width / 2, y: point.y - size.height / 2 };
+    if (this.diagram.options.grid?.snap) position = snapPoint(position, this.gridSize);
+    const r = this.diagram.options.canDrop?.(type, position) ?? true;
+    if (r === true) return { ok: true, position };
+    if (r === false)
+      return { ok: false, code: 'refused', reason: 'This symbol cannot be placed here.' };
+    return {
+      ok: false,
+      code: r.code ?? 'refused',
+      reason: r.reason,
+      ...(r.detail ? { detail: r.detail } : {}),
+    };
+  }
+
+  /** Adds a node of `type` centred on `point` (palette drop) if allowed, and selects it. */
+  tryDrop(
+    type: string,
+    point: Point,
+    init: Partial<Omit<NodeModel, 'id' | 'type' | 'position'>> = {},
+  ): ConnectResult {
+    const check = this.checkDrop(type, point, init);
+    if (!check.ok) return check;
+    const base = type.slice(type.lastIndexOf('/') + 1);
+    const id = uniqueId(base, (c) => this.store.nodes.has(c));
+    const position = check.position;
+    this.diagram.update((tx) => tx.addNode({ ...clone(init), id, type, position }));
+    this.diagram.setSelection([{ kind: 'node', id }]);
+    return { ok: true, id };
+  }
+
+  /** Like `tryDrop`, returning the new id or null. */
   drop(
     type: string,
     point: Point,
     init: Partial<Omit<NodeModel, 'id' | 'type' | 'position'>> = {},
   ): string | null {
-    const def = this.diagram.symbols.get(type);
-    if (!def) return null;
-    const size = nodeSize(def, { ...previewNode(def), ...init } as NodeModel);
-    let position = { x: point.x - size.width / 2, y: point.y - size.height / 2 };
-    if (this.diagram.options.grid?.snap) position = snapPoint(position, this.gridSize);
-    const hook = this.diagram.options.canDrop;
-    if (hook && hook(type, position) !== true) return null;
-    const base = type.slice(type.lastIndexOf('/') + 1);
-    const id = uniqueId(base, (c) => this.store.nodes.has(c));
-    this.diagram.update((tx) => tx.addNode({ ...clone(init), id, type, position }));
-    this.diagram.setSelection([{ kind: 'node', id }]);
-    return id;
+    const r = this.tryDrop(type, point, init);
+    return r.ok ? r.id : null;
   }
 
   /** Sets a node label. An empty string removes it. */
@@ -493,9 +540,6 @@ export class EditorCommands {
     this.diagram.update((tx) => tx.updateNode(nodeId, { label: next }));
   }
 }
-
-const pairKey = (a: LinkEnd, b: LinkEnd): string =>
-  `${a.node}\u0000${a.port}\u0001${b.node}\u0000${b.port}`;
 
 /** `base_1`, `base_2`, ... : the first candidate that `taken` rejects is skipped. */
 export function uniqueId(base: string, taken: (id: string) => boolean): string {

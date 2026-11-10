@@ -30,6 +30,7 @@ function renderStub() {
     for (const p of valve.ports as PortDef[]) {
       const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
       c.setAttribute('data-port-id', p.id);
+      c.setAttribute('class', 'pv-port');
       g.append(c);
     }
     nodes.append(g);
@@ -308,6 +309,61 @@ describe('EditorController', () => {
     expect(spy).not.toHaveBeenCalled();
     drag(node, [210, 105], [260, 105]);
     expect(spy).toHaveBeenCalledOnce();
+  });
+
+  it('marks refusing ports with the reason and emits connectRejected only for drops on a port or node', () => {
+    const rejected = vi.fn();
+    d.on('connectRejected', rejected);
+    const sig = q('[data-node-id="a"] [data-port-id="sig"]');
+    pointer('pointerdown', q('[data-node-id="b"] [data-port-id="out"]'), 240, 110);
+    pointer('pointermove', d.view!.root, 100, 50);
+    // a.sig only accepts signal links: marked as refused, with the reason for a tooltip.
+    expect(sig.getAttribute('data-refused')).toBe('kind-not-accepted');
+    expect(sig.getAttribute('data-refused-reason')).toBe(
+      'This port does not accept process links.',
+    );
+    pointer('pointermove', d.view!.root, 21, 2);
+    expect(q('.pv-editor .pv-refusal-tip').textContent).toBe(
+      'This port does not accept process links.',
+    );
+    pointer('pointerup', d.view!.root, 21, 2);
+    expect(rejected).toHaveBeenCalledOnce();
+    expect(rejected.mock.calls[0]![0]).toMatchObject({
+      from: { node: 'b', port: 'out' },
+      to: { node: 'a', port: 'sig' },
+      kind: 'process',
+      code: 'kind-not-accepted',
+      point: { x: 21, y: 2 },
+    });
+    // The marks are cleared when the gesture ends.
+    expect(sig.hasAttribute('data-refused')).toBe(false);
+    expect(d.store.links.size).toBe(1);
+
+    // A drop on empty canvas is a cancel: no event.
+    pointer('pointerdown', q('[data-node-id="b"] [data-port-id="out"]'), 240, 110);
+    pointer('pointerup', d.view!.root, 700, 700);
+    expect(rejected).toHaveBeenCalledOnce();
+  });
+
+  it('treats releasing over the starting node body as a cancel, not a self-link', () => {
+    const rejected = vi.fn();
+    d.on('connectRejected', rejected);
+    pointer('pointerdown', q('[data-node-id="b"] [data-port-id="out"]'), 240, 110);
+    // Inside b's box (200..240 x 100..120), more than the 16 px snap radius from every port.
+    pointer('pointerup', d.view!.root, 220, 118);
+    expect(d.store.links.size).toBe(1);
+    expect(rejected).not.toHaveBeenCalled();
+  });
+
+  it('connects a drop on a node body to its nearest accepting port', () => {
+    pointer('pointerdown', q('[data-node-id="b"] [data-port-id="out"]'), 240, 110);
+    // Inside node a's box (0..40 x 0..20), away from any port.
+    pointer('pointerup', d.view!.root, 12, 12);
+    const added = [...d.store.links.values()].find((l) => l.id !== 'm')!;
+    expect(added).toMatchObject({
+      from: { node: 'b', port: 'out' },
+      to: { node: 'a', port: 'in' },
+    });
   });
 });
 
