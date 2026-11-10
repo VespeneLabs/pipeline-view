@@ -98,6 +98,9 @@ describe('setIssues', () => {
     expect(a.getAttribute('aria-description')).toBe(
       'Error: Not connected. Warning: No outlet pressure.',
     );
+    expect(a.querySelector(':scope > desc.pv-issue-desc')!.textContent).toBe(
+      'Error: Not connected. Warning: No outlet pressure.',
+    );
     expect($('[data-node-id="b"]')!.hasAttribute('data-issue-severity')).toBe(false);
     expect($('[data-link-id="ab"]')!.getAttribute('data-issue-severity')).toBe('info');
 
@@ -121,6 +124,7 @@ describe('setIssues', () => {
     flush();
     expect($('[data-node-id="a"]')!.hasAttribute('data-issue-severity')).toBe(false);
     expect($('[data-node-id="a"]')!.hasAttribute('aria-description')).toBe(false);
+    expect($('[data-node-id="a"] desc')).toBeNull();
     expect($$('.pv-issue-badge').map((b) => b.getAttribute('data-issue-node'))).toEqual(['b']);
     expect(d.getIssues()).toEqual({
       nodes: { b: [{ severity: 'info', message: 'y' }], c: [] },

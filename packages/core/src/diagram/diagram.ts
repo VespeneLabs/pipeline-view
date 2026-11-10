@@ -1,4 +1,12 @@
-import type { DataRecord, DiagramModel, ModelPatch, Point, Rect, Size } from '../model/types';
+import type {
+  DataRecord,
+  DiagramModel,
+  ModelPatch,
+  NodeModel,
+  Point,
+  Rect,
+  Size,
+} from '../model/types';
 import { ModelStore, applyPatch, clone, validateModel } from '../model/store';
 import { migrateModel } from '../model/migrate';
 import {
@@ -24,6 +32,7 @@ import {
 import { applyViewportToView, createView, type View } from '../viewport/view';
 import { Emitter } from './emitter';
 import { nodeBounds, unionRects } from './geometry';
+import { nodePorts } from '../symbols/resolve';
 import { SvgRenderer } from '../render/svg-renderer';
 import { OverlayRenderer } from '../render/overlay';
 import { attachPointerEvents } from '../render/input';
@@ -61,6 +70,8 @@ export interface InternalEvents {
   viewport: { viewport: Viewport };
   /** Node geometry changed outside the model (measured HTML node sizes): re-place and re-route. */
   geometry: { ids: string[] };
+  /** An approved async change wasn't applied because the model changed while the hook was pending. */
+  changeDropped: { reason: 'stale' };
 }
 
 const MAX_UNDO = 200;
@@ -75,6 +86,9 @@ export class Diagram implements DiagramApi {
   readonly symbols: SymbolRegistry;
   /** Measured sizes of content-sized HTML nodes (FR-45). View state: never saved, never undone. */
   private readonly measuredSizes = new Map<string, Size>();
+  private htmlTypesCache:
+    | { spec: DiagramOptions['nodeRenderers']; types: Record<string, 'fixed' | 'content'> }
+    | undefined;
   /** @internal */
   readonly internal = new Emitter<InternalEvents>();
 
@@ -90,6 +104,11 @@ export class Diagram implements DiagramApi {
   /** Live-data keys per node (setNodeData), excluded from patch() and isDirty(). */
   private readonly live = new Map<string, LiveState>();
   private revision = 0;
+  /**
+   * Bumped by every applied change (commits, previews, loads). An async veto replays its ops only if
+   * this is unchanged when the hook resolves (see replayIfUnchanged).
+   */
+  private epoch = 0;
   private savedRevision = 0;
   private savedDocument = '';
   private destroyed = false;
@@ -193,6 +212,7 @@ export class Diagram implements DiagramApi {
   load(model: DiagramModel): void {
     this.assertAlive();
     this.store.load(model);
+    this.epoch++;
     this.previewOps = null;
     this.previewTracker = null;
     this.undoStack = [];
@@ -216,6 +236,11 @@ export class Diagram implements DiagramApi {
     this.transact(fn, opts, true);
   }
 
+  /**
+   * `guarded` is true for user edits: the before-hooks run (FR-43) and links on ports that disappear
+   * are pruned (FR-40). It's false for host-driven patches (applyDiff, patch(), host history), whose
+   * documents are the source of truth and already carry any link removals.
+   */
   private transact(
     fn: (tx: Transaction) => void,
     opts: { undoable?: boolean },
@@ -223,7 +248,7 @@ export class Diagram implements DiagramApi {
   ): void {
     if (this.previewOps) throw new Error('Commit or cancel the active preview before update()');
     const tracker = new ChangeTracker();
-    const ops = this.runTx(fn, tracker);
+    const ops = this.runTx(fn, tracker, guarded);
     if (ops.length === 0) return;
     const apply = (t: ChangeTracker) => {
       if (opts.undoable !== false) this.pushUndo(ops, t);
@@ -234,8 +259,9 @@ export class Diagram implements DiagramApi {
     // Vetoed (or pending): nothing was emitted yet, so a silent revert is enough.
     this.revertSilently(ops);
     if (verdict !== false) {
+      const at = this.epoch;
       void verdict.then((ok) => {
-        if (ok && !this.destroyed) apply(this.applyTracked(ops));
+        if (ok) this.replayIfUnchanged(at, () => apply(this.applyTracked(ops)));
       });
     }
   }
@@ -264,6 +290,21 @@ export class Diagram implements DiagramApi {
     if (!settle(first)) return false;
     const v = second();
     return v instanceof Promise ? v.then(settle, () => false) : settle(v);
+  }
+
+  /**
+   * Re-applies a change whose async veto resolved true, but only if nothing changed meanwhile. The ops
+   * were recorded against the earlier model: replaying them over newer edits could overwrite those edits
+   * or reinsert items at stale positions. When the model moved (an edit, undo, load, or a gesture in
+   * progress), the change is dropped and the host is told through `changeDropped`.
+   */
+  private replayIfUnchanged(at: number, replay: () => void): void {
+    if (this.destroyed) return;
+    if (this.epoch !== at || this.previewOps) {
+      this.internal.emit('changeDropped', { reason: 'stale' });
+      return;
+    }
+    replay();
   }
 
   private revertSilently(ops: Op[]): void {
@@ -315,7 +356,7 @@ export class Diagram implements DiagramApi {
    */
   preview(fn: (tx: Transaction) => void): void {
     this.previewTracker ??= new ChangeTracker();
-    const ops = this.runTx(fn, this.previewTracker);
+    const ops = this.runTx(fn, this.previewTracker, true);
     this.previewOps ??= [];
     this.previewOps.push(...ops);
     if (ops.length) this.commit(ops, false);
@@ -338,11 +379,14 @@ export class Diagram implements DiagramApi {
     for (const op of inverse) applyOp(this.store, op);
     this.commit(inverse, false);
     if (verdict !== false) {
+      const at = this.epoch;
       void verdict.then((ok) => {
-        if (!ok || this.destroyed) return;
-        const t = this.applyTracked(ops);
-        this.pushUndo(ops, t);
-        this.commit(ops, true, true, t);
+        if (!ok) return;
+        this.replayIfUnchanged(at, () => {
+          const t = this.applyTracked(ops);
+          this.pushUndo(ops, t);
+          this.commit(ops, true, true, t);
+        });
       });
     }
   }
@@ -361,10 +405,20 @@ export class Diagram implements DiagramApi {
     return this.previewOps !== null;
   }
 
-  private runTx(fn: (tx: Transaction) => void, tracker?: ChangeTracker): Op[] {
+  /** Resolved port ids of a node, or undefined for an unknown symbol without a ports override. */
+  private portIdsOf(node: NodeModel): ReadonlySet<string> | undefined {
+    const def = this.symbols.get(node.type);
+    return def || node.ports ? new Set(nodePorts(def, node).map((p) => p.id)) : undefined;
+  }
+
+  private runTx(fn: (tx: Transaction) => void, tracker?: ChangeTracker, prune = true): Op[] {
     this.assertAlive();
     if (this.inTransaction) throw new Error('diagram.update() cannot be nested');
-    const tx = new TransactionImpl(this.store, tracker);
+    const tx = new TransactionImpl(this.store, {
+      tracker,
+      // User edits prune links on ports that disappear (FR-40); host-driven patches don't (FR-44).
+      ...(prune ? { portIds: (node: NodeModel) => this.portIdsOf(node) } : {}),
+    });
     this.inTransaction = true;
     try {
       fn(tx);
@@ -456,6 +510,7 @@ export class Diagram implements DiagramApi {
   private commit(ops: Op[], pub = true, internal = true, tracker?: ChangeTracker): void {
     const diff = diffOf(ops);
     if (isEmptyDiff(diff)) return;
+    this.epoch++;
     if (pub) this.revision++;
     this.pruneSelection(diff);
     if (internal) this.internal.emit('model', { diff });
@@ -644,10 +699,14 @@ export class Diagram implements DiagramApi {
 
   /** Node types rendered as HTML (FR-45) and their sizing. */
   htmlNodeTypes(): Record<string, 'fixed' | 'content'> {
+    // Hot path (every symbol lookup goes through ViewRegistry): memoized on the option's identity.
+    const spec = this.options.nodeRenderers;
+    if (this.htmlTypesCache && this.htmlTypesCache.spec === spec) return this.htmlTypesCache.types;
     const out: Record<string, 'fixed' | 'content'> = {};
     for (const [type, spec] of Object.entries(this.options.nodeRenderers ?? {})) {
       out[type] = typeof spec === 'function' ? 'fixed' : (spec.sizing ?? 'fixed');
     }
+    this.htmlTypesCache = { spec, types: out };
     return out;
   }
 
@@ -661,6 +720,7 @@ export class Diagram implements DiagramApi {
     if (!size && !prev) return;
     if (size) this.measuredSizes.set(id, { width: size.width, height: size.height });
     else this.measuredSizes.delete(id);
+    (this.symbols as ViewRegistry).refresh();
     this.internal.emit('geometry', { ids: [id] });
   }
 

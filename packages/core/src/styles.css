@@ -435,6 +435,14 @@
   color: var(--pv-muted);
 }
 
+/* ---- port labels (per-node ports, FR-40) ---------------------------------- */
+
+.pv-port-label {
+  fill: var(--pv-muted);
+  font: 500 var(--pv-font-size-small) var(--pv-font);
+  pointer-events: none;
+}
+
 /* ---- Comparison (FR-51) ---- */
 .pv-diff-outline {
   fill: none;

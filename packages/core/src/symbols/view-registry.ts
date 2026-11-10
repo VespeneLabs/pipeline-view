@@ -18,7 +18,7 @@ const htmlFallback = (type: string): SymbolDef => ({
 });
 
 export class ViewRegistry extends SymbolRegistry {
-  private readonly wrapped = new WeakMap<SymbolDef, SymbolDef>();
+  private wrapped = new WeakMap<SymbolDef, SymbolDef>();
 
   constructor(
     parent: SymbolRegistry,
@@ -27,6 +27,14 @@ export class ViewRegistry extends SymbolRegistry {
     private readonly measured: ReadonlyMap<string, Size>,
   ) {
     super(parent);
+  }
+
+  /**
+   * Call when a measured size changes. Wrappers get a new identity, so per-node caches keyed on the
+   * symbol (nodeSize/nodePorts) don't serve sizes or ports from before the measurement.
+   */
+  refresh(): void {
+    this.wrapped = new WeakMap();
   }
 
   override get(type: string): SymbolDef | undefined {

@@ -91,15 +91,17 @@ describe('nodeRenderers (FR-45)', () => {
   it('content sizing: the measured size drives bounds and scales the ports', async () => {
     const ref = createRef<Diagram>();
     const Card = () => <div>content</div>;
+    let width = 200;
+    let height = 80;
     const offsets = vi
       .spyOn(HTMLElement.prototype, 'offsetWidth', 'get')
       .mockImplementation(function (this: HTMLElement) {
-        return this.classList.contains('pv-node-html') ? 200 : 0;
+        return this.classList.contains('pv-node-html') ? width : 0;
       });
     const offsetsH = vi
       .spyOn(HTMLElement.prototype, 'offsetHeight', 'get')
       .mockImplementation(function (this: HTMLElement) {
-        return this.classList.contains('pv-node-html') ? 80 : 0;
+        return this.classList.contains('pv-node-html') ? height : 0;
       });
     const { container } = render(
       <PipelineView
@@ -121,6 +123,17 @@ describe('nodeRenderers (FR-45)', () => {
     expect(out.getAttribute('cy')).toBe('40');
     expect(ref.current!.getLinkPath('l')![0]).toEqual({ x: 200, y: 40 });
     expect(ref.current!.canUndo()).toBe(false); // measuring is view state, not an edit
+
+    // The content grows: the next measurement moves the port and the route (no stale cached size).
+    width = 260;
+    height = 100;
+    await act(async () => {
+      ref.current!.setMeasuredSize('c1', { width, height });
+      ref.current!.renderer!.flush();
+    });
+    expect(out.getAttribute('cx')).toBe('260');
+    expect(out.getAttribute('cy')).toBe('50');
+    expect(ref.current!.getLinkPath('l')![0]).toEqual({ x: 260, y: 50 });
     offsets.mockRestore();
     offsetsH.mockRestore();
   });
