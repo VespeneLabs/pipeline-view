@@ -60,6 +60,11 @@ export interface Router {
   route(requests: RouteRequest[]): RouteResult[];
   /** Forget the stored routes of deleted links so they no longer occupy corridors. */
   removeRoutes(linkIds: string[]): void;
+  /**
+   * Takes over routes computed elsewhere (for example in a routing Web Worker, FR-55) without routing
+   * them again, so later `updateObstacle` / `route` calls know their corridors. Matched by linkId.
+   */
+  adoptRoutes?(requests: RouteRequest[], results: RouteResult[]): void;
   /** Compute line-jump crossings and branch junctions for the current set of routes (FR-12). */
   analyze(routes: RouteResult[]): { crossings: Crossing[]; junctions: Junction[] };
 }
