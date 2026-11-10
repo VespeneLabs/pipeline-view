@@ -1,0 +1,209 @@
+/*
+ * @pipeline-view/core styles. Every visual value is a --pv-* custom property (FR-33/35).
+ * Values come from Figma node 1:21 at 1:1 scale. Tokens are declared with zero specificity
+ * (:where), so any host rule overrides them. Theme: data-theme="light" | "dark" on any ancestor
+ * or on .pv-root; otherwise prefers-color-scheme decides.
+ */
+
+:where(:root),
+:where([data-theme='light']) {
+  --pv-font: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --pv-bg: #ffffff;
+  --pv-border: #d8e1e5;
+  --pv-grid: #eef2f4;
+  --pv-frame-radius: 10px;
+  --pv-line: #637783;
+  --pv-line-signal: #637783;
+  --pv-line-width: 2.4px;
+  --pv-line-signal-dash: 4 5;
+  --pv-line-electrical-dash: 10 7;
+  /* Reference #50 is a solid line with paired ticks. Core draws the dash fallback until ticks land. */
+  --pv-line-pneumatic-dash: 12 4 2 4;
+  --pv-symbol-stroke: #334d5b;
+  --pv-symbol-stroke-width: 2.4px;
+  --pv-symbol-fill: var(--pv-bg);
+  --pv-level-fill: var(--pv-line);
+  --pv-level-opacity: 0.18;
+  --pv-ink: #192d38;
+  --pv-muted: #596c77;
+  --pv-font-size-label: 14px;
+  --pv-font-size-small: 12px;
+  --pv-selection: #185ac7;
+  --pv-selection-bg: #eef4ff;
+  --pv-selection-radius: 6px;
+  --pv-card-bg: #f5f8f9;
+  --pv-card-border: #d8e1e5;
+  --pv-radius: 6px;
+  --pv-arrow-size: 10;
+  --pv-flow-color: var(--pv-line);
+  --pv-flow-dash: 8 12;
+  --pv-junction-radius: 4.8;
+  --pv-jump-radius: 8;
+  --pv-leader-line: var(--pv-line-signal);
+  --pv-focus-ring: #185ac7;
+}
+
+:where([data-theme='dark']) {
+  --pv-bg: #0e171c;
+  --pv-border: #2a3a43;
+  --pv-grid: #172229;
+  --pv-line: #8a9eaa;
+  --pv-line-signal: #8a9eaa;
+  --pv-symbol-stroke: #b9c8d0;
+  --pv-level-opacity: 0.28;
+  --pv-ink: #e3ebef;
+  --pv-muted: #93a6b1;
+  --pv-selection: #6ea8ff;
+  --pv-selection-bg: #15243a;
+  --pv-card-bg: #152129;
+  --pv-card-border: #2a3a43;
+  --pv-focus-ring: #6ea8ff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :where(:root:not([data-theme='light'])) {
+    --pv-bg: #0e171c;
+    --pv-border: #2a3a43;
+    --pv-grid: #172229;
+    --pv-line: #8a9eaa;
+    --pv-line-signal: #8a9eaa;
+    --pv-symbol-stroke: #b9c8d0;
+    --pv-level-opacity: 0.28;
+    --pv-ink: #e3ebef;
+    --pv-muted: #93a6b1;
+    --pv-selection: #6ea8ff;
+    --pv-selection-bg: #15243a;
+    --pv-card-bg: #152129;
+    --pv-card-border: #2a3a43;
+    --pv-focus-ring: #6ea8ff;
+  }
+}
+
+/* Re-declare derived tokens where the theme switches, so var(--pv-bg) etc. resolve against the local theme. */
+:where([data-theme]) {
+  --pv-symbol-fill: var(--pv-bg);
+  --pv-level-fill: var(--pv-line);
+  --pv-flow-color: var(--pv-line);
+  --pv-leader-line: var(--pv-line-signal);
+}
+
+/* ---- root ---------------------------------------------------------------- */
+
+.pv-root {
+  background: var(--pv-bg);
+  color: var(--pv-ink);
+  font-family: var(--pv-font);
+}
+.pv-root:focus-visible {
+  outline: 2px solid var(--pv-focus-ring);
+}
+.pv-root.pv-pan-ready {
+  cursor: grab;
+}
+.pv-root.pv-panning {
+  cursor: grabbing;
+}
+
+/* ---- nodes --------------------------------------------------------------- */
+
+.pv-node {
+  color: var(--pv-symbol-stroke);
+}
+/* Symbols ship stroke-width="2" as a presentation attribute; this rule overrides it. */
+.pv-symbol :is(path, circle, ellipse, rect, line, polyline, polygon) {
+  stroke-width: var(--pv-symbol-stroke-width);
+}
+.pv-node.pv-selected {
+  color: var(--pv-selection);
+}
+.pv-label {
+  fill: var(--pv-ink);
+  font: 600 var(--pv-font-size-label) var(--pv-font);
+  paint-order: stroke;
+  stroke: var(--pv-bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.pv-port {
+  fill: var(--pv-bg);
+  stroke: var(--pv-selection);
+  stroke-width: 1.5px;
+  opacity: 0;
+}
+.pv-root[data-mode='edit'] .pv-node:hover .pv-port {
+  opacity: 1;
+}
+.pv-missing {
+  color: var(--pv-muted);
+}
+
+/* ---- links --------------------------------------------------------------- */
+
+.pv-link-line,
+.pv-link-arrows,
+.pv-link-flow,
+.pv-link-hit {
+  fill: none;
+  stroke-linejoin: round;
+}
+.pv-link-line {
+  stroke: var(--pv-line);
+  stroke-width: var(--pv-line-width);
+}
+.pv-link[data-kind='signal'] .pv-link-line {
+  stroke: var(--pv-line-signal);
+  stroke-dasharray: var(--pv-line-signal-dash);
+}
+.pv-link[data-kind='electrical'] .pv-link-line {
+  stroke: var(--pv-line-signal);
+  stroke-dasharray: var(--pv-line-electrical-dash);
+}
+.pv-link[data-kind='pneumatic'] .pv-link-line {
+  stroke: var(--pv-line-signal);
+  stroke-dasharray: var(--pv-line-pneumatic-dash);
+}
+.pv-link-arrows {
+  stroke: var(--pv-line);
+  stroke-width: var(--pv-line-width);
+  stroke-linecap: round;
+}
+.pv-link-hit {
+  stroke: transparent;
+  stroke-width: 12px;
+  pointer-events: stroke;
+}
+.pv-link[data-flowing] .pv-link-line {
+  stroke-opacity: 0.35;
+}
+.pv-link-flow {
+  stroke: var(--pv-flow-color);
+  stroke-width: var(--pv-line-width);
+  stroke-dasharray: var(--pv-flow-dash);
+  animation: pv-flow 1s linear infinite;
+  pointer-events: none;
+}
+@keyframes pv-flow {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pv-link-flow {
+    animation: none;
+  }
+}
+.pv-link.pv-selected :is(.pv-link-line, .pv-link-arrows) {
+  stroke: var(--pv-selection);
+  stroke-opacity: 1;
+}
+.pv-junction {
+  fill: var(--pv-line);
+  stroke: none;
+}
+
+/* ---- overlay ------------------------------------------------------------- */
+
+.pv-overlay > * {
+  pointer-events: auto;
+}

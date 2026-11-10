@@ -14,6 +14,7 @@ import {
 import { applyViewportToView, createView, type View } from '../viewport/view';
 import { Emitter } from './emitter';
 import { nodeBounds, unionRects } from './geometry';
+import { SvgRenderer } from '../render/svg-renderer';
 import { TransactionImpl, applyOp, diffOf, invertOp, isEmptyDiff, type Op } from './transaction';
 import type {
   DiagramApi,
@@ -72,6 +73,8 @@ export class Diagram implements ImplementedApi {
   view: View | undefined;
   /** @internal Pan/zoom input. Its `suppressClick` tells click handlers a drag just ended. */
   viewportController: ViewportController | undefined;
+  /** @internal SVG renderer. Created on mount. */
+  renderer: SvgRenderer | undefined;
   private viewport: Viewport = { x: 0, y: 0, zoom: 1 };
   private size: Size = { width: 0, height: 0 };
   private readonly minZoom: number;
@@ -114,6 +117,7 @@ export class Diagram implements ImplementedApi {
       this.resizeObserver = new RO(() => this.measure());
       this.resizeObserver.observe(view.root);
     }
+    this.renderer = new SvgRenderer(this, view);
     this.internal.emit('mount', { view });
     if (this.pendingFit) this.zoomToFit(this.pendingFit);
   }
@@ -396,6 +400,11 @@ export class Diagram implements ImplementedApi {
     return unionRects(rects) ?? { x: 0, y: 0, width: 0, height: 0 };
   }
 
+  /** Rendered polyline of a link (port points included), as routed. Undefined before mount or the first render. */
+  getLinkPath(linkId: string): Point[] | undefined {
+    this.renderer?.flush();
+    return this.renderer?.getLinkPath(linkId);
+  }
   /** Maps a DOM element (an event target) to the diagram item it belongs to, using the data-*-id attributes. */
   hitTest(
     target: EventTarget | null,
@@ -489,6 +498,7 @@ export class Diagram implements ImplementedApi {
     if (this.destroyed) return;
     this.destroyed = true;
     this.cancelAnimation();
+    this.renderer?.destroy();
     this.viewportController?.destroy();
     this.resizeObserver?.disconnect();
     this.view?.root.remove();
