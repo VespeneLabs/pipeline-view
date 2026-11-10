@@ -40,7 +40,15 @@ export interface Reading {
   status: 'normal' | 'warning' | 'alarm' | 'stale';
 }
 
-const card = (id: string, node: string, x: number, y: number, tag: string, unit: string) => ({
+const card = (
+  id: string,
+  node: string,
+  x: number,
+  y: number,
+  tag: string,
+  unit: string,
+  leaderWaypoints?: { x: number; y: number }[],
+) => ({
   id,
   kind: 'html' as const,
   renderer: 'readingCard',
@@ -48,6 +56,7 @@ const card = (id: string, node: string, x: number, y: number, tag: string, unit:
   position: { x, y },
   size: { width: 160, height: 92 },
   leader: true,
+  ...(leaderWaypoints ? { leaderWaypoints } : {}),
   data: { tag, unit, decimals: 1, reading: id } satisfies CardData,
 });
 
@@ -195,10 +204,19 @@ export const monitorModel: DiagramModel = {
     },
   ],
   annotations: [
-    card('TI-101', 'MHWT', 308, -15, 'TI-101 · MHWT', '°C'),
+    // Leader bends copied from the Figma sensor-signal vectors (relative to the anchored node).
+    card('TI-101', 'MHWT', 308, -15, 'TI-101 · MHWT', '°C', [
+      { x: 290, y: 31 },
+      { x: 290, y: 0 },
+      { x: 78, y: 0 },
+      { x: 78, y: 14 },
+    ]),
     card('FI-103', 'MPAT', 132, 3, 'FI-103 · Additive', 'kg/h'),
-    card('FI-101', 'FCV101', -136, -34, 'FI-101 · Feed flow', 'kg/h'),
-    card('TI-102', 'MHT', 100, 20, 'TI-102 · MHT', '°C'),
+    card('FI-101', 'FCV101', -136, -34, 'FI-101 · Feed flow', 'kg/h', [
+      { x: -57, y: 90 },
+      { x: 40, y: 90 },
+    ]),
+    card('TI-102', 'MHT', 100, 20, 'TI-102 · MHT', '°C', [{ x: 78, y: 66 }]),
     {
       id: 'P03-state',
       kind: 'html',

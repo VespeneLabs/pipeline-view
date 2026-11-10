@@ -34,14 +34,8 @@ test('live data ticks at 1 Hz through setNodeDataBatch', async ({ page }) => {
   await expect(page.getByText('Paused')).toBeVisible();
 });
 
-// fixme: core captures the pointer on pointerdown for panning, so Chrome retargets the click to the root and
-// view-mode clicks never select. Reported to the core owner; un-fixme with the core fix.
-test.fixme('clicking equipment selects it', async ({ page }) => {
+test('clicking equipment selects it', async ({ page }) => {
   await page.goto('./?static#/monitor');
-  // The casing stroke (left edge of the impeller circle). Clicking the open middle needs a node hit
-  // area in core; switch to a plain .click() once that lands.
-  const casing = page.locator('[data-node-id="P03"] .pv-symbol path').first();
-  const box = (await casing.boundingBox())!;
-  await casing.click({ position: { x: 1, y: box.height / 2 } });
+  await page.locator('[data-node-id="P03"]').click();
   await expect(page.getByText('selected. A host app')).toContainText('P03');
 });

@@ -55,6 +55,10 @@ export function ProcessMonitor() {
   const [flow, setFlow] = useState(!STATIC);
   const [selected, setSelected] = useState<string | null>('FCV101');
   const [tick, setTick] = useState(0);
+  const [ready, setReady] = useState<Diagram | null>(null);
+  // Runs after PipelineView's own effects of the same commit, so after it has loaded the model (a load
+  // clears the selection). The Figma frame shows FCV101 selected.
+  useEffect(() => ready?.setSelection([{ kind: 'node', id: 'FCV101' }]), [ready]);
 
   /** 1:1 with the Figma frame when it fits, otherwise zoom to fit. */
   const frameView = (d: Diagram) => {
@@ -68,8 +72,7 @@ export function ProcessMonitor() {
     diagramRef.current = d;
     (window as unknown as { __diagram?: Diagram }).__diagram = d; // for tests and the console
     frameView(d);
-    // PipelineView loads the model right after onReady, which clears the selection.
-    requestAnimationFrame(() => d.setSelection([{ kind: 'node', id: 'FCV101' }]));
+    setReady(d);
     resize.current?.disconnect();
     resize.current = new ResizeObserver(() => frameView(d));
     if (d.view) resize.current.observe(d.view.root);
