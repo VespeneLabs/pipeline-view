@@ -17,6 +17,8 @@ import { nodeBounds, unionRects } from './geometry';
 import { SvgRenderer } from '../render/svg-renderer';
 import { OverlayRenderer } from '../render/overlay';
 import { attachPointerEvents } from '../render/input';
+import { KeyboardNavigation } from '../render/a11y';
+import { exportPng, exportSvgString } from '../render/export';
 import { TransactionImpl, applyOp, diffOf, invertOp, isEmptyDiff, type Op } from './transaction';
 import type {
   DiagramApi,
@@ -48,12 +50,9 @@ export interface InternalEvents {
 const MAX_UNDO = 200;
 const ANIMATION_MS = 250;
 
-/** Everything in DiagramApi except export, which lands in a later layer. */
-type ImplementedApi = Omit<DiagramApi, 'exportSVG' | 'exportPNG'>;
-
 const refKey = (r: ItemRef) => `${r.kind}\u0000${r.id}`;
 
-export class Diagram implements ImplementedApi {
+export class Diagram implements DiagramApi {
   /** @internal Model storage. Treat items as read-only. */
   readonly store = new ModelStore();
   /** Instance registry layered over the global one (FR-7). */
@@ -80,6 +79,8 @@ export class Diagram implements ImplementedApi {
   /** @internal Annotations and HTML overlays. Created on mount. */
   overlay: OverlayRenderer | undefined;
   private detachPointerEvents: (() => void) | undefined;
+  /** @internal Keyboard focus navigation. Created on mount. */
+  keyboard: KeyboardNavigation | undefined;
   private viewport: Viewport = { x: 0, y: 0, zoom: 1 };
   private size: Size = { width: 0, height: 0 };
   private readonly minZoom: number;
@@ -125,6 +126,7 @@ export class Diagram implements ImplementedApi {
     this.renderer = new SvgRenderer(this, view);
     this.overlay = new OverlayRenderer(this, view);
     this.detachPointerEvents = attachPointerEvents(this, view);
+    this.keyboard = new KeyboardNavigation(this, view);
     this.internal.emit('mount', { view });
     if (this.pendingFit) this.zoomToFit(this.pendingFit);
   }
@@ -418,6 +420,18 @@ export class Diagram implements ImplementedApi {
   }
 
   /** Maps a DOM element (an event target) to the diagram item it belongs to, using the data-*-id attributes. */
+  /** Standalone SVG of the whole diagram (or the visible viewport) with styles inlined (FR-32). */
+  exportSVG(opts?: { viewportOnly?: boolean; padding?: number }): string {
+    if (!this.view) throw new Error('exportSVG() needs a mounted diagram');
+    return exportSvgString(this, this.view, opts);
+  }
+
+  /** PNG of the SVG export. `scale` defaults to 2 for crisp output on high-DPI screens. */
+  exportPNG(opts?: { viewportOnly?: boolean; padding?: number; scale?: number }): Promise<Blob> {
+    if (!this.view) return Promise.reject(new Error('exportPNG() needs a mounted diagram'));
+    return exportPng(this, this.view, opts);
+  }
+
   hitTest(
     target: EventTarget | null,
   ): ItemRef | { kind: 'port'; node: string; port: string } | null {
@@ -510,6 +524,7 @@ export class Diagram implements ImplementedApi {
     if (this.destroyed) return;
     this.destroyed = true;
     this.cancelAnimation();
+    this.keyboard?.destroy();
     this.detachPointerEvents?.();
     this.overlay?.destroy();
     this.renderer?.destroy();
