@@ -11,6 +11,7 @@ const ROUTES = [
   'monitor',
   'editor',
   'controlled',
+  'review',
   'stress',
   'api',
   'gallery',

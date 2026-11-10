@@ -4,6 +4,7 @@ import { ProcessMonitor } from './demos/monitor/ProcessMonitor';
 import { PidEditor } from './demos/editor/Editor';
 import { StressTest } from './demos/stress/StressTest';
 import { ControlledDemo } from './demos/controlled/Controlled';
+import { ReviewDemo } from './demos/review/Review';
 import { ApiReference } from './pages/ApiReference';
 import { CustomSymbols } from './pages/CustomSymbols';
 import { Gallery } from './pages/Gallery';
@@ -29,6 +30,7 @@ const PAGES: Page[] = [
   { path: 'monitor', title: 'Process monitor', group: 'Demos', component: ProcessMonitor },
   { path: 'editor', title: 'P&ID editor', group: 'Demos', component: PidEditor },
   { path: 'controlled', title: 'Controlled mode', group: 'Demos', component: ControlledDemo },
+  { path: 'review', title: 'Validation & compare', group: 'Demos', component: ReviewDemo },
   { path: 'stress', title: 'Stress test', group: 'Demos', component: StressTest },
   { path: 'api', title: 'API reference', group: 'Reference', component: ApiReference },
   { path: 'gallery', title: 'Symbol gallery', group: 'Reference', component: Gallery },
