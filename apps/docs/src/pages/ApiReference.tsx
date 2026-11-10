@@ -135,7 +135,7 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
       },
       {
         sig: 'applyDiff(patch: ModelPatch, { undoable? }): void',
-        doc: 'Applies a JSON patch (added / removed / changed per collection) as one transaction.',
+        doc: 'Applies a JSON patch (added / removed / changed per collection) as one transaction. Undoable by default, unlike patch().',
       },
       {
         sig: 'isDirty() / markSaved()',
@@ -156,15 +156,19 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
     entries: [
       {
         sig: 'DiagramOptions.onBeforeDelete(items: { nodes, links, annotations }) => boolean | Promise<boolean>',
-        doc: 'Asked before a delete, including links that go with their nodes. Return a Promise to show your own confirmation; the change is rolled back while it is pending and applied when it resolves true, unless the model changed in the meantime.',
+        doc: 'Asked before a delete, including links that go with their nodes. Return a Promise to show your own confirmation; the change is rolled back while it is pending and applied when it resolves true, unless the model changed in the meantime (then changeDropped fires instead).',
       },
       {
         sig: 'DiagramOptions.beforeChange(diff, patch) => boolean | Promise<boolean>',
-        doc: 'Veto for any user transaction, with the same Promise behaviour.',
+        doc: 'Veto for every update() (programmatic ones too) and every committed editor gesture, with the same Promise behaviour. Host-driven patch(), applyDiff() and history replays skip it.',
       },
       {
         sig: 'NodeModel.locked / LinkModel.locked',
-        doc: 'Locked items cannot be moved, deleted or reconnected in edit mode, and get data-locked. Saved with the model (v2).',
+        doc: 'Saved with the model (v2), and styled through data-locked. In edit mode a locked node cannot be moved or deleted, and a locked link cannot be deleted or reconnected; deleting a selection skips locked items, and nodes whose removal would take a locked link with them. An update() that would remove a locked link (e.g. by removing its port) throws and rolls back.',
+      },
+      {
+        sig: 'changeDropped: { reason: "stale", diff }',
+        doc: 'An async-approved change was not applied because the model changed while the Promise was pending. Also as onChangeDropped on <PipelineView>.',
       },
     ],
   },
