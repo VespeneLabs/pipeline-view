@@ -152,6 +152,33 @@ describe('viewport API', () => {
     expect(d.screenToDiagram({ x: 400, y: 300 })).toEqual({ x: 200, y: 100 });
   });
 
+  it('zoomToFit keeps a minimum zoom without limiting manual zoom-out', () => {
+    // Content now spans ~4000 wide in an 800x600 box: a plain fit would need zoom ~0.2.
+    d.update((tx) => tx.addNode({ id: 'far', type: 'test/box', position: { x: 3950, y: 0 } }));
+    d.zoomToFit({ padding: 0, minZoom: 0.5 });
+    const b = d.getBounds();
+    expect(d.getViewport().zoom).toBe(0.5);
+    expect(d.diagramToScreen({ x: b.x, y: b.y }).x).toBe(0);
+    d.setViewport({ zoom: 0.1 });
+    expect(d.getViewport().zoom).toBe(0.1);
+  });
+
+  it('zoomToFit uses options.fitMinZoom by default', () => {
+    d.destroy();
+    d = new Diagram({ symbols: [box], fitMinZoom: 0.5 });
+    d.mount(container);
+    d.load({
+      version: 2,
+      nodes: [
+        { id: 'a', type: 'test/box', position: { x: 0, y: 0 } },
+        { id: 'b', type: 'test/box', position: { x: 4000, y: 0 } },
+      ],
+      links: [],
+    });
+    d.zoomToFit({ padding: 0 });
+    expect(d.getViewport().zoom).toBe(0.5);
+  });
+
   it('zoomToItem centers a node', () => {
     d.zoomToItem({ kind: 'node', id: 'b' });
     expect(d.diagramToScreen({ x: 350, y: 175 })).toEqual({ x: 400, y: 300 });

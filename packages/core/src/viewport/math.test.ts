@@ -26,6 +26,20 @@ describe('viewport math', () => {
     expect(after.y).toBeCloseTo(before.y);
   });
 
+  it('fitRect shows the top-left part when the zoom floor stops the content from fitting', () => {
+    // 4000x300 content in 800x600 would need zoom 0.19; with a floor of 0.5 it overflows horizontally.
+    const f = fitRect(
+      { x: 100, y: 50, width: 4000, height: 300 },
+      { width: 800, height: 600 },
+      20,
+      0.5,
+      2,
+    );
+    expect(f.zoom).toBe(0.5);
+    // Left edge at the padding; vertically it still fits, so it stays centered.
+    expect(diagramToScreen(f, { x: 100, y: 200 })).toEqual({ x: 20, y: 300 });
+  });
+
   it('fitRect centers and respects padding and zoom limits', () => {
     const f = fitRect(
       { x: 100, y: 100, width: 400, height: 200 },

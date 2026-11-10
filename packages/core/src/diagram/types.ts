@@ -217,6 +217,12 @@ export interface DiagramOptions {
   /** When to zoom to fit after load (FR-47). Default 'if-no-viewport'. */
   fitOnLoad?: 'always' | 'if-no-viewport' | 'never';
   /**
+   * The smallest zoom that fitting (on load, or `zoomToFit()`) uses. When the whole diagram doesn't fit
+   * at this zoom, the top-left part shows and the rest is reachable by panning. Unlike `minZoom`, it
+   * doesn't limit manual zoom. Default: no floor beyond `minZoom`.
+   */
+  fitMinZoom?: number;
+  /**
    * Large diagrams (FR-55): render only what's visible above a node count (default on; threshold
    * default 300), hide detail below zoom thresholds per layer, and optionally route in a Web Worker.
    */
@@ -314,7 +320,7 @@ export interface DiagramApi {
 
   getViewport(): Viewport;
   setViewport(v: Partial<Viewport>, opts?: { animate?: boolean }): void;
-  zoomToFit(opts?: { padding?: number; animate?: boolean }): void;
+  zoomToFit(opts?: { padding?: number; animate?: boolean; minZoom?: number }): void;
   zoomToItem(item: ItemRef, opts?: { animate?: boolean }): void;
   screenToDiagram(p: Point): Point;
   diagramToScreen(p: Point): Point;

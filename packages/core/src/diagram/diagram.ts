@@ -145,7 +145,7 @@ export class Diagram implements DiagramApi {
   private readonly maxZoom: number;
   private resizeObserver: ResizeObserver | undefined;
   private animFrame = 0;
-  private pendingFit: { padding?: number } | null = null;
+  private pendingFit: { padding?: number; minZoom?: number } | null = null;
   /** A fit-on-load is wanted once the content (HTML/React included) has rendered and been measured. */
   private fitWanted = false;
   private fitFrame = 0;
@@ -705,19 +705,22 @@ export class Diagram implements DiagramApi {
     this.animFrame = 0;
   }
 
-  /** Fits the whole diagram. Before mount, or while the container has no size, it's deferred until it can run. */
-  zoomToFit(opts: { padding?: number; animate?: boolean } = {}): void {
+  /**
+   * Fits the whole diagram. Before mount, or while the container has no size, it's deferred until it can run.
+   * `minZoom` (default `options.fitMinZoom`) keeps the fit legible: when the whole diagram would need a
+   * smaller zoom, it stays at `minZoom` and shows the top-left part, and the user can pan to the rest.
+   */
+  zoomToFit(opts: { padding?: number; animate?: boolean; minZoom?: number } = {}): void {
     if (!this.view || this.size.width === 0 || this.size.height === 0) {
-      this.pendingFit = { padding: opts.padding };
+      this.pendingFit = { padding: opts.padding, minZoom: opts.minZoom };
       return;
     }
     this.pendingFit = null;
     const bounds = this.getBounds();
     if (bounds.width === 0 && bounds.height === 0 && this.store.nodes.size === 0) return;
-    this.setViewport(
-      fitRect(bounds, this.size, opts.padding ?? 24, this.minZoom, Math.min(this.maxZoom, 2)),
-      opts,
-    );
+    const maxZoom = Math.min(this.maxZoom, 2);
+    const floor = clamp(opts.minZoom ?? this.options.fitMinZoom ?? 0, this.minZoom, maxZoom);
+    this.setViewport(fitRect(bounds, this.size, opts.padding ?? 24, floor, maxZoom), opts);
   }
 
   /** Centers an item and zooms to fit it, never zooming in past 2x. */
