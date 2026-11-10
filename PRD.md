@@ -145,7 +145,7 @@ Most process-diagram tooling is either a commercial general-purpose diagram engi
 
 | ID | Requirement |
 |---|---|
-| NFR-1 Performance | 500 nodes, 1,000 links and 2,000 bound values updating at 1 Hz. Pan and zoom hold ≥ 55 fps on a mid-range laptop (M1 or similar, Chrome). A single data tick takes ≤ 4 ms main-thread time. Re-routing during a drag takes ≤ 16 ms for affected links. |
+| NFR-1 Performance | 500 nodes, 1,000 links and 2,000 bound values updating at 1 Hz. Pan and zoom hold ≥ 55 fps on a mid-range laptop (M1 or similar, Chrome). A single data tick takes ≤ 4 ms main-thread time. Re-routing during a drag takes ≤ 16 ms for affected links.<br>**Verification:** the strict budgets (tick ≤ 4 ms, drag ≤ 16 ms, ≥ 55 fps) are checked locally by the bench test `apps/docs/e2e/perf.spec.ts` (run without `CI`). Measured at v1: tick 1.1 ms, drag re-route 1.0 ms, pan/zoom 60 fps. On shared CI runners the same gate takes the best of 3 batches and enforces 1.5× headroom (tick ≤ 6 ms, drag ≤ 24 ms, ≥ 45 fps), because runner noise alone moves the tick between 1.6 and 4.5 ms. |
 | NFR-2 Bundle size | `core` ≤ 60 kB gzip, `symbols` ≤ 40 kB gzip (tree-shakable per symbol), `react` ≤ 10 kB gzip. No runtime dependencies in core, apart from an optional routing worker. |
 | NFR-3 Browsers | The last 2 versions of Chrome, Edge, Firefox and Safari. Touch: pan, pinch and tap. |
 | NFR-4 Accessibility | Keyboard navigation between nodes, ARIA labels from the node label and type, visible focus ring, WCAG AA contrast for both themes, reduced-motion support. |
@@ -194,7 +194,7 @@ apps/docs                docs site + live demos + symbol gallery (Storybook or s
 
 ## 9. Success metrics
 - Demo 1 is visually indistinguishable from the Figma frame. Reviewed side by side, there are ≤ 2 px deviations in linework placement.
-- NFR-1 benchmarks pass in CI (a stress test of a generated 500-node diagram).
+- NFR-1 benchmarks pass (a stress test of a generated 500-node diagram, `apps/docs/perf.html`). The strict budgets are verified locally and in the bench test (v1: tick 1.1 ms, drag 1.0 ms, 60 fps). CI enforces the same gate with 1.5× headroom (≥ 45 fps, best of 3) to absorb shared-runner noise, so a green CI means no regression, not strict compliance.
 - A new developer gets a live diagram on screen in **≤ 15 minutes** by following the getting-started guide.
 - No pipe ever passes through a node bounding box in auto-routing mode (property-based tests).
 

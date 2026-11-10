@@ -57,6 +57,10 @@ Every visual is a `--pv-*` custom property, with light and dark themes. Set `dat
 .pv-node[data-status='alarm'] { color: #b62f38; }
 ```
 
+## Performance
+
+Built for 500 nodes, 1,000 links and 2,000 values updating at 1 Hz. Measured at v1 (Chrome, M-class laptop, `apps/docs/perf.html`): a data tick takes **1.1 ms** of main-thread time (budget 4 ms), a drag re-route **1.0 ms** (budget 16 ms), and pan/zoom runs at **60 fps** (budget 55). The strict budgets are verified locally by the bench test. CI runs the same gate with 1.5× headroom (≥ 45 fps, best of 3) to absorb shared-runner noise.
+
 ## SSR
 
 Safe to import on the server, and the model APIs work there. `mount()` and export need a browser.
