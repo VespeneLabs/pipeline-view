@@ -3,7 +3,7 @@
  * - Data ticks (setNodeData) re-render only the symbol markup and data-status of the touched nodes. No routing.
  * - Structural changes reroute only the links attached to changed nodes, plus those the router reports as affected.
  */
-import type { LinkModel, NodeModel, Point } from '../model/types';
+import type { LinkModel, NodeModel, Point, Rect } from '../model/types';
 import type { Crossing, Junction, RouteRequest, Router } from '../routing/types';
 import type { SymbolDef } from '../symbols/types';
 import type { ItemRef, ModelDiff } from '../diagram/types';
@@ -37,6 +37,9 @@ interface NodeEl {
   node: NodeModel;
   /** Ports last rendered, to detect per-node port changes. */
   portSig?: string;
+  /** Obstacle rect and resolved port points (diagram coordinates) last given to the router. */
+  obstacleSig?: string;
+  portPointSig?: string;
 }
 
 interface LinkEl {
@@ -59,6 +62,8 @@ export class SvgRenderer {
   private readonly nodes = new Map<string, NodeEl>();
   private readonly links = new Map<string, LinkEl>();
   private readonly routes = new Map<string, Point[]>();
+  /** The router's node clearance, for deciding whether a resize reaches a route. */
+  private readonly clearance: number;
   /** Incremental line-jump / junction analysis: drag frames only re-check the links they reroute. */
   private analyzer = new RouteAnalyzer();
   private crossings = new Map<string, Point[]>();
@@ -90,6 +95,7 @@ export class SvgRenderer {
     router?: Router,
   ) {
     this.router = router ?? createRouter(diagram.options.routing);
+    this.clearance = diagram.options.routing?.clearance ?? 12;
     this.junctionLayer = this.svg('g', { class: 'pv-junctions' }) as SVGGElement;
     view.layers.links.after(this.junctionLayer);
     const i = diagram.internal;
@@ -175,7 +181,9 @@ export class SvgRenderer {
     const obstacles = new Map<string, ReturnType<typeof nodeBounds>>();
     for (const n of store.nodes.values()) {
       this.upsertNode(n);
-      obstacles.set(n.id, nodeBounds(n, this.def(n)));
+      const g = this.geometrySig(n);
+      Object.assign(this.nodes.get(n.id)!, { obstacleSig: g.rectSig, portPointSig: g.pointSig });
+      obstacles.set(n.id, g.rect);
     }
     this.router.setObstacles(obstacles);
     this.routeLinks([...store.links.keys()]);
@@ -216,9 +224,30 @@ export class SvgRenderer {
         prev.flipY !== n.flipY ||
         prev.type !== n.type;
       if (geometryChanged) {
-        for (const l of this.router.updateObstacle(id, nodeBounds(n, this.def(n))))
-          this.reroute.add(l);
-        for (const l of store.linksOf(id)) this.reroute.add(l.id);
+        // Only what actually moved counts, so a content-sized HTML node whose text width changes on a
+        // data tick doesn't re-route its links unless its ports or its obstacle really moved (FR-4).
+        const el = this.nodes.get(id)!;
+        const { rect, rectSig, pointSig } = this.geometrySig(n);
+        const portsMoved = pointSig !== el.portPointSig;
+        if (rectSig !== el.obstacleSig) {
+          const own = new Set(store.linksOf(id).map((l) => l.id));
+          for (const l of this.router.updateObstacle(id, rect)) {
+            // The router always reports the node's own links. With the ports in place, they only need a
+            // new route when the resized node (plus the router's clearance) now reaches their path.
+            if (
+              portsMoved ||
+              !own.has(l) ||
+              crossesInterior(this.routes.get(l), rect, this.clearance)
+            ) {
+              this.reroute.add(l);
+            }
+          }
+        }
+        if (portsMoved) {
+          for (const l of store.linksOf(id)) this.reroute.add(l.id);
+        }
+        el.obstacleSig = rectSig;
+        el.portPointSig = pointSig;
       }
     }
     const ids = [...this.reroute].filter((id) => store.links.has(id));
@@ -232,6 +261,17 @@ export class SvgRenderer {
   }
 
   // ---- nodes ---------------------------------------------------------------
+
+  /** The node's obstacle rect and resolved port points, as comparable signatures. */
+  private geometrySig(n: NodeModel) {
+    const def = this.def(n);
+    const rect = nodeBounds(n, def);
+    const rectSig = `${rect.x},${rect.y},${rect.width},${rect.height}`;
+    const pointSig = resolvePorts(n, def)
+      .map((p) => `${p.id}@${p.point.x},${p.point.y}:${p.direction}`)
+      .join('|');
+    return { rect, rectSig, pointSig };
+  }
 
   private def(n: NodeModel): SymbolDef | undefined {
     return this.diagram.symbols.get(n.type);
@@ -669,3 +709,28 @@ const portSignature = (ports: PortDef[]) =>
 const sameSize = (a: { width: number; height: number }, b: { width: number; height: number }) =>
   a.width === b.width && a.height === b.height;
 const PORT_LABEL_INSET = 8;
+
+/**
+ * True when a route's inner segments come closer than `clearance` to `r`, which the router never
+ * produces. The first and last segments are port stubs, which may sit inside their own node's clearance.
+ */
+function crossesInterior(pts: Point[] | undefined, r: Rect, clearance: number): boolean {
+  if (!pts) return true;
+  const l = r.x - clearance;
+  const t = r.y - clearance;
+  const rt = r.x + r.width + clearance;
+  const b = r.y + r.height + clearance;
+  for (let k = 1; k + 2 < pts.length; k++) {
+    const p = pts[k]!;
+    const q = pts[k + 1]!;
+    if (
+      Math.max(p.x, q.x) > l &&
+      Math.min(p.x, q.x) < rt &&
+      Math.max(p.y, q.y) > t &&
+      Math.min(p.y, q.y) < b
+    ) {
+      return true;
+    }
+  }
+  return false;
+}

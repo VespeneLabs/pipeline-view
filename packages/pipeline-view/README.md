@@ -41,6 +41,8 @@ const Card = ({ node, data, status, selected, ports }: NodeRendererProps) => (
 
 The library draws the ports (from the symbol registered for `app/card`, or none), the selection box and the routes. With `sizing: 'content'` the node takes its content's size, and ports keep their relative position on the box.
 
+For cards that show live values, prefer a fixed size, or give the value a stable width (`font-variant-numeric: tabular-nums` and a `min-width`). A content-sized node whose width changes with every tick doesn't re-route links whose ports stay put, but its box still moves, and a height change moves the ports and re-routes their links.
+
 ## Controlled mode (your own store)
 
 When your app keeps the document in its own store (Zustand, Redux, …), let the store own the truth and the history, and let the diagram apply differences:
