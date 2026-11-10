@@ -53,7 +53,13 @@ export interface Router {
   setObstacles(obstacles: Map<string, Rect>): void;
   /** Update one obstacle incrementally (node moved or rotated). Returns the ids of routed links whose route may now be invalid. */
   updateObstacle(nodeId: string, rect: Rect | null): string[];
+  /**
+   * Route the given links. Results come back in request order. The router remembers each route so that
+   * `updateObstacle` can report affected links and later routes can spread around it.
+   */
   route(requests: RouteRequest[]): RouteResult[];
+  /** Forget the stored routes of deleted links so they no longer occupy corridors. */
+  removeRoutes(linkIds: string[]): void;
   /** Compute line-jump crossings and branch junctions for the current set of routes (FR-12). */
   analyze(routes: RouteResult[]): { crossings: Crossing[]; junctions: Junction[] };
 }

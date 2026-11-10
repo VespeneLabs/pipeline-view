@@ -10,3 +10,4 @@ export * from './diagram/geometry';
 export * from './viewport/math';
 export type { View, ViewLayers } from './viewport/view';
 export { DRAG_THRESHOLD } from './viewport/controller';
+export { OrthogonalRouter, createRouter } from './routing/router';
