@@ -1,0 +1,174 @@
+/*
+ * Demo-only status tokens (the library only emits data-status). Values from Figma node 1:21.
+ */
+:root {
+  --demo-normal-fg: #226a50;
+  --demo-normal-bg: var(--pv-card-bg);
+  --demo-normal-border: var(--pv-card-border);
+  --demo-warning-fg: #9a5900;
+  --demo-warning-bg: #fff4de;
+  --demo-warning-border: var(--pv-card-border);
+  --demo-alarm-fg: #b62f38;
+  --demo-alarm-bg: #fcecee;
+  --demo-alarm-border: #e7adb2;
+  --demo-stale-fg: #6b7a83;
+  --demo-stale-bg: #f1f3f4;
+  --demo-stale-border: var(--pv-card-border);
+}
+
+:root[data-theme='dark'] {
+  --demo-normal-fg: #5fd3a2;
+  --demo-warning-fg: #f0b45a;
+  --demo-warning-bg: #2a2112;
+  --demo-warning-border: #4d3b18;
+  --demo-alarm-fg: #ff8a8f;
+  --demo-alarm-bg: #2e1517;
+  --demo-alarm-border: #5c2a2e;
+  --demo-stale-fg: #8c9aa2;
+  --demo-stale-bg: #182127;
+}
+
+.reading-card {
+  --fg: var(--demo-normal-fg);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 160px;
+  height: 92px;
+  padding: 8px 12px;
+  border: 1px solid var(--demo-normal-border);
+  border-radius: var(--pv-radius, 6px);
+  background: var(--demo-normal-bg);
+  font-family: var(--pv-font);
+  line-height: 1.4;
+}
+
+.reading-card[data-status='warning'] {
+  --fg: var(--demo-warning-fg);
+  border-color: var(--demo-warning-border);
+  background: var(--demo-warning-bg);
+}
+
+.reading-card[data-status='alarm'] {
+  --fg: var(--demo-alarm-fg);
+  border-color: var(--demo-alarm-border);
+  background: var(--demo-alarm-bg);
+}
+
+.reading-card[data-status='stale'] {
+  --fg: var(--demo-stale-fg);
+  border-style: dashed;
+  background: var(--demo-stale-bg);
+}
+
+.reading-card__tag {
+  color: var(--pv-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.reading-card__value {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin-top: 1px;
+  color: var(--pv-ink);
+  font-size: 25px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.reading-card[data-status='stale'] .reading-card__value {
+  color: var(--demo-stale-fg);
+}
+
+.reading-card__unit {
+  color: var(--pv-muted);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.reading-card__status,
+.pump-state {
+  margin-top: auto;
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.pump-state {
+  --fg: var(--demo-normal-fg);
+  font-family: var(--pv-font);
+}
+
+.pump-state[data-status='stale'] {
+  --fg: var(--demo-stale-fg);
+}
+
+/* ---- page ------------------------------------------------------------------ */
+
+.monitor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.monitor-toolbar button {
+  padding: 6px 12px;
+  border: 1px solid var(--pv-border);
+  border-radius: 6px;
+  background: var(--pv-bg);
+  color: var(--pv-ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.monitor-toolbar button[aria-pressed='true'] {
+  border-color: var(--pv-selection);
+  background: var(--pv-selection-bg);
+  color: var(--pv-selection);
+}
+
+.monitor-tick {
+  margin-left: auto;
+  color: var(--pv-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.monitor-frame {
+  position: relative;
+  max-width: 1178px; /* 1176 design px + 1px border on each side */
+  height: 587px;
+  overflow: hidden;
+  border: 1px solid var(--pv-border);
+  border-radius: 10px;
+  background: var(--pv-bg);
+}
+
+.monitor-details {
+  margin-top: 12px;
+  color: var(--pv-muted);
+  font-size: 14px;
+}
+
+/* Figma: pipe labels are regular 13px muted text; the area label is 11px SemiBold. */
+.monitor-frame .pv-annotation[data-variant='label'] {
+  fill: var(--pv-muted);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.monitor-frame .pv-annotation[data-variant='area'] {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.monitor-frame .pv-annotation[data-variant='legend'] {
+  font-weight: 400;
+  white-space: pre;
+}

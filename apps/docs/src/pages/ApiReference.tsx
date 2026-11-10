@@ -35,6 +35,10 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
         doc: 'Transactional edit: one render, one undo step, emits modelChange with a diff, may re-route.',
       },
       { sig: 'undo() / redo() / canUndo() / canRedo()', doc: 'Undo history of update() calls.' },
+      {
+        sig: 'preview(fn) / commitPreview() / cancelPreview()',
+        doc: 'Live gesture edits (drags) that become exactly one undo step on commit, or vanish on cancel.',
+      },
     ],
   },
   {
@@ -69,9 +73,16 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
       { sig: 'getBounds(): Rect', doc: 'Bounding box of all content in diagram coordinates.' },
       {
         sig: 'getSelection() / setSelection(items: ItemRef[])',
-        doc: 'Current selection; emits selectionChange.',
+        doc: 'Current selection; emits selectionChange. In view mode a click selects.',
       },
-      { sig: 'exportSVG(opts?) / exportPNG(opts?)', doc: 'Whole diagram or current viewport.' },
+      {
+        sig: 'getLinkPath(linkId): Point[] | undefined',
+        doc: 'The routed polyline of a link, ports included.',
+      },
+      {
+        sig: 'exportSVG(opts?) / exportPNG(opts?)',
+        doc: 'Whole diagram or current viewport: exportSVG returns a standalone SVG string, exportPNG a Blob.',
+      },
     ],
   },
   {
@@ -99,9 +110,12 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
       },
       {
         sig: 'htmlRenderers: Record<string, HtmlRenderer>',
-        doc: 'Renderers for HTML annotations (reading cards, any HTML).',
+        doc: 'Renderers for HTML annotations and node overlays (data.overlay). Called again with the same element on every data or status change, so they must be idempotent; only the first returned cleanup is kept. Anchored annotations receive { ...node.data, ...annotation.data } and fall back to the node status.',
       },
-      { sig: 'grid: { size, snap, visible }', doc: 'Editor grid.' },
+      {
+        sig: 'grid: { size, snap, visible }',
+        doc: 'Editor grid; visible draws it with --pv-grid.',
+      },
       { sig: 'minZoom, maxZoom', doc: 'Zoom limits.' },
       { sig: 'routing: { clearance?, spacing?, bendPenalty? }', doc: 'Orthogonal router tuning.' },
       {

@@ -31,6 +31,39 @@ const TOKENS: Token[] = [
   { name: '--pv-line-signal-dash', light: '4 5', dark: '4 5', use: 'Signal dash pattern' },
   { name: '--pv-line-electrical-dash', light: '10 7', dark: '10 7', use: 'Electrical signal dash' },
   {
+    name: '--pv-line-pneumatic-dash',
+    light: 'none',
+    dark: 'none',
+    use: 'Pneumatic dash (core draws paired // ticks instead)',
+  },
+  {
+    name: '--pv-tick-spacing',
+    light: '40',
+    dark: '40',
+    use: 'Distance between pneumatic tick pairs (unitless)',
+  },
+  {
+    name: '--pv-arrow-size',
+    light: '10',
+    dark: '10',
+    use: 'Flow-direction chevron size (unitless)',
+  },
+  {
+    name: '--pv-flow-color',
+    light: 'var(--pv-line)',
+    dark: 'var(--pv-line)',
+    use: 'Flow animation dashes',
+  },
+  { name: '--pv-flow-dash', light: '8 12', dark: '8 12', use: 'Flow animation dash pattern' },
+  { name: '--pv-junction-radius', light: '4.8', dark: '4.8', use: 'Branch dot radius (unitless)' },
+  { name: '--pv-jump-radius', light: '8', dark: '8', use: 'Line-jump hop radius (unitless)' },
+  {
+    name: '--pv-leader-line',
+    light: 'var(--pv-line-signal)',
+    dark: 'var(--pv-line-signal)',
+    use: 'Card leader lines',
+  },
+  {
     name: '--pv-symbol-stroke',
     light: '#334d5b',
     dark: '#b9c8d0',
@@ -44,6 +77,13 @@ const TOKENS: Token[] = [
     dark: 'var(--pv-bg)',
     use: 'Knockout fills inside symbols',
   },
+  {
+    name: '--pv-level-fill',
+    light: 'var(--pv-line)',
+    dark: 'var(--pv-line)',
+    use: 'Tank level fill',
+  },
+  { name: '--pv-level-opacity', light: '0.18', dark: '0.28', use: 'Tank level fill opacity' },
   { name: '--pv-ink', light: '#192d38', dark: '#e3ebef', use: 'Labels', swatch: true },
   { name: '--pv-muted', light: '#596c77', dark: '#93a6b1', use: 'Secondary text', swatch: true },
   {
@@ -74,7 +114,18 @@ const TOKENS: Token[] = [
     use: 'HTML card border',
     swatch: true,
   },
-  { name: '--pv-radius', light: '6px', dark: '6px', use: 'Card and selection radius' },
+  { name: '--pv-selection-radius', light: '6px', dark: '6px', use: 'Selection box radius' },
+  {
+    name: '--pv-focus-ring',
+    light: '#185ac7',
+    dark: '#6ea8ff',
+    use: 'Keyboard focus ring',
+    swatch: true,
+  },
+  { name: '--pv-radius', light: '6px', dark: '6px', use: 'Card radius' },
+  { name: '--pv-frame-radius', light: '10px', dark: '10px', use: 'Diagram frame radius' },
+  { name: '--pv-font-size-label', light: '14px', dark: '14px', use: 'Node labels (SemiBold)' },
+  { name: '--pv-font-size-small', light: '12px', dark: '12px', use: 'Area labels, legends, cards' },
   { name: '--pv-font', light: 'Inter, system-ui, sans-serif', dark: '', use: 'All diagram text' },
 ];
 
@@ -88,12 +139,17 @@ const OVERRIDE = `/* Brand the diagram: override any token on the container or a
 const FORCE = `// Follows prefers-color-scheme by default ('auto').
 new Diagram({ theme: 'dark' });
 diagram.setTheme('light');
-// ...or set data-theme="dark" on any ancestor element.`;
+// ...or set data-theme="dark" on any ancestor element.
 
-const STATUS = `/* status is free-form: the library only writes data-status="<value>". */
-[data-status='alarm'] { color: #b62f38; }
-[data-status='warning'] { color: #9a5900; }
-[data-status='stale'] { opacity: 0.55; }
+// Optional background grid, drawn with --pv-grid:
+new Diagram({ grid: { size: 20, snap: true, visible: true } });`;
+
+const STATUS = `/* status is free-form: the library only writes data-status="<value>".
+   Scope to .pv-node / .pv-overlay-item so the rules win regardless of stylesheet order. */
+.pv-node[data-status='alarm'] { color: #b62f38; }
+.pv-node[data-status='warning'] { color: #9a5900; }
+.pv-node[data-status='stale'] { opacity: 0.55; }
+.pv-overlay-item[data-status='alarm'] { outline: 2px solid #b62f38; }
 
 /* Per-medium pipe colours belong to your app, not the library. */
 .pv-link[data-kind='process'][data-medium='gas'] { stroke: #c9a227; }`;
@@ -103,8 +159,10 @@ export function Theming() {
     <article className="prose">
       <h1>Theming</h1>
       <p className="lede">
-        Every visual value is a CSS custom property, so restyling needs no JavaScript. Symbols draw
-        with <code>currentColor</code>; recolouring them is one token.
+        Every visual value is a CSS custom property, so restyling needs no JavaScript. Import{' '}
+        <code>@pipeline-view/core/styles.css</code> once; its tokens have zero specificity, so any
+        rule of yours wins. Symbols draw with <code>currentColor</code>; recolouring them is one
+        token.
       </p>
 
       <h2>Light and dark</h2>
