@@ -582,3 +582,15 @@
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+
+/* ---- level of detail (FR-55): set on .pv-root below per-layer zoom thresholds ---- */
+
+.pv-lod-labels :is(.pv-label, .pv-port-label, .pv-annotation) {
+  display: none;
+}
+.pv-lod-overlays .pv-overlay {
+  visibility: hidden;
+}
+.pv-lod-ports .pv-port {
+  display: none;
+}

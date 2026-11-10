@@ -73,6 +73,15 @@ export function exportSvgElement(
   view: View,
   opts: ExportOptions = {},
 ): SVGSVGElement {
+  // Culling (FR-55) hides off-screen items with display:none; the export must include them.
+  const culling = diagram.culling;
+  if (culling?.isActive() && !opts.viewportOnly) {
+    return culling.withAllVisible(() => buildSvg(diagram, view, opts));
+  }
+  return buildSvg(diagram, view, opts);
+}
+
+function buildSvg(diagram: Diagram, view: View, opts: ExportOptions): SVGSVGElement {
   diagram.renderer?.flush();
   diagram.overlay?.flush();
   const doc = view.root.ownerDocument;
