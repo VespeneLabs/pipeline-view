@@ -16,8 +16,10 @@
     "format:check": "prettier --check .",
     "size": "size-limit",
     "changeset": "changeset",
+    "version-packages": "changeset version && node scripts/changelog-model.mjs && prettier --write packages/pipeline-view/CHANGELOG.md",
     "check:packages": "node scripts/check-packages.mjs",
-    "smoke:consumer": "node scripts/smoke-consumer.mjs"
+    "smoke:consumer": "node scripts/smoke-consumer.mjs",
+    "test:scripts": "node --test \"scripts/*.test.mjs\""
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
