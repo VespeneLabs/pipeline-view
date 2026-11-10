@@ -62,6 +62,7 @@ const useDoc = create<{ model: DiagramModel; past: ModelPatch[] }>(() => ({ mode
 
 - A new `model` from the store is applied with `diagram.patch()`: only the difference changes, untouched links aren't re-routed, and viewport, selection and live values (`setNodeData`) survive. Passing back the model you received in `onModelChange` costs nothing.
 - Prefer patches to whole models? Call `diagram.applyDiff(patch)` yourself. Every `modelChange` carries the JSON `patch` of the change.
+- Each `modelChange` has an `origin`: `'user'` (edits), `'history'` (undo/redo) or `'host'` (your own `patch()` / `applyDiff()`). `<PipelineView>` doesn't report `'host'` changes to `onModelChange`, so your store never sees its own edits echoed back (`emitHostChanges` opts in).
 - Want the store to hold undo entries instead? Pass `history: { push, undo, redo }`. The diagram pushes `{ forward, inverse }` patches and applies the one your `undo()`/`redo()` returns.
 - `diagram.isDirty()` / `markSaved()` track unsaved changes against the last save (live values don't count).
 
