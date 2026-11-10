@@ -115,6 +115,7 @@ export class TransactionImpl implements Transaction {
   addNode(node: NodeModel): void {
     this.add('nodes', node);
   }
+  /** `data` in a patch replaces the whole record, and undo restores the previous record, including live values written in between. Use setNodeData for live values. */
   updateNode(id: string, patch: Partial<Omit<NodeModel, 'id'>>): void {
     this.patch('nodes', id, patch);
   }

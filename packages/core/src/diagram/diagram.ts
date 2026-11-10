@@ -190,15 +190,8 @@ export class Diagram implements HeadlessApi {
     this.pruneSelection(diff);
     if (internal) this.internal.emit('model', { diff });
     if (pub && this.events.has('modelChange')) {
-      // The model snapshot is a deep copy, so build it only if a handler reads it.
-      let snapshot: DiagramModel | undefined;
-      const store = this.store;
-      this.events.emit('modelChange', {
-        diff,
-        get model() {
-          return (snapshot ??= store.toJSON());
-        },
-      });
+      // Snapshot eagerly, and only when someone listens, so async readers see the state at commit time.
+      this.events.emit('modelChange', { diff, model: this.store.toJSON() });
     }
   }
 
@@ -217,7 +210,10 @@ export class Diagram implements HeadlessApi {
     if (ids.length) this.internal.emit('data', { ids });
   }
 
-  /** Unknown ids are ignored: live feeds often carry tags that aren't on the diagram. */
+  /**
+   * Unknown ids are ignored, because live feeds often carry tags that aren't on the diagram.
+   * Pass status '' to clear it. A call with neither patch nor status is a no-op.
+   */
   private writeData(
     id: string,
     patch: DataRecord | undefined,
@@ -225,7 +221,7 @@ export class Diagram implements HeadlessApi {
   ): boolean {
     this.assertAlive();
     const node = this.store.nodes.get(id);
-    if (!node) return false;
+    if (!node || (!patch && status === undefined)) return false;
     const next: Partial<typeof node> = {};
     if (patch) next.data = { ...node.data, ...patch };
     if (status !== undefined) next.status = status;
