@@ -261,23 +261,6 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
     ],
   },
   {
-    title: 'Your own palette and connecting by command',
-    entries: [
-      {
-        sig: 'acceptDrop({ mimeType, toNode: (dataTransfer, point) => NodeModel | null }) → unsubscribe',
-        doc: 'HTML5 drag and drop from any element of your app: drops carrying mimeType become the node toNode builds at point (diagram coordinates), checked with canDrop. A taken id gets a _N suffix. Edit mode only.',
-      },
-      {
-        sig: 'startPlacement(type, init?)',
-        doc: 'Placement mode for keyboard and touch users: a preview starts at the centre of the view and follows the pointer, canDrop marks a refused spot (data-refused with the reason), a click or tap places it, arrow keys nudge it, Enter places and Esc cancels.',
-      },
-      {
-        sig: "connect(from, to, kind = 'process') → { ok: true, id } | { ok: false, code, reason, detail? }",
-        doc: 'Connects two ports headlessly with every rule applied (roles, limits, direction, graph rules, canConnect), as one undo step. The link is stored in flow order. A refusal also carries from / to in flow order, plus dragFrom / dragTo when your argument order differed.',
-      },
-    ],
-  },
-  {
     title: 'Graph rules and helpers',
     entries: [
       {
@@ -343,10 +326,6 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
       {
         sig: 'lod: false | { labels?: 0.4, overlays?: 0.35, ports?: 0.5 }',
         doc: 'Below these zoom levels, labels, overlay cards and port dots are hidden (root classes pv-lod-labels / -overlays / -ports). On by default only while culling is active; passing an lod object turns it on regardless. View-only: the model and exports are unaffected.',
-      },
-      {
-        sig: 'routingWorker: boolean | { createWorker? }',
-        doc: 'Opt-in. Routes the initial full pass of large diagrams (at least culling.threshold links) in a Web Worker; links show as straight placeholders until the routes arrive. Edits stay on the main thread, a newer load drops a stale result, and a worker failure falls back to main-thread routing. createWorker supplies a bundler-specific worker (the ./routing-worker subpath).',
       },
     ],
   },
