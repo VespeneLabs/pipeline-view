@@ -1,5 +1,6 @@
 import { StrictMode, useEffect, useState, type ComponentType } from 'react';
 import { createRoot } from 'react-dom/client';
+import { ProcessMonitor } from './demos/monitor/ProcessMonitor';
 import { ApiReference } from './pages/ApiReference';
 import { CustomSymbols } from './pages/CustomSymbols';
 import { Gallery } from './pages/Gallery';
@@ -7,6 +8,8 @@ import { GettingStarted } from './pages/GettingStarted';
 import { Theming } from './pages/Theming';
 import { useRoute } from './router';
 import { applyTheme, initialTheme, type Theme } from './theme';
+import '@fontsource-variable/inter';
+import '@pipeline-view/core/styles.css';
 import './styles.css';
 
 interface Page {
@@ -20,6 +23,7 @@ const PAGES: Page[] = [
   { path: 'getting-started', title: 'Getting started', group: 'Guides', component: GettingStarted },
   { path: 'theming', title: 'Theming', group: 'Guides', component: Theming },
   { path: 'custom-symbols', title: 'Custom symbols', group: 'Guides', component: CustomSymbols },
+  { path: 'monitor', title: 'Process monitor', group: 'Demos', component: ProcessMonitor },
   { path: 'api', title: 'API reference', group: 'Reference', component: ApiReference },
   { path: 'gallery', title: 'Symbol gallery', group: 'Reference', component: Gallery },
 ];

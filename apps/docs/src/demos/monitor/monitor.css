@@ -104,3 +104,71 @@
 .pump-state[data-status='stale'] {
   --fg: var(--demo-stale-fg);
 }
+
+/* ---- page ------------------------------------------------------------------ */
+
+.monitor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.monitor-toolbar button {
+  padding: 6px 12px;
+  border: 1px solid var(--pv-border);
+  border-radius: 6px;
+  background: var(--pv-bg);
+  color: var(--pv-ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.monitor-toolbar button[aria-pressed='true'] {
+  border-color: var(--pv-selection);
+  background: var(--pv-selection-bg);
+  color: var(--pv-selection);
+}
+
+.monitor-tick {
+  margin-left: auto;
+  color: var(--pv-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.monitor-frame {
+  position: relative;
+  max-width: 1178px; /* 1176 design px + 1px border on each side */
+  height: 587px;
+  overflow: hidden;
+  border: 1px solid var(--pv-border);
+  border-radius: 10px;
+  background: var(--pv-bg);
+}
+
+.monitor-details {
+  margin-top: 12px;
+  color: var(--pv-muted);
+  font-size: 14px;
+}
+
+/* Figma: pipe labels are regular 13px muted text; the area label is 11px SemiBold. */
+.monitor-frame .pv-annotation[data-variant='label'] {
+  fill: var(--pv-muted);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.monitor-frame .pv-annotation[data-variant='area'] {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.monitor-frame .pv-annotation[data-variant='legend'] {
+  font-weight: 400;
+  white-space: pre;
+}

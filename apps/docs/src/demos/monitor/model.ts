@@ -7,6 +7,8 @@ import type { DiagramModel, SymbolDef } from '@pipeline-view/core';
  */
 export const FRAME = { width: 1176, height: 585 };
 
+// Text annotation positions are baselines: Figma text-box top + 13 (13px labels), + 11 (area), + 12 (legend).
+
 /** Invisible off-page terminal, so pipes can start or end at the frame edge. Shows registerSymbol in use. */
 export const terminal: SymbolDef = {
   type: 'demo/terminal',
@@ -61,28 +63,28 @@ export const monitorModel: DiagramModel = {
       type: 'process/tank',
       position: { x: 170, y: 105 },
       label: 'MHWT',
-      data: { level: 0.62 },
+      data: { level: 0.62, 'TI-101': { value: 14.0, status: 'normal' } satisfies Reading },
     },
     {
       id: 'MPAT',
-      type: 'process/tank',
+      type: 'process/conical-tank',
       position: { x: 840, y: 105 },
       label: 'MPAT',
-      data: { level: 0.35 },
+      data: { level: 0.35, 'FI-103': { value: 1.1, status: 'normal' } satisfies Reading },
     },
     {
       id: 'MRM',
-      type: 'process/tank',
+      type: 'process/conical-tank',
       position: { x: 500, y: 320 },
       label: 'MRM',
       data: { level: 0.48 },
     },
     {
       id: 'MHT',
-      type: 'process/tank',
+      type: 'process/conical-tank',
       position: { x: 900, y: 320 },
       label: 'MHT',
-      data: { level: 0.71 },
+      data: { level: 0.71, 'TI-102': { value: 12.9, status: 'warning' } satisfies Reading },
     },
     {
       id: 'P03',
@@ -103,7 +105,7 @@ export const monitorModel: DiagramModel = {
       type: 'process/control-valve',
       position: { x: 780, y: 335 },
       label: 'FCV101',
-      data: { open: true },
+      data: { open: true, 'FI-101': { value: 2.1, status: 'alarm' } satisfies Reading },
     },
   ],
   links: [
@@ -218,42 +220,42 @@ export const monitorModel: DiagramModel = {
       kind: 'text',
       variant: 'area',
       text: '02 / MIX & TRANSFER',
-      position: { x: 450, y: 281 },
+      position: { x: 450, y: 292 },
     },
     {
       id: 'lbl-steam',
       kind: 'text',
       variant: 'label',
       text: 'Steam supply',
-      position: { x: 24, y: 77 },
+      position: { x: 24, y: 90 },
     },
     {
       id: 'lbl-soft',
       kind: 'text',
       variant: 'label',
       text: 'Soft water',
-      position: { x: 24, y: 132 },
+      position: { x: 24, y: 145 },
     },
     {
       id: 'lbl-additive',
       kind: 'text',
       variant: 'label',
       text: 'Additive dosing',
-      position: { x: 804, y: 77 },
+      position: { x: 804, y: 90 },
     },
     {
       id: 'lbl-mphe',
       kind: 'text',
       variant: 'label',
       text: 'To MPHE-02',
-      position: { x: 1015, y: 535 },
+      position: { x: 1015, y: 548 },
     },
     {
       id: 'legend',
       kind: 'text',
       variant: 'legend',
       text: 'Solid line  Process flow     - - -  Instrument signal',
-      position: { x: 24, y: 552 },
+      position: { x: 24, y: 564 },
     },
   ],
 };

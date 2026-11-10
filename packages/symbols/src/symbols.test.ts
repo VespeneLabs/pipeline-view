@@ -7,6 +7,7 @@ import {
   PIPING,
   PROCESS,
   VALVES,
+  conicalTank,
   flowIndicatingController,
   gasSymbols,
   gateValve,
@@ -52,10 +53,11 @@ function samples(def: SymbolDef): string[] {
 }
 
 describe('symbol definitions', () => {
-  it('ships 50 gas symbols numbered 01–50 in order, plus 3 process symbols', () => {
+  it('ships 50 gas symbols numbered 01–50 in order, plus 4 process symbols', () => {
     expect(gasSymbols.map((d) => d.ref)).toEqual(Array.from({ length: 50 }, (_, i) => i + 1));
     expect(processSymbols.map((d) => d.type)).toEqual([
       'process/tank',
+      'process/conical-tank',
       'process/pump',
       'process/control-valve',
     ]);
@@ -126,6 +128,12 @@ describe('bindable parts', () => {
     expect(tank.render!({ data: { level: 7 } })).toContain('M22 26H78');
   });
 
+  it('fills the cone-bottom tank through the cone below the cylinder', () => {
+    expect(conicalTank.render!({ data: { level: 1 } })).toContain('M22 26H78V84L50 114L22 84Z');
+    // 10 %: the liquid sits inside the cone only (y = 105.2, half-width 8.21).
+    expect(conicalTank.render!({ data: { level: 0.1 } })).toContain('M41.79 105.2H58.21L50 114Z');
+  });
+
   it('takes instrument tag letters and loop number from data, escaped', () => {
     const svg = pressureTransmitter.render!({ data: { letters: 'PIT', loop: 204 } });
     expect(svg).toContain('>PIT</text>');
@@ -142,7 +150,7 @@ describe('registration helpers', () => {
     const registry = new SymbolRegistry();
     registerGasSymbols(registry);
     registerProcessSymbols(registry);
-    expect(registry.list()).toHaveLength(53);
+    expect(registry.list()).toHaveLength(54);
     expect(registry.get('gas/ball-valve')?.ref).toBe(2);
   });
 });
