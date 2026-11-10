@@ -47,6 +47,25 @@ describe('validateConnect: built-in rules (FR-41)', () => {
     });
   });
 
+  it('also swaps when the drag ends on an outlet from a both-port', () => {
+    // c.tap has no role (both); b.out is an outlet: the link must run b.out → c.tap.
+    expect(validateConnect(setup(), end('c', 'tap'), end('b', 'out'), 'signal')).toEqual({
+      ok: true,
+      from: end('b', 'out'),
+      to: end('c', 'tap'),
+    });
+  });
+
+  it('passes the ends to canConnect in flow order', () => {
+    const canConnect = vi.fn(() => true as const);
+    validateConnect(setup({ canConnect }), end('c', 'in'), end('b', 'out'), 'process');
+    const [f, t] = canConnect.mock.calls[0] as unknown as [
+      { node: { id: string }; port: string },
+      { node: { id: string }; port: string },
+    ];
+    expect([f.node.id, f.port, t.node.id, t.port]).toEqual(['b', 'out', 'c', 'in']);
+  });
+
   it('refuses each built-in case with its code, in precedence order', () => {
     const d = setup({ directed: true, noSelfLoops: true });
     const code = (f: [string, string], t: [string, string], kind = 'process') => {

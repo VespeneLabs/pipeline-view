@@ -135,6 +135,10 @@ export class TransactionImpl implements Transaction {
   addNode(node: NodeModel): void {
     this.add('nodes', node);
   }
+  /**
+   * Throws (and the transaction rolls back) when the update removes a port that carries a locked link
+   * (FR-40, FR-43); hosts calling update() with port-changing data should catch it.
+   */
   /** `data` in a patch replaces the whole record, and undo restores the previous record, including live values written in between. Use setNodeData for live values. */
   updateNode(id: string, patch: Partial<Omit<NodeModel, 'id'>>): void {
     // Per-node ports derive from type, data or the ports override (FR-40).

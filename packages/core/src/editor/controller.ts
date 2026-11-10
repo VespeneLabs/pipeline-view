@@ -480,11 +480,12 @@ export class EditorController {
       const b = nodeBounds(n, this.diagram.symbols.get(n.type));
       if (p.x >= b.x && p.x <= b.x + b.width && p.y >= b.y && p.y <= b.y + b.height) hit = n.id;
     }
-    if (!hit) return null;
+    // Releasing over the starting node's own body is a cancel, not a self-link; a deliberate self-link
+    // still works by dropping onto one of its ports (snap radius).
+    if (!hit || hit === g.from.node) return null;
     const onNode = (e: LinkEnd) => e.node === hit;
     const drop = nearestDrop(g, p, Infinity, onNode);
     if (drop) return drop;
-    if (hit === g.from.node) return null;
     const r = refusal(this.diagram, 'missing-port', {
       from: g.from,
       to: { node: hit, port: '' },

@@ -86,10 +86,24 @@ export function validateConnect(
   const refuse = (code: RefusalCode, detail?: Record<string, unknown>, reason?: string) =>
     refusal(diagram, code, { from, to, kind, ...(detail ? { detail } : {}) }, reason);
 
+  // Flow order (outlet → inlet): an inlet can start the drag, or the drag can end on an outlet, but the
+  // link, the checks below and the host hook all see source → target.
+  const swap =
+    !!pa &&
+    !!pb &&
+    ((role(pa) === 'in' && role(pb) !== 'in') || (role(pb) === 'out' && role(pa) !== 'out'));
+  const src = swap ? to : from;
+  const dst = swap ? from : to;
+  // Read only after the missing-port check below.
+  const ps = (swap ? pb : pa)!;
+  const pd = (swap ? pa : pb)!;
+
   const runHook = (): ConnectCheck | null => {
     if (!opts.canConnect || !a || !b) return null;
-    const r = opts.canConnect({ node: a, port: from.port }, { node: b, port: to.port }, kind);
-    return fromValidation(diagram, r, { from, to, kind });
+    const na = swap ? b : a;
+    const nb = swap ? a : b;
+    const r = opts.canConnect({ node: na, port: src.port }, { node: nb, port: dst.port }, kind);
+    return fromValidation(diagram, r, { from: src, to: dst, kind });
   };
 
   if (opts.canConnectOrder === 'before-builtins') {
@@ -114,14 +128,6 @@ export function validateConnect(
     }
   }
 
-  // Flow order: an inlet can start the drag, but the link still runs outlet → inlet.
-  let src = from;
-  let dst = to;
-  let ps = pa;
-  let pd = pb;
-  if (role(pa) === 'in' && role(pb) !== 'in') {
-    [src, dst, ps, pd] = [to, from, pb, pa];
-  }
   const wrongWay =
     (role(ps) === 'in' && role(pd) === 'in') || (role(ps) === 'out' && role(pd) === 'out');
   if (wrongWay && isDirected(diagram, kind)) {
