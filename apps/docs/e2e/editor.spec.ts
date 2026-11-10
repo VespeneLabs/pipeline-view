@@ -117,7 +117,7 @@ test('adds a symbol from the palette and deletes it', async ({ page }) => {
   const added = after.nodes.at(-1)!;
   expect(added.type).toBe('gas/ball-valve');
   await expect(node(page, added.id)).toBeVisible();
-  await page.getByTestId('editor-canvas').locator('.pv-root').focus();
+  await page.getByTestId('editor-canvas').focus();
   await page.keyboard.press('Delete');
   expect((await model(page)).nodes).toHaveLength(before);
 });
