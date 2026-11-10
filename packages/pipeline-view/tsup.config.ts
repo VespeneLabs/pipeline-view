@@ -20,4 +20,8 @@ export default defineConfig({
   dts: false,
   noExternal: [/^@pipeline-view\//],
   external: ['react', 'react-dom', /^react\//, /^react-dom\//],
+  // Shared chunks live in dist/chunks/, so size checks can exclude them per subpath (.size-limit.json).
+  esbuildOptions(options) {
+    options.chunkNames = 'chunks/[name]-[hash]';
+  },
 });
