@@ -126,7 +126,9 @@ describe('viewport API', () => {
     d.on('viewportChange', onChange);
     d.setViewport({ x: 10, y: 20, zoom: 2 });
     expect(d.view!.scene.getAttribute('transform')).toBe('translate(10,20) scale(2)');
-    expect(d.view!.overlay.style.transform).toBe('translate(10px,20px) scale(2)');
+    expect(d.view!.overlay.style.transform.replace(/,\s+/g, ',')).toBe(
+      'translate(10px,20px) scale(2)',
+    );
     expect(onChange).toHaveBeenCalledExactlyOnceWith({ viewport: { x: 10, y: 20, zoom: 2 } });
     d.setViewport({ x: 10, y: 20, zoom: 2 });
     expect(onChange).toHaveBeenCalledTimes(1);
@@ -203,7 +205,9 @@ describe('input', () => {
   });
 
   it('captures the pointer only once a press turns into a pan, so clicks keep their target', () => {
-    const capture = vi.spyOn(d.view!.root, 'setPointerCapture').mockImplementation(() => {});
+    const capture = vi
+      .spyOn(withCapture(d.view!.root), 'setPointerCapture')
+      .mockImplementation(() => {});
     pointer('pointerdown', { clientX: 0, clientY: 0 });
     pointer('pointerup', { clientX: 1, clientY: 0 });
     expect(capture).not.toHaveBeenCalled();
@@ -258,3 +262,11 @@ describe('hitTest', () => {
     expect(d.hitTest(document.body)).toBeNull();
   });
 });
+
+/** jsdom has no setPointerCapture; give it a stub so the spy has something to wrap. */
+function withCapture<T extends Element>(el: T): T {
+  if (!('setPointerCapture' in el)) {
+    (el as unknown as { setPointerCapture: () => void }).setPointerCapture = () => {};
+  }
+  return el;
+}
