@@ -9,36 +9,53 @@ TypeScript library for interactive P&ID and process diagrams, built for the gas 
 - **Light and dark themes** via `--pv-*` CSS tokens; symbols follow `currentColor`
 - Framework-agnostic core with **no runtime dependencies**, plus React bindings; safe to import during SSR
 
-> **Status:** v1. Released as tarballs on [GitHub Releases](https://github.com/VespeneLabs/pipeline-view/releases) (not on npm). Scope and decisions: [PRD.md](./PRD.md).
+> **Status:** v1. Published to [GitHub Packages](https://github.com/orgs/VespeneLabs/packages) as the private package `@vespenelabs/pipeline-view`. Scope and decisions: [PRD.md](./PRD.md).
 
-| Package | What it is |
+One package, with subpath exports:
+
+| Import | What it is |
 | --- | --- |
-| `@pipeline-view/core` | Model and JSON, commands/undo, router, viewport, SVG renderer, HTML overlay, editor, export |
-| `@pipeline-view/symbols` | Gas P&ID pack and process equipment (tree-shakable, one module per symbol) |
-| `@pipeline-view/react` | `<PipelineView/>`, `<SymbolPalette/>`, hooks |
+| `@vespenelabs/pipeline-view` | Core: model and JSON, commands/undo, router, viewport, SVG renderer, HTML overlay, editor, export |
+| `@vespenelabs/pipeline-view/symbols` | Gas P&ID pack and process equipment (tree-shakable, one module per symbol) |
+| `@vespenelabs/pipeline-view/react` | `<PipelineView/>`, `<SymbolPalette/>`, hooks (React 18 or later, an optional peer dependency) |
+| `@vespenelabs/pipeline-view/styles.css` | The `--pv-*` theme tokens and base styles |
 
-## Install
+All subpaths share one core instance, so symbols registered through `/symbols` are visible to every `Diagram`.
 
-Each release attaches one tarball per package. Install the ones you need in a single command, so the packages resolve to each other (replace `1.0.0` with the release you want):
+## Installing from GitHub Packages
 
-```sh
-V=1.0.0
-BASE=https://github.com/VespeneLabs/pipeline-view/releases/download/v$V
-npm install $BASE/pipeline-view-core-$V.tgz $BASE/pipeline-view-symbols-$V.tgz $BASE/pipeline-view-react-$V.tgz
-```
+The package is published to GitHub Packages (`https://npm.pkg.github.com`) as a private package. To consume it:
 
-`pnpm add` and `yarn add` take the same URLs. `@pipeline-view/react` needs React 18 or later.
+1. Grant the consuming repository read access, once per repository: on GitHub, open **VespeneLabs → Packages → pipeline-view → Package settings → Manage Actions access**, click **Add repository**, pick the repository and give it the **Read** role. This lets that repository's GitHub Actions install the package with its own `GITHUB_TOKEN`.
+2. Point the `@vespenelabs` scope at GitHub Packages in the consumer's `.npmrc`:
+
+   ```ini
+   @vespenelabs:registry=https://npm.pkg.github.com
+   //npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
+   ```
+
+   Locally, set `NODE_AUTH_TOKEN` to a personal access token (classic) with the `read:packages` scope, from an account that can see the package. In GitHub Actions, give the job `permissions: packages: read` and set `NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}`.
+3. Install it: `npm install @vespenelabs/pipeline-view` (or `pnpm add`), plus `react react-dom` if you use the React bindings.
+
+Each GitHub Release also attaches the package tarball, for offline installs.
+
+### Releasing
+
+1. Add changesets as you go (`pnpm changeset`). To release, run `pnpm changeset version` and merge the result to `main`. That bumps `packages/pipeline-view/package.json` and writes its `CHANGELOG.md`.
+2. Tag the release commit and push the tag: `git tag v1.2.0 && git push origin v1.2.0`.
+
+The `Publish package` workflow (`.github/workflows/publish.yml`) checks that the tag matches the package version. It then builds, runs the tests, checks the packed tarball (`pnpm check:packages`), installs it into a fresh consumer project (`pnpm smoke:consumer`), and runs `pnpm publish` to GitHub Packages. To retry a failed publish without re-tagging, run the workflow manually (**Actions → Publish package → Run workflow**) and pick the version tag under *Use workflow from*. A run started from a branch stops at the version check. The `Release` workflow (same tag) creates the GitHub Release with the changelog and the tarball.
 
 ## Quick start
 
 React:
 
 ```tsx
-import type { Diagram } from '@pipeline-view/core';
-import { PipelineView, type DiagramModel } from '@pipeline-view/react';
-import { gasSymbols, processSymbols } from '@pipeline-view/symbols';
+import type { Diagram } from '@vespenelabs/pipeline-view';
+import { PipelineView, type DiagramModel } from '@vespenelabs/pipeline-view/react';
+import { gasSymbols, processSymbols } from '@vespenelabs/pipeline-view/symbols';
 import { useEffect, useRef } from 'react';
-import '@pipeline-view/core/styles.css';
+import '@vespenelabs/pipeline-view/styles.css';
 
 const symbols = [...gasSymbols, ...processSymbols];
 

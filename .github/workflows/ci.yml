@@ -27,6 +27,7 @@ jobs:
       - run: pnpm test
       - run: pnpm size
       - run: pnpm check:packages
+      - run: pnpm smoke:consumer
 
   e2e:
     runs-on: ubuntu-latest

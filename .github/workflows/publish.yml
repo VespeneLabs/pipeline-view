@@ -1,0 +1,46 @@
+name: Publish package
+
+# Publishes @vespenelabs/pipeline-view to GitHub Packages (private) when a version tag (v1.2.3) is pushed.
+# Re-run a failed publish without re-tagging: Actions → Publish package → Run workflow, then pick the
+# version tag (not a branch) under "Use workflow from". A run from a branch stops at the version check.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: '@vespenelabs'
+      - run: pnpm install --frozen-lockfile
+
+      - name: Tag matches package versions
+        run: node scripts/check-release-version.mjs "$GITHUB_REF_NAME"
+
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm test
+      # Tarball contents, no workspace ranges, attw types; then install it into a fresh consumer project.
+      - run: pnpm check:packages
+      - run: pnpm smoke:consumer
+
+      - name: Publish to GitHub Packages
+        run: pnpm publish --filter @vespenelabs/pipeline-view --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

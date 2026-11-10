@@ -1,6 +1,7 @@
 {
   "name": "@pipeline-view/core",
   "version": "1.0.0",
+  "private": true,
   "description": "Framework-agnostic engine for interactive P&ID / process diagrams",
   "license": "MIT",
   "author": "VespeneLabs",
@@ -51,8 +52,5 @@
   },
   "engines": {
     "node": ">=20"
-  },
-  "publishConfig": {
-    "access": "public"
   }
 }

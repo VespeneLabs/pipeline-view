@@ -1,6 +1,7 @@
 {
   "name": "@pipeline-view/symbols",
   "version": "1.0.0",
+  "private": true,
   "description": "P&ID symbol packs for pipeline-view (gas service + process equipment)",
   "license": "MIT",
   "author": "VespeneLabs",
@@ -46,8 +47,5 @@
   },
   "engines": {
     "node": ">=20"
-  },
-  "publishConfig": {
-    "access": "public"
   }
 }

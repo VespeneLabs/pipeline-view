@@ -1,8 +1,8 @@
 name: Release
 
 # Runs when a version tag is pushed (e.g. v1.0.0) after `pnpm changeset version` was merged to main.
-# It builds and verifies, then creates a GitHub Release with the package tarballs and the changelog.
-# No npm publish.
+# It builds and verifies, then creates a GitHub Release with the package tarball and the changelog.
+# Publishing to GitHub Packages is publish.yml (same tag).
 on:
   push:
     tags: ['v*']
@@ -34,7 +34,7 @@ jobs:
       - run: pnpm test
       - run: pnpm size
 
-      # Packs core / symbols / react into release/ and verifies them: tarball contents, no workspace:
+      # Packs @vespenelabs/pipeline-view into release/ and verifies it: tarball contents, no workspace:
       # ranges left, metadata, and type resolution (attw). The verified tarballs are the ones attached.
       - name: Pack and verify
         run: |

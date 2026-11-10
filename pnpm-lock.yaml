@@ -252,6 +252,25 @@ importers:
         specifier: ^4.10.2
         version: 4.10.2
 
+  packages/pipeline-view:
+    dependencies:
+      react:
+        specifier: '>=18'
+        version: 19.3.1
+      react-dom:
+        specifier: '>=18'
+        version: 19.3.1(react@19.3.1)
+    devDependencies:
+      '@pipeline-view/core':
+        specifier: workspace:*
+        version: link:../core
+      '@pipeline-view/react':
+        specifier: workspace:*
+        version: link:../react
+      '@pipeline-view/symbols':
+        specifier: workspace:*
+        version: link:../symbols
+
   packages/react:
     dependencies:
       '@pipeline-view/core':
