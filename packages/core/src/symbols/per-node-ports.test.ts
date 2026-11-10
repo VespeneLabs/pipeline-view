@@ -277,4 +277,32 @@ describe('rendering per-node ports', () => {
     expect(d.getLinkPath('o')![0]).toEqual({ x: 240, y: 96 });
     d.destroy();
   });
+
+  it('redraws ports and reroutes when live data (setNodeData) changes them', () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const d = new Diagram({ symbols: [manifold, pump] });
+    d.load(model());
+    d.mount(container);
+    d.update((tx) =>
+      tx.addLink({
+        id: 'o',
+        from: { node: 'm', port: 'out-1' },
+        to: { node: 'p1', port: 'in' },
+        kind: 'process',
+      }),
+    );
+    d.renderer!.flush();
+    expect(d.renderer!.getLinkPath('o')![0]).toEqual({ x: 240, y: 64 });
+    d.setNodeData('m', { inputs: 5 });
+    d.renderer!.flush();
+    expect(
+      [...container.querySelectorAll('[data-node-id="m"] .pv-port')].map(
+        (p) => (p as SVGElement).dataset.portId,
+      ),
+    ).toEqual(['in-1', 'in-2', 'in-3', 'in-4', 'in-5', 'out-1']);
+    // The node grew from 128 to 192 px, so out-1 moved down and link 'o' was rerouted from it.
+    expect(d.renderer!.getLinkPath('o')![0]).toEqual({ x: 240, y: 96 });
+    d.destroy();
+  });
 });

@@ -20,7 +20,7 @@ export interface PortDef {
   role?: 'in' | 'out' | 'both';
   /** Maximum number of links on this port (FR-41). Omitted means unlimited. */
   maxLinks?: number;
-  /** Short text drawn next to the port, for example its index on a manifold (FR-40). Also used in its accessible name. */
+  /** Short text drawn next to the port, for example its index on a manifold (FR-40). */
   label?: string;
 }
 

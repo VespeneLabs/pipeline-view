@@ -8,6 +8,7 @@
  * - Home / End go to the first / last node in reading order.
  * - Enter (view mode) selects the focused node and emits nodeClick. Escape (view mode) clears the selection.
  * - + / - zoom around the center, and 0 zooms to fit. These work in both modes.
+ * - F8 / Shift+F8 step to the next / previous item with problem markers (FR-48), in both modes.
  */
 import type { Point, Rect } from '../model/types';
 import type { Diagram } from '../diagram/diagram';
@@ -127,6 +128,7 @@ export class KeyboardNavigation {
     else if (e.key === '+' || e.key === '=') this.zoomBy(ZOOM_STEP);
     else if (e.key === '-' || e.key === '_') this.zoomBy(1 / ZOOM_STEP);
     else if (e.key === '0') d.zoomToFit({ animate: true });
+    else if (e.key === 'F8') d.nextIssue(e.shiftKey ? -1 : 1);
     else if (view && e.key === 'Enter' && this.focusedId) this.activate(this.focusedId);
     else if (view && e.key === 'Escape') d.setSelection([]);
     else handled = false;
@@ -192,8 +194,13 @@ export class KeyboardNavigation {
   /** Pans (without zooming) so a focused node is fully on screen. */
   private ensureVisible(id: string): void {
     const b = this.boundsOf(id);
+    if (b) this.reveal(b);
+  }
+
+  /** Pans (without zooming) so `b`, in diagram coordinates, is on screen with a small margin. */
+  reveal(b: Rect): void {
     const r = this.view.root;
-    if (!b || !r.clientWidth) return;
+    if (!r.clientWidth) return;
     const tl = this.diagram.diagramToScreen({ x: b.x, y: b.y });
     const br = this.diagram.diagramToScreen({ x: b.x + b.width, y: b.y + b.height });
     const m = 24;

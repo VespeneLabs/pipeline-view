@@ -7,6 +7,7 @@ import {
   type DiagramOptions,
   type EditorControllerOptions,
   type HtmlRenderer,
+  type IssueMap,
   type SymbolDef,
   type ThemeName,
 } from '@pipeline-view/core';
@@ -41,6 +42,11 @@ export interface PipelineViewProps {
   model?: DiagramModel;
   mode?: DiagramMode;
   theme?: ThemeName;
+  /**
+   * Problem markers on nodes and links (FR-48), e.g. validation results. Applied with `setIssues` whenever
+   * the object's identity changes, so memoize it. Never saved with the model.
+   */
+  issues?: IssueMap;
   /** Instance-local symbols, added to the global registry. */
   symbols?: SymbolDef[];
   /** React overlay renderers, referenced by HtmlAnnotation.renderer or a node's data.overlay. */
@@ -143,7 +149,7 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
       };
     }, [portals]);
 
-    const { model, mode, theme, symbols, fitOnLoad = true } = props;
+    const { model, mode, theme, issues, symbols, fitOnLoad = true } = props;
 
     useEffect(() => {
       if (!diagram || !model || model === loaded.current || model === lastEmitted.current) return;
@@ -167,6 +173,10 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
     useEffect(() => {
       if (diagram && theme) diagram.setTheme(theme);
     }, [diagram, theme]);
+
+    useEffect(() => {
+      diagram?.setIssues(issues ?? {});
+    }, [diagram, issues]);
 
     useEffect(() => {
       if (diagram && symbols?.length) diagram.symbols.register(...symbols);

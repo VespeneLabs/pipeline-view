@@ -93,7 +93,12 @@ export class SvgRenderer {
       i.on('load', () => this.markFull()),
       i.on('model', ({ diff }) => this.onModel(diff)),
       i.on('data', ({ ids }) => {
-        for (const id of ids) this.dataNodes.add(id);
+        // Live data that changes a node's ports or size (FR-40) needs the structural path: redraw the
+        // ports, update the routing obstacle and reroute attached links. Plain data ticks stay cheap.
+        for (const id of ids) {
+          if (this.geometryFromData(id)) this.dirtyNodes.add(id);
+          else this.dataNodes.add(id);
+        }
         this.schedule();
       }),
       diagram.on('selectionChange', () => {
@@ -224,6 +229,8 @@ export class SvgRenderer {
     if (!el) {
       const g = this.svg('g', { class: 'pv-node' }) as SVGGElement;
       g.dataset.nodeId = n.id;
+      // Stable test hooks (part of the public API, see @vespenelabs/pipeline-view/testing).
+      g.dataset.pvNodeId = n.id;
       // Roving tabindex: render/a11y.ts gives the focused node tabindex 0.
       g.setAttribute('role', 'button');
       g.setAttribute('tabindex', '-1');
@@ -298,8 +305,22 @@ export class SvgRenderer {
     for (const p of ports) {
       const c = this.svg('circle', { class: 'pv-port', cx: p.position.x, cy: p.position.y, r: 4 });
       c.dataset.portId = p.id;
+      c.dataset.pvPortId = p.id;
       el.body.append(c);
     }
+  }
+
+  /** True when a node's ports or size differ from what was last rendered (data-driven per-node ports). */
+  private geometryFromData(id: string): boolean {
+    const el = this.nodes.get(id);
+    const n = this.diagram.store.nodes.get(id);
+    if (!el || !n || el.node === n) return false;
+    const def = this.def(n);
+    if (typeof def?.ports !== 'function' && typeof def?.size !== 'function') return false;
+    return (
+      portSignature(nodePorts(def, n)) !== el.portSig ||
+      !sameSize(nodeSize(def, el.node), nodeSize(def, n))
+    );
   }
 
   /** Port labels (FR-40), like node labels, sit outside the transformed body so they never rotate or mirror. */
@@ -411,6 +432,7 @@ export class SvgRenderer {
     if (!el) {
       const g = this.svg('g', { class: 'pv-link' }) as SVGGElement;
       g.dataset.linkId = l.id;
+      g.dataset.pvLinkId = l.id;
       const hit = this.svg('path', { class: 'pv-link-hit' }) as SVGPathElement;
       const line = this.svg('path', { class: 'pv-link-line' }) as SVGPathElement;
       const arrows = this.svg('path', { class: 'pv-link-arrows' }) as SVGPathElement;

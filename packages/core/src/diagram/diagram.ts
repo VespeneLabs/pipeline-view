@@ -36,6 +36,7 @@ import { SvgRenderer } from '../render/svg-renderer';
 import { OverlayRenderer } from '../render/overlay';
 import { attachPointerEvents } from '../render/input';
 import { KeyboardNavigation } from '../render/a11y';
+import { IssueLayer } from '../render/issues';
 import { exportPng, exportSvgString } from '../render/export';
 import { TransactionImpl, applyOp, diffOf, invertOp, isEmptyDiff, type Op } from './transaction';
 import type {
@@ -43,6 +44,7 @@ import type {
   DiagramEvents,
   DiagramMode,
   DiagramOptions,
+  IssueMap,
   ItemRef,
   ModelDiff,
   ThemeName,
@@ -105,6 +107,9 @@ export class Diagram implements DiagramApi {
   private detachPointerEvents: (() => void) | undefined;
   /** @internal Keyboard focus navigation. Created on mount. */
   keyboard: KeyboardNavigation | undefined;
+  /** @internal Problem markers (FR-48). Created on mount. */
+  issueLayer: IssueLayer | undefined;
+  private issues: IssueMap = {};
   private viewport: Viewport = { x: 0, y: 0, zoom: 1 };
   private size: Size = { width: 0, height: 0 };
   private readonly minZoom: number;
@@ -156,6 +161,8 @@ export class Diagram implements DiagramApi {
     this.overlay = new OverlayRenderer(this, view);
     this.detachPointerEvents = attachPointerEvents(this, view);
     this.keyboard = new KeyboardNavigation(this, view);
+    this.issueLayer = new IssueLayer(this, view);
+    this.issueLayer.set(this.issues);
     this.internal.emit('mount', { view });
     if (this.pendingFit) this.zoomToFit(this.pendingFit);
   }
@@ -593,6 +600,13 @@ export class Diagram implements DiagramApi {
     if (node) return { kind: 'node', id: node.dataset.nodeId! };
     const link = el.closest<HTMLElement | SVGElement>('[data-link-id]');
     if (link) return { kind: 'link', id: link.dataset.linkId! };
+    const badge = el.closest<SVGElement>('[data-issue-node], [data-issue-link]');
+    if (badge) {
+      const nodeId = badge.getAttribute('data-issue-node');
+      return nodeId !== null
+        ? { kind: 'node', id: nodeId }
+        : { kind: 'link', id: badge.getAttribute('data-issue-link')! };
+    }
     const ann = el.closest<HTMLElement | SVGElement>('[data-annotation-id]');
     if (ann) return { kind: 'annotation', id: ann.dataset.annotationId! };
     return null;
@@ -618,6 +632,50 @@ export class Diagram implements DiagramApi {
     const y = a.position.y + (anchor?.position.y ?? 0);
     const size = a.kind === 'html' ? a.size : undefined;
     return { x, y, width: size?.width ?? 0, height: size?.height ?? 0 };
+  }
+
+  // ---- problem markers (FR-48) ---------------------------------------------
+
+  /**
+   * Replaces all problem markers. Issues are view state (validation results, save errors): they're never
+   * saved with the model, and they survive load() and edits for as long as their item exists.
+   */
+  setIssues(issues: IssueMap): void {
+    this.issues = { nodes: { ...issues.nodes }, links: { ...issues.links } };
+    this.issueLayer?.set(this.issues);
+  }
+
+  /** The current problem markers, as last passed to setIssues(). */
+  getIssues(): IssueMap {
+    return { nodes: { ...this.issues.nodes }, links: { ...this.issues.links } };
+  }
+
+  /**
+   * Steps to the next (or previous) item with issues, in reading order, starting after the current
+   * selection. Selects it, scrolls it into view and focuses it if it's a node. Returns the item, or null
+   * when no item has issues. Bound to F8 / Shift+F8.
+   */
+  nextIssue(direction: 1 | -1 = 1): ItemRef | null {
+    const items = this.issueLayer?.items() ?? [];
+    if (items.length === 0) return null;
+    const current = this.getSelection()[0];
+    const at = current
+      ? items.findIndex((i) => i.kind === current.kind && i.id === current.id)
+      : -1;
+    const index =
+      at < 0
+        ? direction > 0
+          ? 0
+          : items.length - 1
+        : (at + direction + items.length) % items.length;
+    const item = items[index]!;
+    this.setSelection([item]);
+    if (item.kind === 'node') this.keyboard?.setFocused(item.id);
+    else {
+      const b = this.itemBounds(item);
+      if (b) this.keyboard?.reveal(b);
+    }
+    return item;
   }
 
   // ---- selection -----------------------------------------------------------
@@ -674,6 +732,7 @@ export class Diagram implements DiagramApi {
     this.destroyed = true;
     this.cancelAnimation();
     this.keyboard?.destroy();
+    this.issueLayer?.destroy();
     this.detachPointerEvents?.();
     this.overlay?.destroy();
     this.renderer?.destroy();

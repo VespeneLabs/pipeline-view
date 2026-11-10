@@ -42,6 +42,10 @@
       "types": "./dist/react.d.ts",
       "import": "./dist/react.js"
     },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js"
+    },
     "./styles.css": "./dist/styles.css"
   },
   "main": "./dist/index.js",
@@ -75,6 +79,7 @@
   "devDependencies": {
     "@pipeline-view/core": "workspace:*",
     "@pipeline-view/react": "workspace:*",
-    "@pipeline-view/symbols": "workspace:*"
+    "@pipeline-view/symbols": "workspace:*",
+    "@pipeline-view/testing": "workspace:*"
   }
 }
