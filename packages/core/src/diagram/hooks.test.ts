@@ -99,7 +99,7 @@ describe('async veto and concurrent edits', () => {
     const answer = deferred();
     const { d } = setup({ onBeforeDelete: () => answer.promise });
     const dropped = vi.fn();
-    d.internal.on('changeDropped', dropped);
+    d.on('changeDropped', dropped);
     d.update((tx) => tx.removeNode('a')); // pending: rolled back
     d.update((tx) => tx.updateNode('a', { label: 'edited meanwhile' })); // a newer, unguarded-by-delete edit
     answer.resolve(true);
@@ -107,7 +107,10 @@ describe('async veto and concurrent edits', () => {
     expect(d.store.nodes.has('a')).toBe(true);
     expect(d.store.nodes.get('a')!.label).toBe('edited meanwhile');
     expect(d.store.links.has('ab')).toBe(true);
-    expect(dropped).toHaveBeenCalledWith({ reason: 'stale' });
+    expect(dropped).toHaveBeenCalledWith({
+      reason: 'stale',
+      diff: expect.objectContaining({ removed: { nodes: ['a'], links: ['ab'], annotations: [] } }),
+    });
   });
 
   it('drops it after a load and while a gesture is in progress', async () => {
