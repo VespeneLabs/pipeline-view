@@ -22,6 +22,7 @@ import { arrowsPath, linkPath, ticksPath } from './paths';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const LABEL_GAP = 16;
+const SELECTION_PAD = 4;
 
 interface NodeEl {
   g: SVGGElement;
@@ -221,7 +222,9 @@ export class SvgRenderer {
       g.setAttribute('tabindex', '-1');
       const body = this.svg('g', { class: 'pv-node-body' }) as SVGGElement;
       const symbol = this.svg('g', { class: 'pv-symbol' }) as SVGGElement;
-      body.append(symbol);
+      // Symbols are stroke-only. This transparent box makes the whole symbol clickable; ports stay on top.
+      const hit = this.svg('rect', { class: 'pv-node-hit' });
+      body.append(hit, symbol);
       g.append(body);
       this.view.layers.nodes.append(g);
       el = { g, body, symbol, label: null, markup: '', node: n };
@@ -235,10 +238,15 @@ export class SvgRenderer {
     const def = this.def(n);
     el.g.dataset.type = n.type;
     el.body.setAttribute('transform', nodeTransform(n, def));
+    const size = symbolSize(def);
+    const hit = el.body.firstElementChild!;
+    hit.setAttribute('width', String(size.width));
+    hit.setAttribute('height', String(size.height));
     this.setStatus(el.g, n.status);
     this.setAriaLabel(el.g, n, def);
     this.renderSymbol(el, n, def);
     this.renderLabel(el, n, def);
+    if (this.selected.has(refKey({ kind: 'node', id: n.id }))) this.placeSelectionBox(n.id);
   }
 
   /** "P-101, Centrifugal pump, alarm": label (or id), symbol name, then status (NFR-4). */
@@ -411,9 +419,36 @@ export class SvgRenderer {
   private renderSelection(): void {
     this.selectionDirty = false;
     const next = new Set(this.diagram.getSelection().map(refKey));
-    for (const k of this.selected) if (!next.has(k)) this.elFor(k)?.classList.remove('pv-selected');
-    for (const k of next) this.elFor(k)?.classList.add('pv-selected');
+    for (const k of this.selected) {
+      if (next.has(k)) continue;
+      const el = this.elFor(k);
+      el?.classList.remove('pv-selected');
+      el?.querySelector(':scope > .pv-selection-box')?.remove();
+    }
+    for (const k of next) {
+      const el = this.elFor(k);
+      el?.classList.add('pv-selected');
+      const [kind, id] = k.split('\u0000');
+      if (kind === 'node') this.placeSelectionBox(id!);
+    }
     this.selected = next;
+  }
+
+  /** Rounded box behind a selected node's symbol (Figma 1:52), at the rotated bounds plus padding. */
+  private placeSelectionBox(id: string): void {
+    const el = this.nodes.get(id);
+    if (!el) return;
+    let box = el.g.querySelector<SVGRectElement>(':scope > .pv-selection-box');
+    if (!box) {
+      box = this.svg('rect', { class: 'pv-selection-box' }) as SVGRectElement;
+      el.g.prepend(box);
+    }
+    const b = nodeBounds(el.node, this.def(el.node));
+    const pad = SELECTION_PAD;
+    box.setAttribute('x', String(b.x - pad));
+    box.setAttribute('y', String(b.y - pad));
+    box.setAttribute('width', String(b.width + 2 * pad));
+    box.setAttribute('height', String(b.height + 2 * pad));
   }
 
   private elFor(k: string): Element | undefined {

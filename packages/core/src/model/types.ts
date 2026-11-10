@@ -70,6 +70,11 @@ interface AnnotationBase<D extends DataRecord> {
   anchor?: { node: string };
   /** Draw a dashed leader line from the annotation to its anchor node (FR-18). */
   leader?: boolean;
+  /**
+   * Bend points for the leader, in the same coordinate space as `position` (relative to the anchor
+   * node's top-left when anchored). Without them, the leader is routed orthogonally around nodes.
+   */
+  leaderWaypoints?: Point[];
   status?: string;
   data?: D;
 }

@@ -202,6 +202,17 @@ describe('input', () => {
     expect(d.getViewport()).toMatchObject({ x: 60, zoom: 1 });
   });
 
+  it('captures the pointer only once a press turns into a pan, so clicks keep their target', () => {
+    const capture = vi.spyOn(d.view!.root, 'setPointerCapture').mockImplementation(() => {});
+    pointer('pointerdown', { clientX: 0, clientY: 0 });
+    pointer('pointerup', { clientX: 1, clientY: 0 });
+    expect(capture).not.toHaveBeenCalled();
+    pointer('pointerdown', { clientX: 0, clientY: 0 });
+    pointer('pointermove', { clientX: 30, clientY: 0 });
+    pointer('pointermove', { clientX: 60, clientY: 0 });
+    expect(capture).toHaveBeenCalledTimes(1);
+  });
+
   it('zooms with the wheel around the cursor', () => {
     const anchor = d.screenToDiagram({ x: 200, y: 100 });
     const e = new WheelEvent('wheel', { deltaY: -100, cancelable: true });

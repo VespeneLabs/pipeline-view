@@ -13,6 +13,9 @@ import type { Diagram } from '../diagram/diagram';
 import type { View } from '../viewport/view';
 import { nodeBounds } from '../diagram/geometry';
 import { leaderPoints, linkPath } from './paths';
+import { createRouter } from '../routing/router';
+import type { Router } from '../routing/types';
+import type { PortDirection } from '../symbols/types';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -46,6 +49,9 @@ export class OverlayRenderer {
   /** node id -> ids of annotations anchored to it, so a data tick touches only its own cards. */
   private readonly anchored = new Map<string, Set<string>>();
   private readonly anchorOf = new Map<string, string>();
+  /** Separate router for leaders, so they avoid nodes without taking lanes from process links. */
+  private leaderRouter: Router | undefined;
+  private obstaclesDirty = true;
 
   constructor(
     private readonly diagram: Diagram,
@@ -67,6 +73,9 @@ export class OverlayRenderer {
   }
 
   private onModel(diff: ModelDiff): void {
+    if (diff.added.nodes.length + diff.changed.nodes.length + diff.removed.nodes.length) {
+      this.obstaclesDirty = true;
+    }
     for (const id of [
       ...diff.added.annotations,
       ...diff.changed.annotations,
@@ -239,10 +248,7 @@ export class OverlayRenderer {
     anchor: NodeModel | undefined,
     box: Rect,
   ): void {
-    const points =
-      a.leader && anchor
-        ? leaderPoints(box, nodeBounds(anchor, this.diagram.symbols.get(anchor.type)))
-        : [];
+    const points = a.leader && anchor ? this.leaderRoute(a, anchor, box) : [];
     if (points.length < 2) {
       item.leader?.remove();
       item.leader = undefined;
@@ -255,6 +261,46 @@ export class OverlayRenderer {
       this.view.layers.leaders.append(item.leader);
     }
     item.leader.setAttribute('d', linkPath(points));
+  }
+
+  /**
+   * Leader polyline (FR-18). With `leaderWaypoints`, it runs card edge → waypoints → node edge. Otherwise
+   * it's routed orthogonally around other nodes between the facing edges, falling back to the direct elbow.
+   */
+  private leaderRoute(a: AnnotationModel, anchor: NodeModel, card: Rect): Point[] {
+    const node = nodeBounds(anchor, this.diagram.symbols.get(anchor.type));
+    if (a.leaderWaypoints?.length) {
+      const wps = a.leaderWaypoints.map((p) => ({
+        x: p.x + anchor.position.x,
+        y: p.y + anchor.position.y,
+      }));
+      return [edgeToward(card, wps[0]!), ...wps, edgeToward(node, wps.at(-1)!)];
+    }
+    const direct = leaderPoints(card, node);
+    if (direct.length < 2) return direct;
+    const from = direct[0]!;
+    const to = direct.at(-1)!;
+    const router = (this.leaderRouter ??= createRouter({ clearance: 8 }));
+    if (this.obstaclesDirty) {
+      this.obstaclesDirty = false;
+      const obstacles = new Map<string, Rect>();
+      for (const n of this.diagram.store.nodes.values()) {
+        obstacles.set(n.id, nodeBounds(n, this.diagram.symbols.get(n.type)));
+      }
+      router.setObstacles(obstacles);
+    }
+    try {
+      const [r] = router.route([
+        {
+          linkId: `leader:${a.id}`,
+          from: { point: from, direction: sideOf(card, from), nodeId: `leader:${a.id}` },
+          to: { point: to, direction: sideOf(node, to), nodeId: anchor.id },
+        },
+      ]);
+      return r && r.points.length >= 2 ? r.points : direct;
+    } catch {
+      return direct;
+    }
   }
 
   // ---- element helpers -----------------------------------------------------
@@ -321,7 +367,10 @@ export class OverlayRenderer {
     const item = this.items.get(key);
     if (!item) return;
     this.items.delete(key);
-    if (item.kind === 'annotation') this.setAnchor(item.id, undefined);
+    if (item.kind === 'annotation') {
+      this.setAnchor(item.id, undefined);
+      if (item.leader) this.leaderRouter?.removeRoutes([`leader:${item.id}`]);
+    }
     try {
       if (typeof item.cleanup === 'function') item.cleanup();
     } finally {
@@ -353,4 +402,24 @@ function textBox(t: SVGTextElement, pos: Point): Rect {
     /* not rendered, or no layout (SSR / tests) */
   }
   return { ...pos, width: 0, height: 0 };
+}
+
+/** The outward side of `box` that `p` lies on. */
+function sideOf(box: Rect, p: Point): PortDirection {
+  const d = [
+    ['left', Math.abs(p.x - box.x)],
+    ['right', Math.abs(p.x - (box.x + box.width))],
+    ['top', Math.abs(p.y - box.y)],
+    ['bottom', Math.abs(p.y - (box.y + box.height))],
+  ] as const;
+  return d.reduce((m, c) => (c[1] < m[1] ? c : m))[0];
+}
+
+/** The point on the edge of `box` that faces `p`, aligned with it when possible so the first segment is orthogonal. */
+function edgeToward(box: Rect, p: Point): Point {
+  const x2 = box.x + box.width;
+  const y2 = box.y + box.height;
+  if (p.x >= box.x && p.x <= x2) return { x: p.x, y: p.y < box.y ? box.y : y2 };
+  if (p.y >= box.y && p.y <= y2) return { x: p.x < box.x ? box.x : x2, y: p.y };
+  return { x: p.x < box.x ? box.x : x2, y: box.y + box.height / 2 };
 }
