@@ -69,10 +69,15 @@ export type ValidationResult =
 
 /** Context passed to `refusalMessages` for localizing a built-in refusal. */
 export interface RefusalContext {
+  /** Source end, always in flow order (outlet → inlet), however the user dragged. */
   from: LinkEnd;
+  /** Target end, always in flow order. */
   to: LinkEnd;
   kind: LinkKind;
   detail?: Record<string, unknown>;
+  /** The ends as the user dragged them, present only when that differs from flow order. */
+  dragFrom?: LinkEnd;
+  dragTo?: LinkEnd;
 }
 
 /** One step of undo history, as JSON-serializable patches (FR-44). */
@@ -225,6 +230,12 @@ export interface PointerEventPayload {
   originalEvent: PointerEvent | MouseEvent;
 }
 
+/**
+ * Where a model change came from: `'user'` for update() and editor gestures, `'host'` for
+ * patch()/applyDiff() (the host's own document), `'history'` for undo/redo (built-in or a HistoryAdapter).
+ */
+export type ChangeOrigin = 'user' | 'host' | 'history';
+
 export interface DiagramEvents {
   nodeClick: PointerEventPayload;
   nodeDoubleClick: PointerEventPayload;
@@ -233,7 +244,7 @@ export interface DiagramEvents {
   hover: { item: ItemRef | null; point: Point };
   selectionChange: { selection: ItemRef[] };
   /** Emitted for transactional changes only. Never emitted for setNodeData. */
-  modelChange: { diff: ModelDiff; model: DiagramModel; patch?: ModelPatch };
+  modelChange: { diff: ModelDiff; model: DiagramModel; patch?: ModelPatch; origin: ChangeOrigin };
   /** `final` is true once a pan, zoom or animation has settled, so hosts can save once (FR-47). */
   viewportChange: { viewport: Viewport; final?: boolean };
   /**
@@ -243,8 +254,13 @@ export interface DiagramEvents {
   changeDropped: { reason: 'stale'; diff: ModelDiff };
   /** A connect drop on a port or node was refused (FR-42). Drops on empty canvas are cancels and don't fire. */
   connectRejected: {
+    /** Source end in flow order (outlet → inlet). */
     from: LinkEnd;
+    /** Target end in flow order. */
     to: LinkEnd;
+    /** The ends as the user dragged them, present only when that differs from flow order. */
+    dragFrom?: LinkEnd;
+    dragTo?: LinkEnd;
     kind: LinkKind;
     code: RefusalCode;
     /** Final, possibly host-localized, message. */

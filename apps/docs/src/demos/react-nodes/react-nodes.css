@@ -1,0 +1,91 @@
+.rn-card {
+  box-sizing: border-box;
+  position: relative;
+  padding: 8px 10px 16px;
+  border: 1px solid var(--pv-card-border);
+  border-radius: var(--pv-radius);
+  background: var(--pv-card-bg);
+  color: var(--pv-ink);
+  font: 12px/1.3 var(--pv-font);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+}
+.rn-card[data-selected='true'] {
+  border-color: var(--pv-selection);
+  box-shadow: 0 0 0 2px var(--pv-selection-bg);
+}
+
+.rn-reading {
+  min-width: 132px;
+  white-space: nowrap;
+  border-left: 4px solid var(--demo-normal, #2e7d32);
+}
+.rn-reading[data-status='warning'] {
+  border-left-color: var(--pv-issue-warning);
+}
+.rn-reading[data-status='alarm'] {
+  border-left-color: var(--pv-issue-error);
+}
+
+.rn-head {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+.rn-head span {
+  color: var(--pv-muted);
+}
+
+/*
+ * Content-sized cards with live numbers: tabular digits plus a min-width keep the card from changing width
+ * (and its links from re-routing) as the digits change. The label, not the value, should drive the size.
+ */
+.rn-value {
+  min-width: 7ch;
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.rn-value small {
+  margin-left: 3px;
+  color: var(--pv-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.rn-trend {
+  display: block;
+  width: 100%;
+  height: 16px;
+}
+.rn-trend polyline {
+  fill: none;
+  stroke: var(--pv-line);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.rn-unit {
+  width: 100%;
+  height: 100%;
+}
+.rn-unit dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1px 8px;
+  margin: 6px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+.rn-unit dt {
+  color: var(--pv-muted);
+}
+.rn-unit dd {
+  margin: 0;
+}
+
+.rn-renders {
+  position: absolute;
+  right: 6px;
+  bottom: 2px;
+  color: var(--pv-muted);
+  font-size: 10px;
+}

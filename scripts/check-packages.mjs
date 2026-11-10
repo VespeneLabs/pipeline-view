@@ -27,7 +27,7 @@ const PACKAGES = [
       'dist/testing.js',
       'dist/testing.d.ts',
     ],
-    attwExclude: ['styles.css'],
+    attwExclude: ['styles.css', 'routing-worker'],
   },
 ];
 // CHANGELOG.md appears after `changeset version` and is always packed by npm/pnpm.
@@ -63,6 +63,17 @@ for (const pkg of PACKAGES) {
   console.log(`  ${tarball}: ${files.length} files`);
 
   for (const f of files) if (!ALLOWED.test(f)) fail(`unexpected file in tarball: ${f}`);
+
+  // The routing worker (FR-55) is loaded with new URL('./routing.worker.js', import.meta.url), so every
+  // file that loads it must sit in the same directory as the worker, or workers break at runtime.
+  for (const f of files.filter((x) => x.endsWith('.js'))) {
+    const text = run('tar', ['-xzOf', tgz, f]);
+    if (!text.includes('./routing.worker.js')) continue;
+    const dir = f.slice(0, f.lastIndexOf('/') + 1);
+    if (!files.includes(`${dir}routing.worker.js`)) {
+      fail(`${f} loads ./routing.worker.js, but ${dir}routing.worker.js is not in the tarball`);
+    } else console.log(`  ✔ routing worker next to its loader (${dir})`);
+  }
   for (const f of [
     'package.json',
     'README.md',

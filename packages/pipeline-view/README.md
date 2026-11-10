@@ -41,6 +41,8 @@ const Card = ({ node, data, status, selected, ports }: NodeRendererProps) => (
 
 The library draws the ports (from the symbol registered for `app/card`, or none), the selection box and the routes. With `sizing: 'content'` the node takes its content's size, and ports keep their relative position on the box.
 
+For cards that show live values, prefer a fixed size, or give the value a stable width (`font-variant-numeric: tabular-nums` and a `min-width`). A content-sized node whose width changes with every tick doesn't re-route links whose ports stay put, but its box still moves, and a height change moves the ports and re-routes their links.
+
 ## Controlled mode (your own store)
 
 When your app keeps the document in its own store (Zustand, Redux, …), let the store own the truth and the history, and let the diagram apply differences:
@@ -63,6 +65,7 @@ const useDoc = create<{ model: DiagramModel; past: ModelPatch[] }>(() => ({ mode
 - Pass `documentKey={doc.id}`: when it changes, the new document is loaded from scratch (fit, fresh selection, history and dirty baseline). Without it, the diagram guesses from shared node ids, which fails when documents reuse ids.
 - A new `model` from the store is applied with `diagram.patch()`: only the difference changes, untouched links aren't re-routed, and viewport, selection and live values (`setNodeData`) survive. Passing back the model you received in `onModelChange` costs nothing.
 - Prefer patches to whole models? Call `diagram.applyDiff(patch)` yourself. Every `modelChange` carries the JSON `patch` of the change.
+- Each `modelChange` has an `origin`: `'user'` (edits), `'history'` (undo/redo) or `'host'` (your own `patch()` / `applyDiff()`). `<PipelineView>` doesn't report `'host'` changes to `onModelChange`, so your store never sees its own edits echoed back (`emitHostChanges` opts in).
 - Want the store to hold undo entries instead? Pass `history: { push, undo, redo }`. The diagram pushes `{ forward, inverse }` patches and applies the one your `undo()`/`redo()` returns.
 - `diagram.isDirty()` / `markSaved()` track unsaved changes against the last save (live values don't count).
 
@@ -73,3 +76,23 @@ Above 300 nodes, the diagram renders only what's visible (plus a margin) and def
 For React (`<PipelineView>`), theming, the editor, export and SSR, see the [repository README](https://github.com/VespeneLabs/pipeline-view#readme) and the docs app.
 
 MIT © VespeneLabs
+
+### Routing in a Web Worker
+
+`createRoutingWorker()` runs a full routing pass off the main thread. Incremental re-routes while dragging stay on the main thread, because they take about 1 ms.
+
+```ts
+import { createRoutingWorker } from '@vespenelabs/pipeline-view';
+
+const worker = createRoutingWorker();
+const results = await worker.routeAll(obstacles, requests); // a newer routeAll() aborts this one (AbortError)
+router.adoptRoutes(requests, results); // the main-thread router continues incrementally
+worker.terminate();
+```
+
+By default the worker loads with `new Worker(new URL('./routing.worker.js', import.meta.url), { type: 'module' })`. If your bundler pre-bundles dependencies and breaks that path (for example Vite's dependency optimizer), either exclude the package from pre-bundling (`optimizeDeps.exclude: ['@vespenelabs/pipeline-view']`), or create the worker yourself from the `@vespenelabs/pipeline-view/routing-worker` subpath:
+
+```ts
+import RoutingWorker from '@vespenelabs/pipeline-view/routing-worker?worker'; // Vite
+const worker = createRoutingWorker({ createWorker: () => new RoutingWorker() });
+```

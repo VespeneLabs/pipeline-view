@@ -40,6 +40,13 @@ export {
 } from './symbols/resolve';
 export { migrateModel } from './model/migrate';
 export {
+  createRoutingWorker,
+  type RoutingWorker,
+  type RoutingWorkerOptions,
+  type WorkerLike,
+} from './routing/worker-client';
+export { runRoutingJob, type RoutingJob, type RoutingReply } from './routing/worker-protocol';
+export {
   upstreamOf,
   downstreamOf,
   topologicalOrder,

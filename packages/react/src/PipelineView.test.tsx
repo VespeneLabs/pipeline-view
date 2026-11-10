@@ -92,6 +92,38 @@ describe('<PipelineView>', () => {
     expect(ref.current!.canUndo()).toBe(false);
   });
 
+  it("doesn't echo the host's own model updates back through onModelChange", () => {
+    const ref = createRef<Diagram>();
+    const onModelChange = vi.fn();
+    const { rerender } = render(
+      <PipelineView ref={ref} model={model()} onModelChange={onModelChange} />,
+    );
+    const next = model();
+    next.nodes[0]!.position = { x: 0, y: 80 };
+    rerender(<PipelineView ref={ref} model={next} onModelChange={onModelChange} />);
+    expect(ref.current!.toJSON().nodes[0]!.position).toEqual({ x: 0, y: 80 }); // patched in
+    expect(onModelChange).not.toHaveBeenCalled();
+    // A user edit is reported, with its origin.
+    act(() => ref.current!.update((tx) => tx.updateNode('a', { label: 'A' })));
+    expect(onModelChange).toHaveBeenCalledTimes(1);
+    expect(onModelChange.mock.calls[0]![0].origin).toBe('user');
+    // Undo is reported as history.
+    act(() => ref.current!.undo());
+    expect(onModelChange.mock.calls[1]![0].origin).toBe('history');
+  });
+
+  it('reports host changes too with emitHostChanges', () => {
+    const onModelChange = vi.fn();
+    const { rerender } = render(
+      <PipelineView model={model()} onModelChange={onModelChange} emitHostChanges />,
+    );
+    const next = model();
+    next.nodes[0]!.position = { x: 0, y: 80 };
+    rerender(<PipelineView model={next} onModelChange={onModelChange} emitHostChanges />);
+    expect(onModelChange).toHaveBeenCalledTimes(1);
+    expect(onModelChange.mock.calls[0]![0].origin).toBe('host');
+  });
+
   it('reloads when the host passes a new model', () => {
     const ref = createRef<Diagram>();
     const { rerender } = render(<PipelineView ref={ref} model={model()} />);

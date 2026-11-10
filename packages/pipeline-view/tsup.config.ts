@@ -11,6 +11,9 @@ export default defineConfig({
     symbols: 'src/symbols.ts',
     react: 'src/react.ts',
     testing: 'src/testing.ts',
+    // The routing worker (FR-55) sits next to the shared chunk that holds createRoutingWorker(), which
+    // loads it with new URL('./routing.worker.js', import.meta.url).
+    'chunks/routing.worker': '../core/src/routing/routing.worker.ts',
   },
   format: ['esm'],
   splitting: true,
