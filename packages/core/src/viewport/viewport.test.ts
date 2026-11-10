@@ -21,6 +21,7 @@ function pointer(type: string, init: Partial<PointerEventInit> & { target?: Elem
       button: 0,
       pointerId: 1,
       pointerType: 'mouse',
+      isPrimary: (rest.pointerId ?? 1) === 1,
       ...rest,
     }),
   );
@@ -154,6 +155,24 @@ describe('input', () => {
     pointer('pointermove', { clientX: 40, clientY: 0 });
     pointer('pointerup');
     expect(d.getViewport().x).toBe(40);
+  });
+
+  it('resets suppressClick on the next primary press even if it does not pan', () => {
+    pointer('pointerdown', { clientX: 0, clientY: 0 });
+    pointer('pointermove', { clientX: 50, clientY: 0 });
+    pointer('pointerup');
+    expect(d.viewportController!.suppressClick).toBe(true);
+    d.setMode('edit');
+    pointer('pointerdown', { clientX: 0, clientY: 0 });
+    expect(d.viewportController!.suppressClick).toBe(false);
+  });
+
+  it('drops pointers whose pointerup was missed, so the next press is not a pinch', () => {
+    pointer('pointerdown', { clientX: 0, clientY: 0 });
+    // pointerup happened outside the root and never arrived.
+    pointer('pointerdown', { pointerId: 1, clientX: 100, clientY: 100 });
+    pointer('pointermove', { pointerId: 1, clientX: 160, clientY: 100 });
+    expect(d.getViewport()).toMatchObject({ x: 60, zoom: 1 });
   });
 
   it('zooms with the wheel around the cursor', () => {
