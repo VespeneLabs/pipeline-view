@@ -35,7 +35,9 @@ export interface KeyLike {
 export function isEditableTarget(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
   if (!el || typeof el !== 'object' || !('tagName' in el)) return false;
-  return !!el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
+  // isContentEditable is missing in some DOMs (jsdom), so fall back to the attribute.
+  const ce = el.isContentEditable ?? isEditableAttr(el.getAttribute?.('contenteditable'));
+  return !!ce || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
 }
 
 /** Maps a keyboard event to an editor action. Ctrl and Cmd are interchangeable. Check `isEditableTarget` first. */
@@ -89,4 +91,8 @@ export function actionForKey(e: KeyLike): EditorAction | null {
     default:
       return null;
   }
+}
+
+function isEditableAttr(v: string | null | undefined): boolean {
+  return v != null && v !== 'false';
 }

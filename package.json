@@ -16,8 +16,10 @@
     "format:check": "prettier --check .",
     "size": "size-limit",
     "changeset": "changeset",
+    "version-packages": "changeset version && node scripts/changelog-model.mjs && prettier --write packages/pipeline-view/CHANGELOG.md",
     "check:packages": "node scripts/check-packages.mjs",
-    "smoke:consumer": "node scripts/smoke-consumer.mjs"
+    "smoke:consumer": "node scripts/smoke-consumer.mjs",
+    "test:scripts": "node --test \"scripts/*.test.mjs\""
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
@@ -27,6 +29,7 @@
     "eslint": "^10.14.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "happy-dom": "^21.0.4",
+    "jsdom": "^31.0.0",
     "prettier": "^3.9.10",
     "size-limit": "^14.3.0",
     "tsup": "^9.0.0",

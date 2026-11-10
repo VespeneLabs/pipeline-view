@@ -42,6 +42,12 @@
   --pv-jump-radius: 8;
   --pv-leader-line: var(--pv-line-signal);
   --pv-focus-ring: #185ac7;
+  /* Problem markers (FR-48): badge colours per severity, and the icon ink on top of them. */
+  --pv-issue-error: #c62828;
+  --pv-issue-warning: #b26a00;
+  --pv-issue-info: #1f6fb2;
+  --pv-issue-ink: #ffffff;
+  --pv-issue-badge-ring: var(--pv-bg);
 }
 
 :where([data-theme='dark']) {
@@ -59,6 +65,10 @@
   --pv-card-bg: #152129;
   --pv-card-border: #2a3a43;
   --pv-focus-ring: #6ea8ff;
+  --pv-issue-error: #ff6b6b;
+  --pv-issue-warning: #f0a830;
+  --pv-issue-info: #6ea8ff;
+  --pv-issue-ink: #0e171c;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -77,12 +87,17 @@
     --pv-card-bg: #152129;
     --pv-card-border: #2a3a43;
     --pv-focus-ring: #6ea8ff;
+    --pv-issue-error: #ff6b6b;
+    --pv-issue-warning: #f0a830;
+    --pv-issue-info: #6ea8ff;
+    --pv-issue-ink: #0e171c;
   }
 }
 
 /* Re-declare derived tokens where the theme switches, so var(--pv-bg) etc. resolve against the local theme. */
 :where([data-theme]) {
   --pv-symbol-fill: var(--pv-bg);
+  --pv-issue-badge-ring: var(--pv-bg);
   --pv-level-fill: var(--pv-line);
   --pv-flow-color: var(--pv-line);
   --pv-leader-line: var(--pv-line-signal);
@@ -400,4 +415,26 @@
   margin: 0;
   font-size: var(--pv-font-size-small);
   color: var(--pv-muted);
+}
+
+/* ---- Problem markers (FR-48) ---- */
+.pv-issue-badge {
+  cursor: default;
+}
+.pv-issue-badge-bg {
+  fill: var(--pv-issue-error);
+  stroke: var(--pv-issue-badge-ring);
+  stroke-width: 2px;
+}
+.pv-issue-badge[data-issue-severity='warning'] .pv-issue-badge-bg {
+  fill: var(--pv-issue-warning);
+}
+.pv-issue-badge[data-issue-severity='info'] .pv-issue-badge-bg {
+  fill: var(--pv-issue-info);
+}
+.pv-issue-badge-icon {
+  fill: none;
+  stroke: var(--pv-issue-ink);
+  stroke-width: 2px;
+  stroke-linecap: round;
 }

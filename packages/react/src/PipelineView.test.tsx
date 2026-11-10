@@ -105,6 +105,16 @@ describe('<PipelineView>', () => {
     expect(root.dataset.theme).toBe('dark');
   });
 
+  it('applies the issues prop with setIssues and clears it when removed', () => {
+    const ref = createRef<Diagram>();
+    const m = model();
+    const issues = { nodes: { a: [{ severity: 'error' as const, message: 'Not connected.' }] } };
+    const { rerender } = render(<PipelineView ref={ref} model={m} issues={issues} />);
+    expect(ref.current!.getIssues().nodes).toEqual(issues.nodes);
+    rerender(<PipelineView ref={ref} model={m} />);
+    expect(ref.current!.getIssues().nodes).toEqual({});
+  });
+
   it('attaches the editor so mode="edit" edits (Delete removes the selection)', () => {
     const ref = createRef<Diagram>();
     const m = model(); // stable identity: a new object would be reloaded, clearing the selection

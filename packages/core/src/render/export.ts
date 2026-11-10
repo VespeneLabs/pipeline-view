@@ -9,6 +9,8 @@ import type { View } from '../viewport/view';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const XHTML_NS = 'http://www.w3.org/1999/xhtml';
+// Namespace declarations go through setAttributeNS: a plain setAttribute('xmlns') is serialized twice by some DOMs (jsdom).
+const XMLNS_NS = 'http://www.w3.org/2000/xmlns/';
 
 const SVG_PROPS = [
   'fill',
@@ -78,7 +80,7 @@ export function exportSvgElement(
   const b = exportBounds(diagram, view, opts.viewportOnly ?? false, pad);
 
   const svg = doc.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('xmlns', SVG_NS);
+  svg.setAttributeNS(XMLNS_NS, 'xmlns', SVG_NS);
   svg.setAttribute('viewBox', `${b.x} ${b.y} ${b.width} ${b.height}`);
   svg.setAttribute('width', String(Math.ceil(b.width)));
   svg.setAttribute('height', String(Math.ceil(b.height)));
@@ -112,7 +114,7 @@ export function exportSvgElement(
     fo.setAttribute('width', String(el.offsetWidth || parseFloat(el.style.width) || 0));
     fo.setAttribute('height', String(el.offsetHeight || parseFloat(el.style.height) || 0));
     const copy = cloneHtml(el, win);
-    copy.setAttribute('xmlns', XHTML_NS);
+    copy.setAttributeNS(XMLNS_NS, 'xmlns', XHTML_NS);
     copy.style.transform = '';
     copy.style.position = 'static';
     fo.append(copy);
@@ -192,6 +194,9 @@ function exportBounds(diagram: Diagram, view: View, viewportOnly: boolean, pad: 
 function cloneSvg(live: SVGElement, win: Window): SVGElement {
   const copy = live.cloneNode(false) as SVGElement;
   copy.removeAttribute('tabindex');
+  // Problem markers are view state, not part of the drawing.
+  copy.removeAttribute('data-issue-severity');
+  copy.removeAttribute('aria-description');
   copy.removeAttribute('style');
   const cs = win.getComputedStyle(live);
   if (cs.display === 'none' || cs.visibility === 'hidden') copy.setAttribute('display', 'none');
