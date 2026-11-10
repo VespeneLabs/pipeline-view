@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Diagram } from '../diagram/diagram';
 import type { SymbolDef } from '../symbols/types';
-import { attachEditor } from './controller';
+import { attachEditor, getEditor } from './controller';
 
 const valve: SymbolDef = {
   type: 'test/valve',
@@ -11,6 +11,7 @@ const valve: SymbolDef = {
   ports: [
     { id: 'in', position: { x: 0, y: 10 }, direction: 'left' },
     { id: 'out', position: { x: 40, y: 10 }, direction: 'right' },
+    { id: 'sig', position: { x: 20, y: 0 }, direction: 'top', accepts: ['signal'] },
   ],
 };
 
@@ -244,5 +245,43 @@ describe('EditorController', () => {
     d.setMode('edit');
     key('z', { ctrlKey: true });
     expect(spy).toHaveBeenCalledOnce();
+  });
+
+  it('creates links of the chosen kind, falling back to what the start port accepts', () => {
+    const ed = getEditor(d)!;
+    expect(ed.getLinkKind()).toBe('process');
+    ed.setLinkKind('pneumatic');
+    pointer('pointerdown', q('[data-node-id="b"] [data-port-id="out"]'), 240, 110);
+    pointer('pointerup', d.view!.root, 1, 11);
+    const added = () => [...d.store.links.values()].filter((l) => l.id !== 'm');
+    expect(added().map((l) => l.kind)).toEqual(['pneumatic']);
+    // The signal port only accepts 'signal', so that wins over the chosen kind.
+    pointer('pointerdown', q('[data-node-id="a"] [data-port-id="sig"]'), 20, 0);
+    pointer('pointerup', d.view!.root, 220, 100);
+    expect(added().map((l) => l.kind)).toEqual(['pneumatic', 'signal']);
+  });
+
+  it('reuses the port-target circles while the pointer moves', () => {
+    pointer('pointerdown', q('[data-node-id="b"] [data-port-id="out"]'), 240, 110);
+    pointer('pointermove', d.view!.root, 100, 100);
+    const first = d.view!.layers.interaction.querySelector('.pv-port-target');
+    pointer('pointermove', d.view!.root, 2, 11);
+    expect(d.view!.layers.interaction.querySelector('.pv-port-target')).toBe(first);
+    expect(d.view!.layers.interaction.querySelectorAll('.pv-hot').length).toBe(1);
+    pointer('pointerup', d.view!.root, 2, 11);
+  });
+
+  it('keeps the label editor under its node when the view pans', () => {
+    q('[data-node-id="b"]').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    const input = d.view!.root.querySelector<HTMLInputElement>('.pv-label-editor')!;
+    const left = parseFloat(input.style.left);
+    d.setViewport({ x: 50 });
+    expect(parseFloat(input.style.left)).toBe(left + 50);
+  });
+
+  it('exposes the attached controller only while editing', () => {
+    expect(getEditor(d)).toBeDefined();
+    d.setMode('view');
+    expect(getEditor(d)).toBeUndefined();
   });
 });
