@@ -2,7 +2,23 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  align-items: center;
   margin-bottom: 12px;
+}
+
+.stress-toolbar button[aria-pressed='true'],
+.stress-toolbar button[aria-checked='true'] {
+  border-color: var(--pv-selection);
+  background: var(--pv-selection-bg);
+  color: var(--pv-selection);
+}
+
+.stress-lod {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  color: var(--pv-muted);
+  font-size: 13px;
 }
 
 .stress-toolbar button {

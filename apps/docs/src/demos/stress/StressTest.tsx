@@ -2,8 +2,27 @@ import type { Diagram } from '@pipeline-view/core';
 import { PipelineView } from '@pipeline-view/react';
 import { gasSymbols, processSymbols } from '@pipeline-view/symbols';
 import { useEffect, useRef, useState } from 'react';
+import { WhatToTry } from '../../components/WhatToTry';
 import { generateScene, tickValues } from './scene';
+import '../demo.css';
 import './stress.css';
+
+type Lod = 'auto' | 'on' | 'off';
+
+/** Large-diagram options (FR-55). They're read when the diagram is created, so a change remounts it. */
+function largeOptions(culling: boolean, lod: Lod) {
+  return {
+    culling,
+    // 'auto' leaves the library default: level of detail only while culling is active.
+    ...(lod === 'off' ? { lod: false as const } : lod === 'on' ? { lod: {} } : {}),
+  };
+}
+
+/** Nodes actually drawn (culling hides the rest with display:none). */
+const renderedNodes = (d: Diagram) =>
+  [...(d.view?.layers.nodes.children ?? [])].filter(
+    (el) => (el as SVGElement).style.display !== 'none',
+  ).length;
 
 const symbols = [...gasSymbols, ...processSymbols];
 const BUDGET = { tickMs: 4, fps: 55, dragRouteMs: 16 };
@@ -17,6 +36,7 @@ interface Stats {
   dataFlushMs: number;
   /** First full flush after load, including routing all links. */
   loadFlushMs: number;
+  rendered: number;
 }
 
 /** Internal render metrics. Not public API; this page is a perf harness. */
@@ -56,15 +76,21 @@ export function StressTest() {
   const [model] = useState(generateScene);
   const diagram = useRef<Diagram | null>(null);
   const [running, setRunning] = useState(true);
+  const [culling, setCulling] = useState(true);
+  const [lod, setLod] = useState<Lod>('auto');
+  const [zoom, setZoom] = useState(1);
   const [stats, setStats] = useState<Stats>({
     fps: 0,
     tick: 0,
     batchMs: 0,
     dataFlushMs: 0,
     loadFlushMs: 0,
+    rendered: 0,
   });
   const [pan, setPan] = useState<{ avgFps: number; minFps: number } | null>(null);
   const tickRef = useRef(0);
+  /** Longest renderer flush in the first seconds after mount: the initial render, routing every link. */
+  const loadFlush = useRef(0);
 
   // One rAF loop measures frame rate and drives the 1 Hz data tick.
   useEffect(() => {
@@ -73,8 +99,6 @@ export function StressTest() {
     let windowStart = performance.now();
     let lastTick = windowStart;
     let batchMs = 0;
-    const mountedAt = performance.now();
-    let loadMs = 0;
     const loop = () => {
       const now = performance.now();
       frames++;
@@ -86,8 +110,6 @@ export function StressTest() {
         batchMs = performance.now() - t0;
       }
       const m = d && metrics(d);
-      // The largest flush in the first seconds is the initial render, which routes every link.
-      if (m && now - mountedAt < 5000) loadMs = Math.max(loadMs, m.lastFlushMs);
       if (now - windowStart >= 1000) {
         // Snapshot the values now: the state updater runs later, after the counters reset.
         const next = {
@@ -95,8 +117,10 @@ export function StressTest() {
           tick: tickRef.current,
           batchMs,
           dataFlushMs: m?.lastDataFlushMs ?? 0,
-          loadFlushMs: loadMs,
+          loadFlushMs: loadFlush.current,
+          rendered: d ? renderedNodes(d) : 0,
         };
+        if (d) setZoom(d.getViewport().zoom);
         setStats(next);
         frames = 0;
         windowStart = now;
@@ -105,10 +129,23 @@ export function StressTest() {
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [model, running]);
+  }, [model, running, culling, lod]);
 
   const onReady = (d: Diagram) => {
     diagram.current = d;
+    // Demo-only instrumentation (patches an internal): time every flush, not a per-frame sample, because
+    // the initial routing pass can run synchronously inside load or fit, between two frames.
+    loadFlush.current = 0;
+    const r = (d as unknown as { renderer?: { flush(): void } }).renderer;
+    if (r) {
+      const flush = r.flush.bind(r);
+      const until = performance.now() + 5000;
+      r.flush = () => {
+        const t0 = performance.now();
+        flush();
+        if (t0 < until) loadFlush.current = Math.max(loadFlush.current, performance.now() - t0);
+      };
+    }
     // Hook for automated perf checks (Playwright, the console).
     (window as unknown as { __stress?: unknown }).__stress = {
       diagram: d,
@@ -148,6 +185,25 @@ export function StressTest() {
         <code>pnpm build && pnpm preview</code>
         ).
       </p>
+      <WhatToTry
+        steps={[
+          <>
+            Zoom in with the mouse wheel: <b>Rendered nodes</b> drops, because culling only draws
+            what&apos;s on screen (plus a margin). Data for hidden nodes waits until they scroll in.
+          </>,
+          <>
+            Zoom out below 0.5×: port dots, then labels and cards disappear (level of detail, on by
+            default while culling is active).
+          </>,
+          <>
+            Turn <b>Culling off</b> and run the pan/zoom test again to compare frame rates.
+          </>,
+          <>
+            Set <b>LOD on</b> to keep level of detail even without culling, or <b>off</b> to always
+            draw everything.
+          </>,
+        ]}
+      />
       <div className="stress-toolbar">
         <button type="button" aria-pressed={running} onClick={() => setRunning((v) => !v)}>
           {running ? 'Pause data' : 'Resume data'}
@@ -161,6 +217,30 @@ export function StressTest() {
         >
           Fit
         </button>
+        <span className="editor-sep" aria-hidden />
+        <button
+          type="button"
+          aria-pressed={culling}
+          data-testid="toggle-culling"
+          onClick={() => setCulling((v) => !v)}
+        >
+          Culling {culling ? 'on' : 'off'}
+        </button>
+        <span role="radiogroup" aria-label="Level of detail" className="stress-lod">
+          LOD
+          {(['auto', 'on', 'off'] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              role="radio"
+              aria-checked={lod === v}
+              data-testid={`lod-${v}`}
+              onClick={() => setLod(v)}
+            >
+              {v}
+            </button>
+          ))}
+        </span>
       </div>
       <dl className="stress-stats" data-testid="stress-stats">
         <div>
@@ -182,6 +262,16 @@ export function StressTest() {
           </dd>
         </div>
         <div>
+          <dt>Rendered nodes</dt>
+          <dd data-testid="stress-rendered">
+            {stats.rendered} / {model.nodes.length}
+          </dd>
+        </div>
+        <div>
+          <dt>Zoom</dt>
+          <dd data-testid="stress-zoom">{zoom.toFixed(2)}×</dd>
+        </div>
+        <div>
           <dt>Initial render + routing</dt>
           <dd>{stats.loadFlushMs.toFixed(0)} ms</dd>
         </div>
@@ -194,11 +284,12 @@ export function StressTest() {
       </dl>
       <div className="stress-frame">
         <PipelineView
+          key={`${culling}-${lod}`}
           model={model}
           mode="view"
           symbols={symbols}
           onReady={onReady}
-          options={{ ariaLabel: 'Stress test diagram, 500 nodes' }}
+          options={{ ariaLabel: 'Stress test diagram, 500 nodes', ...largeOptions(culling, lod) }}
           style={{ width: '100%', height: '100%' }}
         />
       </div>
