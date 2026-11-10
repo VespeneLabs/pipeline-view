@@ -39,7 +39,11 @@ for (const p of PACKAGES) {
   parts.push(`## @pipeline-view/${p}`, '', body || '_No changes._', '');
 }
 parts.push(
-  'Install from the attached tarballs: `npm install ./pipeline-view-core-' + version + '.tgz …`',
+  'Install from the attached tarballs. Always include core, because symbols and react depend on the same core version:',
+  '',
+  '```sh',
+  `npm install ./pipeline-view-core-${version}.tgz ./pipeline-view-symbols-${version}.tgz ./pipeline-view-react-${version}.tgz`,
+  '```',
 );
 if (found === 0) {
   console.error(

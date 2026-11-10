@@ -8,7 +8,7 @@
  * Usage: node scripts/check-packages.mjs [--out <dir>]   (tarballs are kept in <dir> when given)
  */
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,6 +25,7 @@ const ALLOWED = /^package\/(package\.json|README\.md|CHANGELOG\.md|LICENSE|dist\
 const outArg = process.argv.indexOf('--out');
 const out =
   outArg > -1 ? resolve(process.argv[outArg + 1]) : mkdtempSync(join(tmpdir(), 'pv-pack-'));
+mkdirSync(out, { recursive: true });
 
 const run = (cmd, args, opts = {}) =>
   execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...opts });
