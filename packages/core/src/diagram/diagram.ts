@@ -18,6 +18,8 @@ import { SvgRenderer } from '../render/svg-renderer';
 import { OverlayRenderer } from '../render/overlay';
 import { attachPointerEvents } from '../render/input';
 import { KeyboardNavigation } from '../render/a11y';
+import { DiffLayer } from '../render/diff';
+import type { GetDiffOptions } from '../model/compare';
 import { exportPng, exportSvgString } from '../render/export';
 import { TransactionImpl, applyOp, diffOf, invertOp, isEmptyDiff, type Op } from './transaction';
 import type {
@@ -81,6 +83,9 @@ export class Diagram implements DiagramApi {
   private detachPointerEvents: (() => void) | undefined;
   /** @internal Keyboard focus navigation. Created on mount. */
   keyboard: KeyboardNavigation | undefined;
+  /** @internal Comparison marks (FR-51). Created on mount. */
+  diffLayer: DiffLayer | undefined;
+  private diffBase: { base: DiagramModel; opts: GetDiffOptions } | null = null;
   private viewport: Viewport = { x: 0, y: 0, zoom: 1 };
   private size: Size = { width: 0, height: 0 };
   private readonly minZoom: number;
@@ -132,6 +137,8 @@ export class Diagram implements DiagramApi {
     this.overlay = new OverlayRenderer(this, view);
     this.detachPointerEvents = attachPointerEvents(this, view);
     this.keyboard = new KeyboardNavigation(this, view);
+    this.diffLayer = new DiffLayer(this, view);
+    if (this.diffBase) this.diffLayer.set(this.diffBase.base, this.diffBase.opts);
     this.internal.emit('mount', { view });
     if (this.pendingFit) this.zoomToFit(this.pendingFit);
   }
@@ -411,6 +418,9 @@ export class Diagram implements DiagramApi {
       const b = this.itemBounds({ kind: 'annotation', id: a.id });
       if (b) rects.push(b);
     }
+    // While a comparison is shown, removed items are drawn as ghosts: fit them too.
+    for (const n of this.diffBase?.base.nodes ?? [])
+      if (!this.store.nodes.has(n.id)) rects.push(nodeBounds(n, this.symbols.get(n.type)));
     return unionRects(rects) ?? { x: 0, y: 0, width: 0, height: 0 };
   }
 
@@ -476,6 +486,23 @@ export class Diagram implements DiagramApi {
     return { x, y, width: size?.width ?? 0, height: size?.height ?? 0 };
   }
 
+  // ---- comparison (FR-51) --------------------------------------------------
+
+  /**
+   * Marks how the diagram differs from `base`: `data-diff` on added, moved and changed items, and faded
+   * ghosts for removed ones. The marks follow edits until cleared with `showDiff(null)`. For a summary list,
+   * use `getDiff(base, diagram.toJSON())`.
+   */
+  showDiff(base: DiagramModel | null, opts: GetDiffOptions = {}): void {
+    this.diffBase = base ? { base, opts } : null;
+    this.diffLayer?.set(base, opts);
+  }
+
+  /** The base passed to showDiff(), or null when no comparison is shown. */
+  getDiffBase(): DiagramModel | null {
+    return this.diffBase?.base ?? null;
+  }
+
   // ---- selection -----------------------------------------------------------
 
   getSelection(): ItemRef[] {
@@ -530,6 +557,7 @@ export class Diagram implements DiagramApi {
     this.destroyed = true;
     this.cancelAnimation();
     this.keyboard?.destroy();
+    this.diffLayer?.destroy();
     this.detachPointerEvents?.();
     this.overlay?.destroy();
     this.renderer?.destroy();
