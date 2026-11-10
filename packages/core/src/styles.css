@@ -202,8 +202,30 @@
   stroke: none;
 }
 
-/* ---- overlay ------------------------------------------------------------- */
+/* ---- annotations & overlay ---------------------------------------------- */
 
-.pv-overlay > * {
+.pv-annotation {
+  fill: var(--pv-ink);
+  font: 600 var(--pv-font-size-label) var(--pv-font);
+}
+.pv-annotation[data-variant='area'],
+.pv-annotation[data-variant='legend'] {
+  fill: var(--pv-muted);
+  font-size: var(--pv-font-size-small);
+  font-weight: 500;
+}
+.pv-annotation[data-variant='area'] {
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.pv-leader {
+  fill: none;
+  stroke: var(--pv-leader-line);
+  stroke-width: var(--pv-line-width);
+  stroke-dasharray: var(--pv-line-signal-dash);
+}
+.pv-overlay-item {
+  color: var(--pv-ink);
+  font-family: var(--pv-font);
   pointer-events: auto;
 }

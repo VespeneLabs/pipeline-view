@@ -6,8 +6,12 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 export interface ViewLayers {
   /** Grid pattern rect, drawn in screen space below everything. */
   grid: SVGGElement;
+  /** Dashed leader lines from annotations to their anchor nodes. Below links. */
+  leaders: SVGGElement;
   links: SVGGElement;
   nodes: SVGGElement;
+  /** SVG text annotations. Above nodes. */
+  annotations: SVGGElement;
   /** Editor layer: marquee, handles, guides, connection preview. Diagram coordinates. */
   interaction: SVGGElement;
 }
@@ -48,11 +52,13 @@ export function createView(container: HTMLElement, ariaLabel = 'Process diagram'
   const scene = g('pv-scene');
   const layers: ViewLayers = {
     grid,
+    leaders: g('pv-layer-leaders'),
     links: g('pv-layer-links'),
     nodes: g('pv-layer-nodes'),
+    annotations: g('pv-layer-annotations'),
     interaction: g('pv-layer-interaction'),
   };
-  scene.append(layers.links, layers.nodes, layers.interaction);
+  scene.append(layers.leaders, layers.links, layers.nodes, layers.annotations, layers.interaction);
   svg.append(grid, scene);
 
   const overlay = doc.createElement('div');
