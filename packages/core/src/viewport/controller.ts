@@ -66,7 +66,9 @@ export class ViewportController {
     if (e.button === 1) return true;
     if (e.button !== 0) return false;
     if (this.spaceDown || this.host.getMode() === 'view') return true;
-    // Edit mode: the editor owns mouse presses (marquee, node drag). Touch on the empty background pans.
+    // Edit mode: the editor owns mouse presses (marquee, node drag). Touch on the empty background pans,
+    // except while a symbol is being placed (FR-50), when a touch drag moves the preview.
+    if (this.host.root.classList.contains('pv-placing')) return false;
     const t = e.target as Element | null;
     return e.pointerType === 'touch' && !t?.closest?.(ITEM_SELECTOR);
   }

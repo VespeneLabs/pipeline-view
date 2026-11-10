@@ -594,3 +594,25 @@
 .pv-lod-ports .pv-port {
   display: none;
 }
+
+/* ---- placement mode (FR-50) ------------------------------------------------ */
+
+.pv-root.pv-placing {
+  cursor: copy;
+}
+.pv-editor .pv-placement {
+  color: var(--pv-symbol-stroke);
+  opacity: 0.7;
+  pointer-events: none;
+}
+.pv-editor .pv-placement-box {
+  fill: none;
+  stroke: var(--pv-selection);
+  stroke-dasharray: 4 3;
+}
+.pv-editor .pv-placement[data-refused] {
+  opacity: 0.35;
+}
+.pv-editor .pv-placement[data-refused] .pv-placement-box {
+  stroke: var(--pv-muted);
+}

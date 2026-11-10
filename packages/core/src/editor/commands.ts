@@ -10,6 +10,7 @@ import {
   type ConnectCheck,
   type ConnectIndexes,
   connectIndexes,
+  connectLink,
   validateConnect,
 } from '../diagram/validate';
 import type { AnnotationModel, LinkEnd, LinkModel, NodeModel, Point, Rect } from '../model/types';
@@ -428,14 +429,9 @@ export class EditorCommands {
 
   /** Creates a link if allowed (in flow order) and selects it. Returns its id, or the refusal (FR-54). */
   tryConnect(from: LinkEnd, to: LinkEnd, kind = 'process'): ConnectResult {
-    const check = validateConnect(this.diagram, from, to, kind);
-    if (!check.ok) return check;
-    const id = uniqueId(kind, (c) => this.store.links.has(c));
-    this.diagram.update((tx) =>
-      tx.addLink({ id, from: { ...check.from }, to: { ...check.to }, kind }),
-    );
-    this.diagram.setSelection([{ kind: 'link', id }]);
-    return { ok: true, id };
+    const r = connectLink(this.diagram, from, to, kind);
+    if (r.ok) this.diagram.setSelection([{ kind: 'link', id: r.id }]);
+    return r;
   }
 
   /** Creates a link if allowed and returns its id, or null. See `tryConnect` for the reason. */
@@ -516,6 +512,30 @@ export class EditorCommands {
     const id = uniqueId(base, (c) => this.store.nodes.has(c));
     const position = check.position;
     this.diagram.update((tx) => tx.addNode({ ...clone(init), id, type, position }));
+    this.diagram.setSelection([{ kind: 'node', id }]);
+    return { ok: true, id };
+  }
+
+  /**
+   * Adds a node built by a host drop source (FR-50) at its own position, if `canDrop` allows it. A taken
+   * id gets a `_N` suffix. Selects the node.
+   */
+  tryPlaceNode(node: NodeModel): ConnectResult {
+    const r = this.diagram.options.canDrop?.(node.type, node.position) ?? true;
+    if (r !== true) {
+      return r === false
+        ? { ok: false, code: 'refused', reason: 'This symbol cannot be placed here.' }
+        : {
+            ok: false,
+            code: r.code ?? 'refused',
+            reason: r.reason,
+            ...(r.detail ? { detail: r.detail } : {}),
+          };
+    }
+    const id = this.store.nodes.has(node.id)
+      ? uniqueId(node.id.replace(/_\d+$/, ''), (c) => this.store.nodes.has(c))
+      : node.id;
+    this.diagram.update((tx) => tx.addNode({ ...clone(node), id }));
     this.diagram.setSelection([{ kind: 'node', id }]);
     return { ok: true, id };
   }
