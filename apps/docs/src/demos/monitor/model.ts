@@ -204,7 +204,6 @@ export const monitorModel: DiagramModel = {
       anchor: { node: 'P03' },
       position: { x: 0, y: 98 },
       size: { width: 80, height: 17 },
-      data: { running: true },
     },
     {
       id: 'P102-state',
@@ -213,7 +212,6 @@ export const monitorModel: DiagramModel = {
       anchor: { node: 'P102' },
       position: { x: 0, y: 98 },
       size: { width: 80, height: 17 },
-      data: { running: true },
     },
     {
       id: 'area',
