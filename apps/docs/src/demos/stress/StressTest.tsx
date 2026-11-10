@@ -10,13 +10,20 @@ import './stress.css';
 type Lod = 'auto' | 'on' | 'off';
 
 /** Large-diagram options (FR-55). They're read when the diagram is created, so a change remounts it. */
-function largeOptions(culling: boolean, lod: Lod) {
+function largeOptions(culling: boolean, lod: Lod, worker: boolean) {
   return {
     culling,
+    // Route the initial pass off the main thread (links show as straight placeholders until it's done).
+    routingWorker: worker,
     // 'auto' leaves the library default: level of detail only while culling is active.
     ...(lod === 'off' ? { lod: false as const } : lod === 'on' ? { lod: {} } : {}),
   };
 }
+
+/** Links still drawn as placeholders while the routing worker works. Demo-only: reads an internal. */
+const pendingRoutes = (d: Diagram) =>
+  (d as unknown as { renderer?: { pendingWorker?: Set<string> } }).renderer?.pendingWorker?.size ??
+  0;
 
 /** Nodes actually drawn (culling hides the rest with display:none). */
 const renderedNodes = (d: Diagram) =>
@@ -37,6 +44,8 @@ interface Stats {
   /** First full flush after load, including routing all links. */
   loadFlushMs: number;
   rendered: number;
+  /** Mount → every link routed (the worker's result adopted, or the main-thread pass done). */
+  routesReadyMs: number | null;
 }
 
 /** Internal render metrics. Not public API; this page is a perf harness. */
@@ -78,6 +87,7 @@ export function StressTest() {
   const [running, setRunning] = useState(true);
   const [culling, setCulling] = useState(true);
   const [lod, setLod] = useState<Lod>('auto');
+  const [worker, setWorker] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [stats, setStats] = useState<Stats>({
     fps: 0,
@@ -86,11 +96,15 @@ export function StressTest() {
     dataFlushMs: 0,
     loadFlushMs: 0,
     rendered: 0,
+    routesReadyMs: null,
   });
   const [pan, setPan] = useState<{ avgFps: number; minFps: number } | null>(null);
   const tickRef = useRef(0);
   /** Longest renderer flush in the first seconds after mount: the initial render, routing every link. */
   const loadFlush = useRef(0);
+  /** When the current diagram was created, and when its routes were all in. */
+  const mountedAt = useRef(0);
+  const routesReady = useRef<number | null>(null);
 
   // One rAF loop measures frame rate and drives the 1 Hz data tick.
   useEffect(() => {
@@ -110,6 +124,9 @@ export function StressTest() {
         batchMs = performance.now() - t0;
       }
       const m = d && metrics(d);
+      if (d && routesReady.current === null && pendingRoutes(d) === 0 && d.getLinkPath('l0')) {
+        routesReady.current = now - mountedAt.current;
+      }
       if (now - windowStart >= 1000) {
         // Snapshot the values now: the state updater runs later, after the counters reset.
         const next = {
@@ -119,6 +136,7 @@ export function StressTest() {
           dataFlushMs: m?.lastDataFlushMs ?? 0,
           loadFlushMs: loadFlush.current,
           rendered: d ? renderedNodes(d) : 0,
+          routesReadyMs: routesReady.current,
         };
         if (d) setZoom(d.getViewport().zoom);
         setStats(next);
@@ -129,10 +147,12 @@ export function StressTest() {
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [model, running, culling, lod]);
+  }, [model, running, culling, lod, worker]);
 
   const onReady = (d: Diagram) => {
     diagram.current = d;
+    mountedAt.current = performance.now();
+    routesReady.current = null;
     // Demo-only instrumentation (patches an internal): time every flush, not a per-frame sample, because
     // the initial routing pass can run synchronously inside load or fit, between two frames.
     loadFlush.current = 0;
@@ -202,6 +222,10 @@ export function StressTest() {
             Set <b>LOD on</b> to keep level of detail even without culling, or <b>off</b> to always
             draw everything.
           </>,
+          <>
+            Turn on <b>Worker routing</b>: the first frame appears sooner with straight placeholder
+            lines, and the routed pipes replace them when the worker is done (<b>Routes ready</b>).
+          </>,
         ]}
       />
       <div className="stress-toolbar">
@@ -225,6 +249,14 @@ export function StressTest() {
           onClick={() => setCulling((v) => !v)}
         >
           Culling {culling ? 'on' : 'off'}
+        </button>
+        <button
+          type="button"
+          aria-pressed={worker}
+          data-testid="toggle-worker"
+          onClick={() => setWorker((v) => !v)}
+        >
+          Worker routing {worker ? 'on' : 'off'}
         </button>
         <span role="radiogroup" aria-label="Level of detail" className="stress-lod">
           LOD
@@ -276,6 +308,13 @@ export function StressTest() {
           <dd>{stats.loadFlushMs.toFixed(0)} ms</dd>
         </div>
         <div>
+          <dt>Routes ready</dt>
+          <dd data-testid="stress-routes-ready">
+            {stats.routesReadyMs === null ? '…' : `${stats.routesReadyMs.toFixed(0)} ms`}
+            {worker ? ' (worker)' : ''}
+          </dd>
+        </div>
+        <div>
           <dt>Pan/zoom test</dt>
           <dd data-state={pan ? ok(pan.minFps, BUDGET.fps, true) : undefined}>
             {pan ? `${pan.avgFps} avg / ${pan.minFps} min fps` : 'not run'}
@@ -284,12 +323,15 @@ export function StressTest() {
       </dl>
       <div className="stress-frame">
         <PipelineView
-          key={`${culling}-${lod}`}
+          key={`${culling}-${lod}-${worker}`}
           model={model}
           mode="view"
           symbols={symbols}
           onReady={onReady}
-          options={{ ariaLabel: 'Stress test diagram, 500 nodes', ...largeOptions(culling, lod) }}
+          options={{
+            ariaLabel: 'Stress test diagram, 500 nodes',
+            ...largeOptions(culling, lod, worker),
+          }}
           style={{ width: '100%', height: '100%' }}
         />
       </div>

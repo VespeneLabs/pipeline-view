@@ -317,6 +317,44 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
     ],
   },
   {
+    title: 'Placing, dropping and connecting',
+    entries: [
+      {
+        sig: 'acceptDrop({ mimeType, toNode(dataTransfer, point) }): () => void',
+        doc: 'HTML5 drag and drop from your own elements (edit mode). toNode builds the node at the drop point (diagram coordinates) or returns null; canDrop checks it, the position snaps to the grid when grid.snap is on, and a taken id gets a _N suffix. Returns an unsubscribe.',
+      },
+      {
+        sig: 'startPlacement(type, init?)',
+        doc: 'Placement mode for keyboard and touch: a preview follows the pointer (starting at the centre of the view); canDrop marks a refused spot with its reason; click, tap-lift or Enter places it, arrow keys nudge it (Shift for bigger steps), Esc cancels. Needs a mounted diagram in edit mode, and warns once otherwise.',
+      },
+      {
+        sig: 'connect(from, to, kind?): { ok: true, id } | { ok: false, code, reason, … }',
+        doc: 'Connects two ports from code, with every rule applied, as one undo step; the link is stored in flow order. No mount needed.',
+      },
+      {
+        sig: 'Keyboard: C on the selected node',
+        doc: 'Connect without a mouse: pick a source port with the arrow keys or Tab and Enter, then a compatible target (nearest first) and Enter. Esc steps back, then cancels. Every step, result and refusal (pointer refusals too) is announced in a polite live region.',
+      },
+    ],
+  },
+  {
+    title: 'Routing worker',
+    entries: [
+      {
+        sig: 'routingWorker: boolean | { createWorker? }',
+        doc: 'Routes the initial full pass off the main thread for diagrams with at least culling.threshold links. Links show as straight placeholders until the routes arrive; incremental re-routes during edits stay on the main thread.',
+      },
+      {
+        sig: '@vespenelabs/pipeline-view/routing-worker',
+        doc: "The worker entry, for bundlers that need their own worker import, e.g. Vite: import W from '@vespenelabs/pipeline-view/routing-worker?worker' and pass { createWorker: () => new W() }. By default it loads with new URL('./routing.worker.js', import.meta.url).",
+      },
+      {
+        sig: 'createRoutingWorker({ createWorker? }) → { routeAll, terminate }',
+        doc: 'The worker client for hosts that route outside a Diagram; a newer job aborts the previous one (AbortError).',
+      },
+    ],
+  },
+  {
     title: 'Large diagrams',
     entries: [
       {
