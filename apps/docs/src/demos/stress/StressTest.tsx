@@ -133,8 +133,8 @@ export function StressTest() {
 
   const onReady = (d: Diagram) => {
     diagram.current = d;
-    // Time every flush (not a per-frame sample): the initial routing pass can run synchronously, inside
-    // load or fit, between two frames.
+    // Demo-only instrumentation (patches an internal): time every flush, not a per-frame sample, because
+    // the initial routing pass can run synchronously inside load or fit, between two frames.
     loadFlush.current = 0;
     const r = (d as unknown as { renderer?: { flush(): void } }).renderer;
     if (r) {
