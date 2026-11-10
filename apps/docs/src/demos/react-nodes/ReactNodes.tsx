@@ -10,7 +10,11 @@ import './react-nodes.css';
 
 const symbols = [...processSymbols, readingSymbol, unitSymbol];
 
-/** React components per node type. Reading cards size themselves from their content. */
+/**
+ * React components per node type. Reading cards size themselves from their content (their label); the live
+ * value has a fixed-width slot so ticks don't resize them. Cards whose size is all live data are better
+ * off with sizing: 'fixed'.
+ */
 const nodeRenderers: Record<string, NodeRendererEntry> = {
   'demo/reading': { component: ReadingCard, sizing: 'content' },
   'demo/unit': UnitCard,

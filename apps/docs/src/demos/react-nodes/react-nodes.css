@@ -35,7 +35,12 @@
   color: var(--pv-muted);
 }
 
+/*
+ * Content-sized cards with live numbers: tabular digits plus a min-width keep the card from changing width
+ * (and its links from re-routing) as the digits change. The label, not the value, should drive the size.
+ */
 .rn-value {
+  min-width: 7ch;
   font-size: 20px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
