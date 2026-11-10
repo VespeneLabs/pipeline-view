@@ -7,9 +7,11 @@
 import type { Diagram } from '../diagram/diagram';
 import { findPort } from '../symbols/resolve';
 import { refusal } from '../diagram/validate';
+import type { DropCheck } from './commands';
+import { nodeSize, previewNode } from '../symbols/resolve';
 import { nodeBounds, portPoint } from '../diagram/geometry';
-import type { ItemRef } from '../diagram/types';
-import type { LinkEnd, Point, Rect } from '../model/types';
+import type { DropSource, ItemRef } from '../diagram/types';
+import type { LinkEnd, NodeModel, Point, Rect } from '../model/types';
 import { DRAG_THRESHOLD } from '../viewport/controller';
 import { type Clipboard, EditorCommands, type EditorGeometry } from './commands';
 import type { Guide } from './guides';
@@ -80,6 +82,14 @@ export class EditorController {
   private gesture: Gesture | null = null;
   private clipboard: Clipboard | null = null;
   private labelInput: HTMLInputElement | null = null;
+  /** Placement mode (FR-50): the symbol being placed, its init and where its centre is now. */
+  private placement: {
+    type: string;
+    init: Partial<NodeModel>;
+    at: Point;
+    check: DropCheck;
+    touch: boolean;
+  } | null = null;
   /** Pointer to capture once the press turns into a drag (screen point of the press). */
   private pending: { pointerId: number; at: Point } | null = null;
   /** Editor adornments, kept apart from other content of the interaction layer. */
@@ -116,6 +126,7 @@ export class EditorController {
       diagram.on('selectionChange', () => this.redraw()),
       diagram.internal.on('model', () => this.redraw()),
       diagram.internal.on('load', () => this.redraw()),
+      diagram.internal.on('placement', ({ type, init }) => this.startPlacement(type, init)),
       diagram.internal.on('viewport', () => {
         this.placeLabelEditor();
         this.redraw();
@@ -127,6 +138,8 @@ export class EditorController {
 
   destroy(): void {
     if (controllers.get(this.diagram) === this) controllers.delete(this.diagram);
+    this.placement = null;
+    this.root.classList.remove('pv-placing');
     this.cancelGesture();
     this.closeLabelEditor(false);
     for (const c of this.cleanup) c();
@@ -219,6 +232,15 @@ export class EditorController {
 
   private onDown = (e: PointerEvent): void => {
     if (this.diagram.getMode() !== 'edit' || e.button !== 0) return;
+    if (this.placement) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.movePlacement(this.toDiagram(e));
+      // Mouse and pen place on press; touch places where the finger lifts.
+      if (e.pointerType === 'touch') this.placement.touch = true;
+      else this.finishPlacement();
+      return;
+    }
     if (this.root.classList.contains('pv-pan-ready') || this.gesture) return;
     if (this.labelInput && e.target === this.labelInput) return;
     this.closeLabelEditor(true);
@@ -318,6 +340,10 @@ export class EditorController {
   }
 
   private onMove = (e: PointerEvent): void => {
+    if (this.placement) {
+      this.movePlacement(this.toDiagram(e));
+      return;
+    }
     const g = this.gesture;
     if (!g) return;
     this.captureIfDragging(e);
@@ -356,6 +382,12 @@ export class EditorController {
   };
 
   private onUp = (e: PointerEvent): void => {
+    if (this.placement?.touch) {
+      this.movePlacement(this.toDiagram(e));
+      this.placement.touch = false;
+      this.finishPlacement();
+      return;
+    }
     const g = this.gesture;
     this.pending = null;
     if (!g) return;
@@ -525,6 +557,10 @@ export class EditorController {
 
   private onKey = (e: KeyboardEvent): void => {
     if (this.diagram.getMode() !== 'edit' || isEditableTarget(e.target)) return;
+    if (this.placement && this.onPlacementKey(e)) {
+      e.preventDefault();
+      return;
+    }
     const action = actionForKey(e);
     if (!action) return;
     const c = this.commands;
@@ -597,20 +633,113 @@ export class EditorController {
 
   // ------------------------------------------------------------------ palette drop
 
+  /** The host drop source (FR-50) whose MIME type this drag carries, if any. */
+  private sourceFor(dt: DataTransfer | null): DropSource | undefined {
+    if (!dt) return undefined;
+    for (const s of this.diagram.dropSources) if (dt.types.includes(s.mimeType)) return s;
+    return undefined;
+  }
+
   private onDragOver = (e: DragEvent): void => {
-    if (this.diagram.getMode() === 'edit' && e.dataTransfer?.types.includes(SYMBOL_MIME)) {
+    if (this.diagram.getMode() !== 'edit' || !e.dataTransfer) return;
+    if (e.dataTransfer.types.includes(SYMBOL_MIME) || this.sourceFor(e.dataTransfer)) {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
     }
   };
 
   private onDrop = (e: DragEvent): void => {
-    const type = e.dataTransfer?.getData(SYMBOL_MIME);
-    if (this.diagram.getMode() !== 'edit' || !type) return;
+    if (this.diagram.getMode() !== 'edit' || !e.dataTransfer) return;
+    const type = e.dataTransfer.getData(SYMBOL_MIME);
+    const source = type ? undefined : this.sourceFor(e.dataTransfer);
+    if (!type && !source) return;
     e.preventDefault();
-    this.dropSymbol(type, e.clientX, e.clientY);
+    if (type) this.dropSymbol(type, e.clientX, e.clientY);
+    else {
+      const node = source!.toNode(e.dataTransfer, this.toDiagram(e));
+      if (node) this.commands.tryPlaceNode(node);
+    }
     this.root.focus({ preventScroll: true });
   };
+
+  // ------------------------------------------------------------------ placement (FR-50)
+
+  /** Starts placement mode; see `Diagram.startPlacement`. The preview starts at the centre of the view. */
+  startPlacement(type: string, init: Partial<NodeModel> = {}): void {
+    if (!this.diagram.symbols.get(type)) return;
+    this.cancelGesture();
+    const r = this.root.getBoundingClientRect();
+    const at = this.toDiagram({ clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 });
+    this.placement = {
+      type,
+      init,
+      at,
+      check: this.commands.checkDrop(type, at, init),
+      touch: false,
+    };
+    this.root.classList.add('pv-placing');
+    this.root.focus({ preventScroll: true });
+    this.redraw();
+  }
+
+  /** Cancels placement mode, if active. */
+  cancelPlacement(): void {
+    if (!this.placement) return;
+    this.placement = null;
+    this.root.classList.remove('pv-placing');
+    this.redraw();
+  }
+
+  /** True while placement mode is active. */
+  isPlacing(): boolean {
+    return this.placement !== null;
+  }
+
+  private movePlacement(at: Point): void {
+    const pl = this.placement!;
+    pl.at = at;
+    pl.check = this.commands.checkDrop(pl.type, at, pl.init);
+    this.redraw();
+  }
+
+  /** Places the preview if `canDrop` allows it; a refused spot keeps placement mode on. */
+  private finishPlacement(): void {
+    const pl = this.placement!;
+    const r = this.commands.tryDrop(pl.type, pl.at, pl.init);
+    if (!r.ok) {
+      this.redraw();
+      return;
+    }
+    this.suppressClick();
+    this.cancelPlacement();
+  }
+
+  private onPlacementKey(e: KeyboardEvent): boolean {
+    const step = (e.shiftKey ? 5 : 1) * (this.diagram.options.grid?.size ?? 10);
+    const at = this.placement!.at;
+    switch (e.key) {
+      case 'Escape':
+        this.cancelPlacement();
+        return true;
+      case 'Enter':
+        this.finishPlacement();
+        return true;
+      case 'ArrowLeft':
+        this.movePlacement({ x: at.x - step, y: at.y });
+        return true;
+      case 'ArrowRight':
+        this.movePlacement({ x: at.x + step, y: at.y });
+        return true;
+      case 'ArrowUp':
+        this.movePlacement({ x: at.x, y: at.y - step });
+        return true;
+      case 'ArrowDown':
+        this.movePlacement({ x: at.x, y: at.y + step });
+        return true;
+      default:
+        return false;
+    }
+  }
 
   // ------------------------------------------------------------------ label editor
 
@@ -832,6 +961,46 @@ export class EditorController {
           'stroke-width': 1.5 * s,
         }),
       );
+    }
+    const pl = this.placement;
+    if (pl) {
+      const def = this.diagram.symbols.get(pl.type)!;
+      const node = { ...previewNode(def), ...pl.init } as NodeModel;
+      const size = nodeSize(def, node);
+      const pos = pl.check.ok
+        ? pl.check.position
+        : { x: pl.at.x - size.width / 2, y: pl.at.y - size.height / 2 };
+      const ghost = el('g', {
+        class: 'pv-placement',
+        transform: `translate(${pos.x},${pos.y})`,
+        'data-symbol-type': pl.type,
+      });
+      if (!pl.check.ok) ghost.setAttribute('data-refused', pl.check.code);
+      const body = el('g', { class: 'pv-symbol' });
+      body.innerHTML = def.render ? def.render({ data: node.data ?? {} }) : (def.svg ?? '');
+      ghost.append(
+        el('rect', {
+          class: 'pv-placement-box',
+          x: -2 * s,
+          y: -2 * s,
+          width: size.width + 4 * s,
+          height: size.height + 4 * s,
+          rx: 3 * s,
+          'stroke-width': s,
+        }),
+        body,
+      );
+      out.push(ghost);
+      if (!pl.check.ok) {
+        const tip = el('text', {
+          class: 'pv-refusal-tip',
+          x: pos.x + size.width + 8 * s,
+          y: pos.y - 6 * s,
+          'font-size': 12 * s,
+        });
+        tip.textContent = pl.check.reason;
+        out.push(tip);
+      }
     }
     layer.replaceChildren(...out);
   }

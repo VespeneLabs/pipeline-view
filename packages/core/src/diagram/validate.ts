@@ -6,7 +6,7 @@ import type { LinkEnd, LinkKind, NodeModel } from '../model/types';
 import type { PortDef } from '../symbols/types';
 import { findPort } from '../symbols/resolve';
 import type { Diagram } from './diagram';
-import type { RefusalCode, RefusalContext, ValidationResult } from './types';
+import type { ConnectResult, RefusalCode, RefusalContext, ValidationResult } from './types';
 import { type Graph, buildGraph, flowPathIn } from '../graph/graph';
 
 export type ConnectCheck =
@@ -241,4 +241,23 @@ export function connectIndexes(diagram: Diagram): ConnectIndexes {
       : {}),
     ...(kinds ? { graph: buildGraph(diagram, kinds.length ? { kinds } : {}) } : {}),
   };
+}
+
+/**
+ * Validates and, if allowed, adds the link in flow order as one undo step (FR-54). The id is
+ * `${kind}_N`, the first free one. Shared by `diagram.connect()` and the editor.
+ */
+export function connectLink(
+  diagram: Diagram,
+  from: LinkEnd,
+  to: LinkEnd,
+  kind: LinkKind = 'process',
+): ConnectResult {
+  const check = validateConnect(diagram, from, to, kind);
+  if (!check.ok) return check;
+  let n = 1;
+  while (diagram.store.links.has(`${kind}_${n}`)) n++;
+  const id = `${kind}_${n}`;
+  diagram.update((tx) => tx.addLink({ id, from: { ...check.from }, to: { ...check.to }, kind }));
+  return { ok: true, id };
 }

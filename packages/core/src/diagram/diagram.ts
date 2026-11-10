@@ -2,6 +2,8 @@ import type {
   DataRecord,
   DiagramModel,
   ModelPatch,
+  LinkEnd,
+  LinkKind,
   NodeModel,
   Point,
   Rect,
@@ -33,6 +35,7 @@ import { applyViewportToView, createView, type View } from '../viewport/view';
 import { Emitter } from './emitter';
 import { nodeBounds, unionRects } from './geometry';
 import { nodePorts } from '../symbols/resolve';
+import { connectLink } from './validate';
 import { SvgRenderer } from '../render/svg-renderer';
 import { OverlayRenderer } from '../render/overlay';
 import { attachPointerEvents } from '../render/input';
@@ -44,11 +47,13 @@ import { IssueLayer } from '../render/issues';
 import { exportPng, exportSvgString } from '../render/export';
 import { TransactionImpl, applyOp, diffOf, invertOp, isEmptyDiff, type Op } from './transaction';
 import type {
+  ConnectResult,
   DiagramApi,
   DiagramEvents,
   DiagramMode,
   DiagramOptions,
   IssueMap,
+  DropSource,
   ItemRef,
   ModelDiff,
   ThemeName,
@@ -71,6 +76,8 @@ export interface InternalEvents {
   viewport: { viewport: Viewport };
   /** Node geometry changed outside the model (measured HTML node sizes): re-place and re-route. */
   geometry: { ids: string[] };
+  /** startPlacement() was called (FR-50); the editor controller shows the preview. */
+  placement: { type: string; init: Partial<NodeModel> };
 }
 
 const MAX_UNDO = 200;
@@ -738,6 +745,37 @@ export class Diagram implements DiagramApi {
     return this.renderer?.getLinkPath(linkId);
   }
   /** Swallows the click that follows a gesture (an editor drag, for example) so it doesn't select or emit nodeClick. */
+  /** @internal Host drag-and-drop sources registered with acceptDrop (FR-50). */
+  readonly dropSources = new Set<DropSource>();
+
+  /**
+   * Accepts HTML5 drag-and-drop from host elements (FR-50): drops whose dataTransfer has `mimeType`
+   * become the node `toNode` builds, checked with `canDrop`. Edit mode only. Returns an unsubscribe.
+   */
+  acceptDrop(source: DropSource): () => void {
+    this.dropSources.add(source);
+    return () => {
+      this.dropSources.delete(source);
+    };
+  }
+
+  /**
+   * Placement mode (FR-50): a preview of `type` follows the pointer (it starts at the centre of the
+   * view), `canDrop` marks it as refused, a click or tap places it, arrow keys nudge it, Enter places
+   * it and Esc cancels. Needs edit mode and a mounted diagram.
+   */
+  startPlacement(type: string, init: Partial<NodeModel> = {}): void {
+    this.internal.emit('placement', { type, init });
+  }
+
+  /**
+   * Connects two ports, applying every rule (roles, limits, direction, graph rules, `canConnect`), as
+   * one undo step (FR-54). The link is stored in flow order. Returns its id, or the explained refusal.
+   */
+  connect(from: LinkEnd, to: LinkEnd, kind: LinkKind = 'process'): ConnectResult {
+    return connectLink(this, from, to, kind);
+  }
+
   suppressNextClick(): void {
     if (this.viewportController) this.viewportController.suppressClick = true;
   }
