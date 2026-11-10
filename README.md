@@ -91,6 +91,10 @@ pnpm dev        # http://localhost:5173
 - `#/gallery`: every symbol with its ports, in light and dark
 - Guides: `#/getting-started`, `#/theming`, `#/custom-symbols`, `#/api`
 
+## Performance
+
+The strict NFR-1 budgets (data tick ≤ 4 ms, drag re-route ≤ 16 ms, ≥ 55 fps at 500 nodes / 1k links / 2k values) are verified locally and in the bench test (measured: 1.1 ms / 1.0 ms / 60 fps); on shared CI runners the e2e gate enforces 1.5× headroom. Try it yourself on the `#/stress` demo page.
+
 ## Development
 
 pnpm workspace + Turborepo, Node 20 or later. `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm size` (bundle budgets) and `pnpm --filter docs e2e` (Playwright; visual baselines come from Linux CI). See [CLAUDE.md](./CLAUDE.md) for the full command list and conventions.
