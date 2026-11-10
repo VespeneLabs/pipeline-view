@@ -4,6 +4,9 @@ import { expect, test } from '@playwright/test';
  * NFR-1: 500 nodes, 1,000 links and 2,000 values updating at 1 Hz. A data tick takes ≤ 4 ms of main-thread
  * time, a re-route during a drag takes ≤ 16 ms, and pan/zoom runs at ≥ 55 fps. It measures on perf.html,
  * which uses the plain core API. The numbers are attached to the test report and printed.
+ *
+ * NOTE: in CI (`CI` set) the limits carry the headroom below, so a green CI means no gross regression,
+ * not strict NFR-1 compliance. Run this spec locally (without CI) to check the exact PRD budgets.
  */
 
 interface PerfApi {
