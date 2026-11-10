@@ -131,8 +131,10 @@ describe('nodeRenderers (FR-45)', () => {
       ref.current!.setMeasuredSize('c1', { width, height });
       ref.current!.renderer!.flush();
     });
-    expect(out.getAttribute('cx')).toBe('260');
-    expect(out.getAttribute('cy')).toBe('50');
+    // Port circles are re-rendered when the ports change, so query again.
+    const out2 = container.querySelector('[data-node-id="c1"] [data-port-id="out"]')!;
+    expect(out2.getAttribute('cx')).toBe('260');
+    expect(out2.getAttribute('cy')).toBe('50');
     expect(ref.current!.getLinkPath('l')![0]).toEqual({ x: 260, y: 50 });
     offsets.mockRestore();
     offsetsH.mockRestore();
