@@ -29,7 +29,7 @@ const valve: SymbolDef = {
 };
 
 const model: DiagramModel = {
-  version: 1,
+  version: 2,
   nodes: [
     { id: 'a', type: 'test/valve', position: { x: 0, y: 100 }, label: 'Inlet' },
     { id: 'b', type: 'test/valve', position: { x: 200, y: 100 }, label: 'Outlet' },
@@ -80,6 +80,19 @@ describe('queries', () => {
     expect(p.element.getAttribute('data-pv-port-id')).toBe('in');
     expect(getPort(t, 'b', 'out').point).toEqual({ x: 240, y: 110 });
     expect(() => getPort(t, 'b.nope')).toThrow(/no port "nope". Ports: in, out, sig/);
+  });
+
+  it('getPort sees per-instance ports (NodeModel.ports)', () => {
+    t.diagram.update((tx) =>
+      tx.addNode({
+        id: 'm',
+        type: 'test/valve',
+        position: { x: 0, y: 400 },
+        ports: [{ id: 'p3', position: { x: 20, y: 20 }, direction: 'bottom' }],
+      }),
+    );
+    expect(getPort(t, 'm.p3').point).toEqual({ x: 20, y: 420 });
+    expect(() => getPort(t, 'm.in')).toThrow(/Ports: p3/);
   });
 
   it('expectLink matches ports or whole nodes and lists links on failure', () => {

@@ -14,6 +14,7 @@ import {
   attachEditor,
   getEditor,
   nodeBounds,
+  nodePorts,
   portPoint,
   type DiagramModel,
   type DiagramOptions,
@@ -137,9 +138,11 @@ export function getPort(target: DiagramLike, ref: PortRef | string, portId?: str
   const node = d.store.nodes.get(end.node);
   if (!node) throw new Error(`No node ${JSON.stringify(end.node)}`);
   const sym = d.symbols.get(node.type);
-  const def = sym?.ports.find((p) => p.id === end.port);
+  // Per-instance ports (NodeModel.ports or a ports function) win over the symbol's static list.
+  const ports = nodePorts(sym, node);
+  const def = ports.find((p) => p.id === end.port);
   if (!def) {
-    const ids = sym?.ports.map((p) => p.id).join(', ') || '(none)';
+    const ids = ports.map((p) => p.id).join(', ') || '(none)';
     throw new Error(
       `Node ${JSON.stringify(end.node)} has no port ${JSON.stringify(end.port)}. Ports: ${ids}`,
     );
