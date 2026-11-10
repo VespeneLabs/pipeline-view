@@ -12,7 +12,8 @@ export class SymbolRegistry {
         throw new Error(`Symbol type "${def.type}" must be namespaced, for example "acme/pump"`);
       }
       const ids = new Set<string>();
-      for (const p of def.ports) {
+      // Dynamic port lists are validated when they're evaluated, not at registration.
+      for (const p of Array.isArray(def.ports) ? def.ports : []) {
         if (ids.has(p.id)) throw new Error(`Symbol "${def.type}" has duplicate port id "${p.id}"`);
         ids.add(p.id);
       }

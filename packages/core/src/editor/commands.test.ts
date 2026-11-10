@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Diagram } from '../diagram/diagram';
 import type { DiagramOptions } from '../diagram/types';
 import type { DiagramModel, NodeModel } from '../model/types';
-import type { SymbolDef } from '../symbols/types';
+import type { PortDef, SymbolDef } from '../symbols/types';
 import { EditorCommands, type EditorGeometry } from './commands';
 
 const valve: SymbolDef = {
@@ -21,7 +21,7 @@ const valve: SymbolDef = {
 const geometry: EditorGeometry = {
   bounds: (n) => ({ x: n.position.x, y: n.position.y, width: 40, height: 20 }),
   port: (n, id) => {
-    const p = valve.ports.find((q) => q.id === id);
+    const p = (valve.ports as PortDef[]).find((q) => q.id === id);
     return (
       p && {
         point: { x: n.position.x + p.position.x, y: n.position.y + p.position.y },
@@ -32,7 +32,7 @@ const geometry: EditorGeometry = {
 };
 
 const model = (): DiagramModel => ({
-  version: 1,
+  version: 2,
   nodes: [
     { id: 'a', type: 'test/valve', position: { x: 0, y: 0 } },
     { id: 'b', type: 'test/valve', position: { x: 200, y: 100 } },

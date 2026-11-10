@@ -50,7 +50,7 @@ describe('renderers and host timers (regression: Demo 1 interval never fired)', 
     const container = document.createElement('div');
     document.body.append(container);
     const d = new Diagram();
-    d.load({ version: 1, nodes: [{ id: 'a', type: 'x/y', position: { x: 0, y: 0 } }], links: [] });
+    d.load({ version: 2, nodes: [{ id: 'a', type: 'x/y', position: { x: 0, y: 0 } }], links: [] });
     d.mount(container);
     const clear = vi.spyOn(globalThis, 'clearTimeout');
     const clearInterval = vi.spyOn(globalThis, 'clearInterval');

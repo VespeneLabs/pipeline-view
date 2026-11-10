@@ -5,6 +5,7 @@
  * The selection highlight itself belongs to the renderer.
  */
 import type { Diagram } from '../diagram/diagram';
+import { findPort } from '../symbols/resolve';
 import { nodeBounds, portPoint } from '../diagram/geometry';
 import type { ItemRef } from '../diagram/types';
 import type { LinkEnd, Point, Rect } from '../model/types';
@@ -242,7 +243,7 @@ export class EditorController {
     } else if (hit.kind === 'port') {
       const from = { node: hit.node, port: hit.port };
       const node = this.diagram.store.nodes.get(hit.node);
-      const def = node && this.diagram.symbols.get(node.type)?.ports.find((q) => q.id === hit.port);
+      const def = node && findPort(this.diagram.symbols.get(node.type), node, hit.port);
       const accepts = def?.accepts;
       const kind = !accepts || accepts.includes(this.linkKind) ? this.linkKind : accepts[0]!;
       const origin = this.portLocation(from) ?? p;

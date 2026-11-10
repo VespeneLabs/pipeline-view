@@ -35,7 +35,7 @@ beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
   d = new Diagram({ symbols: [box] });
   d.load({
-    version: 1,
+    version: 2,
     nodes: [
       { id: 'a', type: 'test/box', position: { x: 0, y: 0 } },
       { id: 'b', type: 'test/box', position: { x: 300, y: 150 } },

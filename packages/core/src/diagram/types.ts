@@ -5,7 +5,10 @@ import type {
   AnnotationModel,
   DataRecord,
   DiagramModel,
+  LinkEnd,
+  LinkKind,
   LinkModel,
+  ModelPatch,
   NodeModel,
   Point,
   Rect,
@@ -37,6 +40,106 @@ export type HtmlRenderer = (
   item: { kind: 'node' | 'annotation'; id: string; data: DataRecord | undefined; status?: string },
 ) => void | (() => void);
 
+/** Built-in refusal codes (FR-42). Hosts may return their own codes too. */
+export type RefusalCode =
+  | 'kind-not-accepted'
+  | 'duplicate'
+  | 'port-full'
+  | 'same-port'
+  | 'direction'
+  | 'cycle'
+  | 'self-loop'
+  | 'max-links-between-nodes'
+  | 'missing-port'
+  | (string & {});
+
+/**
+ * Result of a validation hook (FR-42). `true` allows, `false` refuses without a reason, and the object
+ * form refuses with a message for the user and an optional machine-readable code.
+ */
+export type ValidationResult =
+  | boolean
+  | {
+      ok: false;
+      reason: string;
+      code?: RefusalCode;
+      /** Machine-readable context, for example `{ cycleNodes: string[] }`. */
+      detail?: Record<string, unknown>;
+    };
+
+/** Context passed to `refusalMessages` for localizing a built-in refusal. */
+export interface RefusalContext {
+  from: LinkEnd;
+  to: LinkEnd;
+  kind: LinkKind;
+  detail?: Record<string, unknown>;
+}
+
+/** One step of undo history, as JSON-serializable patches (FR-44). */
+export interface HistoryEntry {
+  /** Re-applies the change (redo). */
+  forward: ModelPatch;
+  /** Reverts the change (undo). */
+  inverse: ModelPatch;
+}
+
+/**
+ * Host-owned undo history (FR-44), for apps that keep the document in their own store. The diagram
+ * pushes one entry per undoable transaction. undo()/redo() return the entry to apply (and move it
+ * between the host's stacks), or undefined when there's nothing to do.
+ */
+export interface HistoryAdapter {
+  push(entry: HistoryEntry): void;
+  undo(): HistoryEntry | undefined;
+  redo(): HistoryEntry | undefined;
+  canUndo?(): boolean;
+  canRedo?(): boolean;
+}
+
+/** Items a delete would remove, including links removed along with their nodes (FR-43). */
+export interface DeleteRequest {
+  nodes: string[];
+  links: string[];
+  annotations: string[];
+}
+
+/**
+ * A problem marker on a node or link (FR-48). Issues are view state: they're never part of the saved
+ * model (validation results, server save errors).
+ */
+export interface Issue {
+  severity: 'error' | 'warning' | 'info';
+  message: string;
+  code?: string;
+}
+
+/** All issues at once, keyed by item id (FR-48). Passing a new map replaces the previous one. */
+export interface IssueMap {
+  nodes?: Record<string, Issue[]>;
+  links?: Record<string, Issue[]>;
+}
+
+/** How an item differs from a base model (FR-51). */
+export type DiffMark = 'added' | 'removed' | 'moved' | 'changed';
+
+/** Summary of the differences between two models (FR-51), for a list next to the canvas. */
+export interface ModelComparison {
+  nodes: { id: string; mark: DiffMark }[];
+  links: { id: string; mark: DiffMark }[];
+}
+
+/** Result of a programmatic connect (FR-54). */
+export type ConnectResult =
+  | { ok: true; id: string }
+  | { ok: false; code: RefusalCode; reason: string; detail?: Record<string, unknown> };
+
+/** A drag-and-drop source from any element (FR-50). */
+export interface DropSource {
+  mimeType: string;
+  /** Builds the node to drop at `point` (diagram coordinates), or null to ignore the drop. */
+  toNode: (data: DataTransfer, point: Point) => NodeModel | null;
+}
+
 export interface DiagramOptions {
   mode?: DiagramMode;
   theme?: ThemeName;
@@ -48,13 +151,46 @@ export interface DiagramOptions {
   minZoom?: number;
   maxZoom?: number;
   routing?: RouterOptions;
-  /** Edit-mode validation hooks (FR-29). */
+  /** Edit-mode validation hooks (FR-29, FR-42). Return a reason to explain a refusal. */
   canConnect?: (
     from: { node: NodeModel; port: string },
     to: { node: NodeModel; port: string },
     kind: string,
-  ) => boolean;
-  canDrop?: (type: string, position: Point) => boolean;
+  ) => ValidationResult;
+  canDrop?: (type: string, position: Point) => ValidationResult;
+  /**
+   * Links always run from an 'out' port to an 'in' port, and arrows follow (FR-41). With `kinds`, only
+   * links of those kinds are directed (for example process lines but not signals).
+   */
+  directed?: boolean | { kinds?: LinkKind[] };
+  /** Host-localized text for built-in refusals. Return undefined to keep the default message (FR-42). */
+  refusalMessages?: (code: RefusalCode, ctx: RefusalContext) => string | undefined;
+  /** Whether `canConnect` runs after (default) or before the built-in checks (FR-42). */
+  canConnectOrder?: 'after-builtins' | 'before-builtins';
+  /** Whole-graph rules (FR-49). Refusal codes: 'cycle', 'self-loop', 'max-links-between-nodes'. */
+  noCycles?: boolean | { kinds?: LinkKind[] };
+  noSelfLoops?: boolean;
+  maxLinksBetweenNodes?: number;
+  /**
+   * Undo history (FR-44). Omitted: the diagram keeps its own. `false`: no history (the host owns
+   * undo). An adapter: the host stores the entries.
+   */
+  history?: false | HistoryAdapter;
+  /** Asked before items are deleted in edit mode; resolve false to cancel (FR-43). */
+  onBeforeDelete?: (items: DeleteRequest) => boolean | Promise<boolean>;
+  /** Veto for any transaction, before it's committed (FR-43). */
+  beforeChange?: (diff: ModelDiff, patch: ModelPatch) => boolean | Promise<boolean>;
+  /** Viewport to start with (FR-47), for example one the host saved from `viewportChange` with `final`. */
+  initialViewport?: Viewport;
+  /** When to zoom to fit after load (FR-47). Default 'if-no-viewport'. */
+  fitOnLoad?: 'always' | 'if-no-viewport' | 'never';
+  /**
+   * Large diagrams (FR-55): render only what's visible above a node count (default on; threshold
+   * default 300), hide detail below zoom thresholds per layer, and optionally route in a Web Worker.
+   */
+  culling?: boolean | { threshold?: number; margin?: number };
+  lod?: false | { labels?: number; overlays?: number; ports?: number };
+  routingWorker?: boolean;
   /** Accessible name for the diagram root. */
   ariaLabel?: string;
 }
@@ -83,8 +219,20 @@ export interface DiagramEvents {
   hover: { item: ItemRef | null; point: Point };
   selectionChange: { selection: ItemRef[] };
   /** Emitted for transactional changes only. Never emitted for setNodeData. */
-  modelChange: { diff: ModelDiff; model: DiagramModel };
-  viewportChange: { viewport: Viewport };
+  modelChange: { diff: ModelDiff; model: DiagramModel; patch?: ModelPatch };
+  /** `final` is true once a pan, zoom or animation has settled, so hosts can save once (FR-47). */
+  viewportChange: { viewport: Viewport; final?: boolean };
+  /** A connect drop on a port or node was refused (FR-42). Drops on empty canvas are cancels and don't fire. */
+  connectRejected: {
+    from: LinkEnd;
+    to: LinkEnd;
+    kind: LinkKind;
+    code: RefusalCode;
+    /** Final, possibly host-localized, message. */
+    reason: string;
+    detail?: Record<string, unknown>;
+    point: Point;
+  };
 }
 
 export interface Transaction {
@@ -133,6 +281,26 @@ export interface DiagramApi {
     event: K,
     handler: (payload: DiagramEvents[K]) => void,
   ): () => void;
+
+  // ---- v1.2 (optional until each feature lands; see PRD §11) ----
+
+  /** Applies a patch as one transaction, without a reload, re-route of untouched links, or viewport reset (FR-44). */
+  applyDiff?(patch: ModelPatch, opts?: { undoable?: boolean }): void;
+  /** Applies only the difference between the current model and `model` (controlled mode, FR-44). Returns that patch. */
+  patch?(model: DiagramModel, opts?: { undoable?: boolean }): ModelPatch;
+  /** True if the model changed since the last markSaved() or load() (FR-44). */
+  isDirty?(): boolean;
+  markSaved?(): void;
+  /** Replaces all problem markers (FR-48). */
+  setIssues?(issues: IssueMap): void;
+  /** Connects two ports, applying every validation rule (FR-54). */
+  connect?(from: LinkEnd, to: LinkEnd, kind?: LinkKind): ConnectResult;
+  /** Accepts HTML5 drag-and-drop from host elements (FR-50). Returns an unsubscribe function. */
+  acceptDrop?(source: DropSource): () => void;
+  /** Starts placement mode: a preview follows the pointer, a click places it, Esc cancels (FR-50). */
+  startPlacement?(type: string, init?: Partial<NodeModel>): void;
+  /** Marks items against a base model, or clears the marks with null (FR-51). */
+  showDiff?(base: DiagramModel | null): void;
 
   exportSVG(opts?: { viewportOnly?: boolean; padding?: number }): string;
   exportPNG(opts?: { viewportOnly?: boolean; padding?: number; scale?: number }): Promise<Blob>;

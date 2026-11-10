@@ -6,6 +6,7 @@ import {
   type LinkModel,
   type NodeModel,
 } from './types';
+import { migrateModel } from './migrate';
 
 export type Collection = 'nodes' | 'links' | 'annotations';
 
@@ -45,7 +46,7 @@ export class ModelStore {
 
   load(model: DiagramModel): void {
     validateModel(model);
-    const m = clone(model);
+    const m = migrateModel(clone(model));
     this.nodes.clear();
     this.links.clear();
     this.annotations.clear();
@@ -111,9 +112,9 @@ export class ModelStore {
 /** Structural validation of a model. Throws a descriptive Error on the first problem. */
 export function validateModel(model: DiagramModel): void {
   if (!model || typeof model !== 'object') throw new Error('Model must be an object');
-  if (model.version !== MODEL_VERSION) {
+  if (!(Number.isInteger(model.version) && model.version >= 1 && model.version <= MODEL_VERSION)) {
     throw new Error(
-      `Unsupported model version ${String(model.version)}, expected ${MODEL_VERSION}`,
+      `Unsupported model version ${String(model.version)} (this build reads 1..${MODEL_VERSION})`,
     );
   }
   if (!Array.isArray(model.nodes) || !Array.isArray(model.links)) {

@@ -4,17 +4,19 @@
  */
 import type { NodeModel, Point, Rect, Size } from '../model/types';
 import type { PortDirection, SymbolDef } from '../symbols/types';
+import { findPort, nodePorts, nodeSize } from '../symbols/resolve';
 
-/** Size used for nodes whose symbol type isn't registered. */
-export const FALLBACK_SIZE: Size = { width: 40, height: 40 };
+export { FALLBACK_SIZE } from '../symbols/resolve';
 
-export const symbolSize = (def: SymbolDef | undefined): Size => def?.size ?? FALLBACK_SIZE;
+/** Unrotated size of a node (per instance when the symbol computes it, FR-40). */
+export const symbolSize = (def: SymbolDef | undefined, node?: NodeModel): Size =>
+  nodeSize(def, node);
 
 const rot = (node: NodeModel) => (((node.rotation ?? 0) % 360) + 360) % 360;
 
 /** Axis-aligned bounding box after rotation. */
 export function nodeBounds(node: NodeModel, def: SymbolDef | undefined): Rect {
-  const { width: w, height: h } = symbolSize(def);
+  const { width: w, height: h } = symbolSize(def, node);
   const swap = rot(node) === 90 || rot(node) === 270;
   const bw = swap ? h : w;
   const bh = swap ? w : h;
@@ -28,7 +30,7 @@ export function nodeBounds(node: NodeModel, def: SymbolDef | undefined): Rect {
 
 /** Maps a point from symbol-local coordinates (0..size) to diagram coordinates. */
 export function localToDiagram(node: NodeModel, def: SymbolDef | undefined, p: Point): Point {
-  const { width: w, height: h } = symbolSize(def);
+  const { width: w, height: h } = symbolSize(def, node);
   let dx = (node.flipX ? w - p.x : p.x) - w / 2;
   let dy = (node.flipY ? h - p.y : p.y) - h / 2;
   // SVG is y-down, so a positive rotation is clockwise: (1,0) -> (0,1) at 90°.
@@ -72,7 +74,7 @@ export function portPoint(
   def: SymbolDef | undefined,
   portId: string,
 ): ResolvedPort | undefined {
-  const p = def?.ports.find((q) => q.id === portId);
+  const p = findPort(def, node, portId);
   if (!p) return undefined;
   return {
     id: p.id,
@@ -82,7 +84,7 @@ export function portPoint(
 }
 
 export function resolvePorts(node: NodeModel, def: SymbolDef | undefined): ResolvedPort[] {
-  return (def?.ports ?? []).map((p) => ({
+  return nodePorts(def, node).map((p) => ({
     id: p.id,
     point: localToDiagram(node, def, p.position),
     direction: transformDirection(node, p.direction),
@@ -91,7 +93,7 @@ export function resolvePorts(node: NodeModel, def: SymbolDef | undefined): Resol
 
 /** SVG transform for a node group whose children are drawn in local coordinates. */
 export function nodeTransform(node: NodeModel, def: SymbolDef | undefined): string {
-  const { width: w, height: h } = symbolSize(def);
+  const { width: w, height: h } = symbolSize(def, node);
   let t = `translate(${node.position.x},${node.position.y})`;
   const r = rot(node);
   if (r) t += ` rotate(${r},${w / 2},${h / 2})`;

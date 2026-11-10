@@ -2,8 +2,15 @@
  * Diagram model: the serializable JSON contract (PRD FR-1).
  * Changing these types is a cross-team change: coordinate through the herd before editing.
  */
+import type { PortDef } from '../symbols/types';
 
-export const MODEL_VERSION = 1 as const;
+/** The model version that `toJSON()` writes. */
+export const MODEL_VERSION = 2 as const;
+/**
+ * Versions `load()` accepts. v1 documents are migrated to v2 on load (`migrateModel`). v2 only adds
+ * optional fields (`NodeModel.ports`, `locked`), so a v1 document is valid v2 after the version bump.
+ */
+export type ModelVersion = 1 | 2;
 
 export interface Point {
   x: number;
@@ -34,6 +41,13 @@ export interface NodeModel<D extends DataRecord = DataRecord> {
   label?: string;
   /** Free-form status. It is emitted as the data-status attribute and nothing more (FR-19). */
   status?: string;
+  /**
+   * Per-instance ports (v2). When set, they replace the symbol's ports for this node, for example a
+   * manifold with a variable number of outlets (PRD FR-40).
+   */
+  ports?: PortDef[];
+  /** Locked nodes can't be moved, deleted or reconnected in edit mode, and get `data-locked` (v2, FR-43). */
+  locked?: boolean;
   data?: D;
 }
 
@@ -57,6 +71,8 @@ export interface LinkModel<D extends DataRecord = DataRecord> {
   /** Show direction arrows along the link. The default is true for 'process'. */
   arrows?: boolean;
   status?: string;
+  /** Locked links can't be deleted or reconnected in edit mode, and get `data-locked` (v2, FR-43). */
+  locked?: boolean;
   data?: D;
 }
 
@@ -97,9 +113,36 @@ export interface DiagramModel<
   LD extends DataRecord = DataRecord,
   AD extends DataRecord = DataRecord,
 > {
-  version: typeof MODEL_VERSION;
+  /** `toJSON()` always writes MODEL_VERSION. `load()` also accepts older versions and migrates them. */
+  version: ModelVersion;
   nodes: NodeModel<ND>[];
   links: LinkModel<LD>[];
   annotations?: AnnotationModel<AD>[];
   meta?: DataRecord;
+}
+
+/**
+ * Partial update of one item in a ModelPatch. A key set to `null` removes that optional field
+ * (JSON has no `undefined`).
+ */
+export type ItemChange<T extends { id: string }> = { id: string } & {
+  [K in Exclude<keyof T, 'id'>]?: T[K] | null;
+};
+
+export interface CollectionPatch<T extends { id: string }> {
+  added?: T[];
+  removed?: string[];
+  changed?: ItemChange<T>[];
+}
+
+/**
+ * A JSON-serializable difference between two models (PRD FR-44). It's used by `applyDiff()`,
+ * `patch()`, host-provided history and `modelChange.patch`.
+ */
+export interface ModelPatch {
+  nodes?: CollectionPatch<NodeModel>;
+  links?: CollectionPatch<LinkModel>;
+  annotations?: CollectionPatch<AnnotationModel>;
+  /** Replaces `meta`. `null` removes it. */
+  meta?: DataRecord | null;
 }

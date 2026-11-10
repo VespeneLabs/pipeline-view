@@ -1,4 +1,4 @@
-import type { SymbolDef } from '@pipeline-view/core';
+import { nodePorts, nodeSize, type SymbolDef } from '@pipeline-view/core';
 import {
   ACTUATION,
   EQUIPMENT,
@@ -26,7 +26,7 @@ const SECTIONS = [
 const all = [...gasSymbols, ...processSymbols];
 
 export function SymbolCard({ def, showPorts }: { def: SymbolDef; showPorts: boolean }) {
-  const { width, height } = def.size;
+  const { width, height } = nodeSize(def);
   return (
     <figure className="symbol-card" data-type={def.type}>
       {def.ref !== undefined && (
@@ -43,7 +43,7 @@ export function SymbolCard({ def, showPorts }: { def: SymbolDef; showPorts: bool
         {/* Trusted markup from @pipeline-view/symbols. */}
         <g dangerouslySetInnerHTML={{ __html: def.svg ?? def.render?.({ data: {} }) ?? '' }} />
         {showPorts &&
-          def.ports.map((p) => (
+          nodePorts(def).map((p) => (
             <circle key={p.id} className="symbol-port" cx={p.position.x} cy={p.position.y} r={3.5}>
               <title>{`${p.id} · ${p.direction}${p.accepts ? ` · ${p.accepts.join(', ')}` : ''}`}</title>
             </circle>

@@ -4,6 +4,7 @@
  * `commitPreview()` for drags, which also yields exactly one undo step.
  */
 import type { Diagram } from '../diagram/diagram';
+import { findPort, nodePorts, nodeSize, previewNode } from '../symbols/resolve';
 import type { ItemRef, Transaction } from '../diagram/types';
 import type { AnnotationModel, LinkEnd, LinkModel, NodeModel, Point, Rect } from '../model/types';
 import type { PortDirection } from '../symbols/types';
@@ -374,13 +375,14 @@ export class EditorCommands {
       [a, from.port],
       [b, to.port],
     ] as const) {
-      const def = this.diagram.symbols.get(node.type)?.ports.find((p) => p.id === port);
+      const def = findPort(this.diagram.symbols.get(node.type), node, port);
       if (!def) return false;
       if (def.accepts && !def.accepts.includes(kind)) return false;
     }
     if (pairs.has(pairKey(from, to))) return false;
     const hook = this.diagram.options.canConnect;
-    return !hook || hook({ node: a, port: from.port }, { node: b, port: to.port }, kind);
+    // Only `true` allows; `false` and `{ ok: false, reason }` refuse (FR-42 reasons are surfaced by the editor).
+    return !hook || hook({ node: a, port: from.port }, { node: b, port: to.port }, kind) === true;
   }
 
   /** Every port a link of `kind` starting at `from` may connect to (for highlighting). */
@@ -388,7 +390,7 @@ export class EditorCommands {
     const out: LinkEnd[] = [];
     const pairs = this.connectedPairs();
     for (const n of this.store.nodes.values()) {
-      for (const p of this.diagram.symbols.get(n.type)?.ports ?? []) {
+      for (const p of nodePorts(this.diagram.symbols.get(n.type), n)) {
         const to = { node: n.id, port: p.id };
         if (this.canConnectWith(from, to, kind, pairs)) out.push(to);
       }
@@ -450,10 +452,11 @@ export class EditorCommands {
   ): string | null {
     const def = this.diagram.symbols.get(type);
     if (!def) return null;
-    let position = { x: point.x - def.size.width / 2, y: point.y - def.size.height / 2 };
+    const size = nodeSize(def, { ...previewNode(def), ...init } as NodeModel);
+    let position = { x: point.x - size.width / 2, y: point.y - size.height / 2 };
     if (this.diagram.options.grid?.snap) position = snapPoint(position, this.gridSize);
     const hook = this.diagram.options.canDrop;
-    if (hook && !hook(type, position)) return null;
+    if (hook && hook(type, position) !== true) return null;
     const base = type.slice(type.lastIndexOf('/') + 1);
     const id = uniqueId(base, (c) => this.store.nodes.has(c));
     this.diagram.update((tx) => tx.addNode({ ...clone(init), id, type, position }));

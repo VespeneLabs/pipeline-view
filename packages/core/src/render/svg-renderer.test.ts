@@ -19,7 +19,7 @@ const valve: SymbolDef = {
 };
 
 const model = (): DiagramModel => ({
-  version: 1,
+  version: 2,
   nodes: [
     { id: 'a', type: 'test/valve', position: { x: 0, y: 0 }, label: 'V-1' },
     { id: 'b', type: 'test/valve', position: { x: 200, y: 0 } },
@@ -197,7 +197,7 @@ describe('SvgRenderer', () => {
 
   it('draws a line jump where two links cross without connecting', () => {
     d.load({
-      version: 1,
+      version: 2,
       nodes: [
         { id: 'l', type: 'test/valve', position: { x: 0, y: 100 } },
         { id: 'r', type: 'test/valve', position: { x: 400, y: 100 } },
@@ -262,7 +262,7 @@ describe('NFR-1 data tick budget', () => {
       type: 'test/valve',
       position: { x: (i % 25) * 80, y: Math.floor(i / 25) * 60 },
     }));
-    d.load({ version: 1, nodes, links: [] });
+    d.load({ version: 2, nodes, links: [] });
     d.renderer!.flush();
     const updates: Record<string, { data: Record<string, unknown>; status: string }> = {};
     for (let i = 0; i < 500; i++) {
