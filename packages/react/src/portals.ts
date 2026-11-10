@@ -36,9 +36,21 @@ export class PortalStore {
 
   getSnapshot = (): PortalEntry[] => this.snapshot;
 
+  private pending = false;
+
+  /**
+   * Coalesces notifications per microtask. One overlay flush calls many renderers, and this turns
+   * them into a single snapshot and a single React update. Entries that didn't change keep their
+   * object identity, so memoized slots skip re-rendering.
+   */
   private emit(): void {
-    this.snapshot = [...this.entries.values()];
-    for (const l of this.listeners) l();
+    if (this.pending) return;
+    this.pending = true;
+    queueMicrotask(() => {
+      this.pending = false;
+      this.snapshot = [...this.entries.values()];
+      for (const l of this.listeners) l();
+    });
   }
 
   /** An HtmlRenderer for core, bound to a renderer name. */

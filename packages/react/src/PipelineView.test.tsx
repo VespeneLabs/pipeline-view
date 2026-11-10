@@ -85,7 +85,24 @@ describe('<PipelineView>', () => {
     expect(root.dataset.theme).toBe('dark');
   });
 
-  it('renders React overlay renderers through portals with live updates and cleanup', () => {
+  it('attaches the editor so mode="edit" edits (Delete removes the selection)', () => {
+    const ref = createRef<Diagram>();
+    const m = model(); // stable identity: a new object would be reloaded, clearing the selection
+    const { container, rerender } = render(<PipelineView ref={ref} model={m} mode="view" />);
+    const root = container.querySelector('.pv-root') as HTMLElement;
+    act(() => ref.current!.setSelection([{ kind: 'node', id: 'a' }]));
+    const del = () =>
+      root.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true }),
+      );
+    act(del);
+    expect(ref.current!.toJSON().nodes).toHaveLength(2); // view mode: no editing
+    rerender(<PipelineView ref={ref} model={m} mode="edit" />);
+    act(del);
+    expect(ref.current!.toJSON().nodes.map((n) => n.id)).toEqual(['b']);
+  });
+
+  it('renders React overlay renderers through portals with live updates and cleanup', async () => {
     const ref = createRef<Diagram>();
     const Card = ({ value }: { value: unknown }) => <b className="card">{String(value)}</b>;
     render(
@@ -100,23 +117,23 @@ describe('<PipelineView>', () => {
     const bridge = ref.current!.options.htmlRenderers!.card!;
     expect(ref.current!.options.htmlRenderers!.nope).toBeUndefined();
     let dispose: void | (() => void);
-    act(() => {
+    await act(async () => {
       dispose = bridge(slot, { kind: 'annotation', id: 'r1', data: { value: 1 } });
     });
     expect(slot.querySelector('.card')!.textContent).toBe('1');
-    act(() => {
+    await act(async () => {
       bridge(slot, { kind: 'annotation', id: 'r1', data: { value: 2 } });
     });
     expect(slot.querySelectorAll('.card')).toHaveLength(1);
     expect(slot.querySelector('.card')!.textContent).toBe('2');
-    act(() => (dispose as () => void)());
+    await act(async () => (dispose as () => void)());
     expect(slot.querySelector('.card')).toBeNull();
     slot.remove();
   });
 });
 
 describe('overlay integration', () => {
-  it('mounts a React card for an anchored HTML annotation and updates it with live data', () => {
+  it('mounts a React card for an anchored HTML annotation and updates it with live data', async () => {
     const ref = createRef<Diagram>();
     const m: DiagramModel = {
       ...model(),
@@ -137,7 +154,7 @@ describe('overlay integration', () => {
         renderers={{ card: (item) => <span className="card">{String(item.data?.value)}</span> }}
       />,
     );
-    act(() => {
+    await act(async () => {
       ref.current!.setNodeData('a', { value: 42 });
       ref.current!.overlay!.flush();
     });

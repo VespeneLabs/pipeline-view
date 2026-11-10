@@ -1,15 +1,18 @@
 import {
   Diagram,
+  attachEditor,
   type DiagramEvents,
   type DiagramMode,
   type DiagramModel,
   type DiagramOptions,
+  type EditorControllerOptions,
   type HtmlRenderer,
   type SymbolDef,
   type ThemeName,
 } from '@pipeline-view/core';
 import {
   createContext,
+  memo,
   forwardRef,
   useContext,
   useEffect,
@@ -22,7 +25,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { PortalStore, type ReactRenderer } from './portals';
+import { PortalStore, type PortalEntry, type ReactRenderer } from './portals';
 
 export const DiagramContext = createContext<Diagram | null>(null);
 
@@ -42,6 +45,8 @@ export interface PipelineViewProps {
   renderers?: Record<string, ReactRenderer>;
   /** Other DiagramOptions. Read once, when the diagram is created. */
   options?: Omit<DiagramOptions, 'mode' | 'theme' | 'symbols' | 'htmlRenderers'>;
+  /** Editor options (guides, port snap). The editor attaches itself whenever mode is 'edit'. Read once. */
+  editor?: EditorControllerOptions;
   /** Zoom to fit after each model load. Default true. */
   fitOnLoad?: boolean;
   onReady?: (diagram: Diagram) => void;
@@ -110,6 +115,11 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
         htmlRenderers,
       });
       d.mount(host);
+      // The editor follows setMode itself; it's idle in view mode.
+      const detachEditor = attachEditor(d, {
+        getLinkPath: (id) => d.getLinkPath(id),
+        ...p.editor,
+      });
       const offs = (Object.keys(EVENT_PROPS) as (keyof DiagramEvents)[]).map((event) =>
         d.on(event, (payload) => {
           if (event === 'modelChange')
@@ -123,6 +133,7 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
       p.onReady?.(d);
       return () => {
         for (const off of offs) off();
+        detachEditor();
         d.destroy();
         setDiagram(null);
       };
@@ -149,7 +160,7 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
       if (diagram && symbols?.length) diagram.symbols.register(...symbols);
     }, [diagram, symbols]);
 
-    const entries = useSyncExternalStore(portals.subscribe, portals.getSnapshot, () => []);
+    const entries = useSyncExternalStore(portals.subscribe, portals.getSnapshot, serverSnapshot);
 
     return (
       <DiagramContext.Provider value={diagram}>
@@ -158,15 +169,28 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
           className={props.className}
           style={{ position: 'relative', ...props.style }}
         />
-        {entries.map((e) => {
-          const render = props.renderers?.[e.name];
-          return render ? createPortal(render(e.item), e.el, e.key) : null;
-        })}
+        {entries.map((e) => (
+          <PortalSlot key={e.key} entry={e} render={props.renderers?.[e.name]} />
+        ))}
         {props.children}
       </DiagramContext.Provider>
     );
   },
 );
+
+const NO_ENTRIES: PortalEntry[] = [];
+const serverSnapshot = () => NO_ENTRIES;
+
+/** One overlay slot. Memoized on the entry object, which changes only when that slot's item changes. */
+const PortalSlot = memo(function PortalSlot({
+  entry,
+  render,
+}: {
+  entry: PortalEntry;
+  render: ReactRenderer | undefined;
+}) {
+  return render ? createPortal(render(entry.item), entry.el) : null;
+});
 
 /** The Diagram of the nearest <PipelineView>, or null before it mounts. */
 export function useDiagram(): Diagram | null {
