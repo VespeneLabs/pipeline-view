@@ -524,9 +524,9 @@
 .pv-editor .pv-refusal-tip {
   fill: var(--pv-ink);
   font-family: var(--pv-font);
+  /* A halo in the background colour keeps the text readable over lines; its width is set per zoom. */
   paint-order: stroke;
   stroke: var(--pv-bg);
-  stroke-width: 3px;
   stroke-linejoin: round;
   pointer-events: none;
 }

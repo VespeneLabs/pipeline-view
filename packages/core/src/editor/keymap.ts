@@ -18,7 +18,8 @@ export type EditorAction =
   | 'nudgeLeft'
   | 'nudgeRight'
   | 'nudgeUp'
-  | 'nudgeDown';
+  | 'nudgeDown'
+  | 'connect';
 
 export interface KeyLike {
   key: string;
@@ -77,6 +78,8 @@ export function actionForKey(e: KeyLike): EditorAction | null {
       return 'flipY';
     case 'Escape':
       return 'cancel';
+    case 'c':
+      return 'connect';
     case 'F2':
     case 'Enter':
       return 'editLabel';

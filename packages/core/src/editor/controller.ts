@@ -6,9 +6,9 @@
  */
 import type { Diagram } from '../diagram/diagram';
 import { findPort } from '../symbols/resolve';
-import { refusal } from '../diagram/validate';
+import { portLinkCounts, refusal } from '../diagram/validate';
 import type { DropCheck } from './commands';
-import { nodeSize, previewNode } from '../symbols/resolve';
+import { nodePorts, nodeSize, previewNode } from '../symbols/resolve';
 import { nodeBounds, portPoint } from '../diagram/geometry';
 import type { DropSource, ItemRef } from '../diagram/types';
 import type { LinkEnd, NodeModel, Point, Rect } from '../model/types';
@@ -91,6 +91,21 @@ export class EditorController {
   private gesture: Gesture | null = null;
   private clipboard: Clipboard | null = null;
   private labelInput: HTMLInputElement | null = null;
+  /**
+   * Keyboard connect (FR-54): choosing the source port on a node, then a compatible target port.
+   * `index` points into `ports` (source phase) or `targets` (target phase).
+   */
+  private kb: {
+    phase: 'source' | 'target';
+    node: string;
+    ports: LinkEnd[];
+    targets: LinkEnd[];
+    from?: LinkEnd;
+    kind: string;
+    index: number;
+  } | null = null;
+  /** Polite live region for announcements (keyboard connect, refusals). */
+  private readonly live: HTMLElement;
   /** Placement mode (FR-50): the symbol being placed, its init and where its centre is now. */
   private placement: {
     type: string;
@@ -134,13 +149,29 @@ export class EditorController {
     this.cleanup.push(
       diagram.on('selectionChange', () => this.redraw()),
       diagram.internal.on('model', () => this.redraw()),
-      diagram.internal.on('load', () => this.redraw()),
+      diagram.internal.on('load', () => {
+        this.cancelKeyboardConnect();
+        this.redraw();
+      }),
+      diagram.internal.on('model', () => {
+        // The node being connected from went away (deleted, undone): end the flow.
+        if (this.kb && !diagram.store.nodes.has(this.kb.node)) this.cancelKeyboardConnect();
+      }),
       diagram.internal.on('placement', ({ type, init }) => this.startPlacement(type, init)),
       diagram.internal.on('viewport', () => {
         this.placeLabelEditor();
         this.redraw();
       }),
     );
+    this.live = root.ownerDocument.createElement('div');
+    this.live.className = 'pv-live';
+    this.live.setAttribute('role', 'status');
+    this.live.setAttribute('aria-live', 'polite');
+    // Visually hidden, but read by screen readers.
+    this.live.style.cssText =
+      'position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap';
+    root.append(this.live);
+    this.cleanup.push(diagram.on('connectRejected', ({ reason }) => this.announce(reason)));
     root.classList.add('pv-editing');
     this.redraw();
   }
@@ -148,6 +179,8 @@ export class EditorController {
   destroy(): void {
     if (controllers.get(this.diagram) === this) controllers.delete(this.diagram);
     this.placement = null;
+    this.kb = null;
+    this.live.remove();
     this.root.classList.remove('pv-placing');
     this.cancelGesture();
     this.closeLabelEditor(false);
@@ -579,6 +612,11 @@ export class EditorController {
       e.preventDefault();
       return;
     }
+    if (this.kb && this.onConnectKey(e)) {
+      e.preventDefault();
+      this.redraw();
+      return;
+    }
     const action = actionForKey(e);
     if (!action) return;
     const c = this.commands;
@@ -626,6 +664,15 @@ export class EditorController {
         if (this.gesture) this.cancelGesture();
         else this.diagram.setSelection([]);
         break;
+      case 'connect': {
+        const [only, ...rest] = this.selectedNodes();
+        if (!only || rest.length) {
+          this.announce('Select one node to connect from.');
+          break;
+        }
+        this.startKeyboardConnect(only);
+        break;
+      }
       case 'editLabel': {
         const [only, ...rest] = this.selectedNodes();
         if (!only || rest.length) return;
@@ -679,6 +726,154 @@ export class EditorController {
     }
     this.root.focus({ preventScroll: true });
   };
+
+  // ------------------------------------------------------------------ keyboard connect (FR-54)
+
+  /** Says `text` through the live region (screen readers). */
+  announce(text: string): void {
+    // Clear first, so repeating the same message is announced again.
+    this.live.textContent = '';
+    this.live.textContent = text;
+  }
+
+  private describePort(e: LinkEnd): string {
+    const n = this.diagram.store.nodes.get(e.node);
+    const def = n && this.diagram.symbols.get(n.type);
+    const p = n && findPort(def, n, e.port);
+    const name = n?.label ?? e.node;
+    return `port ${p?.label ?? e.port} of ${name}${def ? ` (${def.name})` : ''}`;
+  }
+
+  /**
+   * Starts connecting from the keyboard on `nodeId`: choose a source port with the arrow keys or Tab,
+   * Enter; then a compatible target port, Enter connects; Escape steps back or cancels.
+   */
+  startKeyboardConnect(nodeId: string): void {
+    const n = this.diagram.store.nodes.get(nodeId);
+    if (!n) return;
+    const ports = nodePorts(this.diagram.symbols.get(n.type), n).map((p) => ({
+      node: nodeId,
+      port: p.id,
+    }));
+    if (!ports.length) {
+      this.announce(`${n.label ?? nodeId} has no ports.`);
+      return;
+    }
+    this.cancelGesture();
+    this.kb = { phase: 'source', node: nodeId, ports, targets: [], kind: this.linkKind, index: 0 };
+    this.announce(
+      `Connect from ${n.label ?? nodeId}. Choose a port with the arrow keys, then press Enter. ${this.describePort(ports[0]!)}.`,
+    );
+    this.redraw();
+  }
+
+  /** Ends the keyboard connect flow, if active, and says so. */
+  private cancelKeyboardConnect(): void {
+    if (!this.kb) return;
+    this.kb = null;
+    this.announce('Connect cancelled.');
+    this.redraw();
+  }
+
+  /** True while the keyboard connect flow is active. */
+  isConnecting(): boolean {
+    return this.kb !== null;
+  }
+
+  private onConnectKey(e: KeyboardEvent): boolean {
+    const kb = this.kb!;
+    const list = kb.phase === 'source' ? kb.ports : kb.targets;
+    const step = (d: number) => {
+      if (!list.length) return;
+      kb.index = (kb.index + d + list.length) % list.length;
+      // A culled (off-screen) node has no visible port: show it (FR-55).
+      this.diagram.culling?.reveal(list[kb.index]!.node);
+      this.announce(`${this.describePort(list[kb.index]!)}, ${kb.index + 1} of ${list.length}.`);
+    };
+    switch (e.key) {
+      case 'Tab':
+        step(e.shiftKey ? -1 : 1);
+        return true;
+      case 'ArrowRight':
+      case 'ArrowDown':
+        step(1);
+        return true;
+      case 'ArrowLeft':
+      case 'ArrowUp':
+        step(-1);
+        return true;
+      case 'Escape':
+        if (kb.phase === 'target') {
+          kb.phase = 'source';
+          kb.index = Math.max(
+            0,
+            kb.ports.findIndex((p) => p.port === kb.from?.port),
+          );
+          this.announce(`Choose a port again. ${this.describePort(kb.ports[kb.index]!)}.`);
+        } else {
+          this.kb = null;
+          this.announce('Connect cancelled.');
+        }
+        return true;
+      case 'Enter':
+        if (kb.phase === 'source') this.chooseKeyboardSource();
+        else this.finishKeyboardConnect();
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  private chooseKeyboardSource(): void {
+    const kb = this.kb!;
+    const from = kb.ports[kb.index]!;
+    const n = this.diagram.store.nodes.get(from.node);
+    const def = n && findPort(this.diagram.symbols.get(n.type), n, from.port);
+    const accepts = def?.accepts;
+    kb.kind = !accepts || accepts.includes(this.linkKind) ? this.linkKind : accepts[0]!;
+    const origin = this.portLocation(from);
+    // Compatible targets, nearest first.
+    kb.targets = this.commands
+      .compatiblePorts(from, kb.kind)
+      .map((t) => ({ t, p: this.portLocation(t) }))
+      .sort((a, b) =>
+        origin && a.p && b.p
+          ? Math.hypot(a.p.x - origin.x, a.p.y - origin.y) -
+            Math.hypot(b.p.x - origin.x, b.p.y - origin.y)
+          : 0,
+      )
+      .map((x) => x.t);
+    if (!kb.targets.length) {
+      // Say why when the source itself is the problem (a full port); otherwise nothing fits.
+      const full =
+        def?.maxLinks !== undefined &&
+        (portLinkCounts(this.diagram).get(`${from.node}\u0000${from.port}`) ?? 0) >= def.maxLinks;
+      this.announce(
+        full
+          ? `${this.describePort(from)} already has the maximum number of links.`
+          : `No compatible ports for ${this.describePort(from)}.`,
+      );
+      return;
+    }
+    kb.from = from;
+    kb.phase = 'target';
+    kb.index = 0;
+    this.announce(
+      `${kb.targets.length} compatible ports. ${this.describePort(kb.targets[0]!)}, 1 of ${kb.targets.length}. Press Enter to connect.`,
+    );
+  }
+
+  private finishKeyboardConnect(): void {
+    const kb = this.kb!;
+    const to = kb.targets[kb.index]!;
+    const r = this.commands.tryConnect(kb.from!, to, kb.kind);
+    if (r.ok) {
+      this.kb = null;
+      this.announce(`Connected ${this.describePort(kb.from!)} to ${this.describePort(to)}.`);
+    } else {
+      this.announce(r.reason);
+    }
+  }
 
   // ------------------------------------------------------------------ placement (FR-50)
 
@@ -968,6 +1163,7 @@ export class EditorController {
           x: g.current.x + 12 * s,
           y: g.current.y - 10 * s,
           'font-size': 12 * s,
+          'stroke-width': 3 * s,
         });
         tip.textContent = drop.reason;
         out.push(tip);
@@ -979,6 +1175,32 @@ export class EditorController {
           'stroke-width': 1.5 * s,
         }),
       );
+    }
+    const kb = this.kb;
+    if (kb) {
+      const cur = (kb.phase === 'source' ? kb.ports : kb.targets)[kb.index];
+      const at = cur && this.portLocation(cur);
+      const origin = kb.from && this.portLocation(kb.from);
+      if (origin && at) {
+        out.push(
+          el('path', {
+            class: 'pv-connect-preview',
+            d: `M${origin.x},${origin.y} H${at.x} V${at.y}`,
+            'stroke-width': 1.5 * s,
+          }),
+        );
+      }
+      if (at) {
+        out.push(
+          el('circle', {
+            class: 'pv-port-target pv-hot pv-kb-port',
+            cx: at.x,
+            cy: at.y,
+            r: 7 * s,
+            'stroke-width': 2 * s,
+          }),
+        );
+      }
     }
     const pl = this.placement;
     if (pl) {
@@ -1015,6 +1237,7 @@ export class EditorController {
           x: pos.x + size.width + 8 * s,
           y: pos.y - 6 * s,
           'font-size': 12 * s,
+          'stroke-width': 3 * s,
         });
         tip.textContent = pl.check.reason;
         out.push(tip);

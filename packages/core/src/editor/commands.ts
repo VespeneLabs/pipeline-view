@@ -521,6 +521,10 @@ export class EditorCommands {
    * id gets a `_N` suffix. Selects the node.
    */
   tryPlaceNode(node: NodeModel): ConnectResult {
+    // Like palette drops, host drops land on the grid when snapping is on.
+    if (this.diagram.options.grid?.snap) {
+      node = { ...node, position: snapPoint(node.position, this.gridSize) };
+    }
     const r = this.diagram.options.canDrop?.(node.type, node.position) ?? true;
     if (r !== true) {
       return r === false
