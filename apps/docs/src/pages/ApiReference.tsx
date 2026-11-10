@@ -291,7 +291,7 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
       },
       {
         sig: "{ component, sizing: 'fixed' | 'content' }",
-        doc: "'fixed' (default) fills the declared size. 'content' sizes the node from its rendered content and scales the ports to match (view state, never saved). For cards showing live numbers, give the value a fixed-width slot (tabular-nums, min-width) or use 'fixed', so ticks don't resize the node and re-route its links.",
+        doc: "'fixed' (default) fills the declared size. 'content' sizes the node from its rendered content and scales the ports to match (view state, never saved). For cards showing live numbers, give the value a fixed-width slot (tabular-nums, min-width) or use 'fixed', so ticks don't resize the node (a resize that moves a port also re-routes that port's links).",
       },
     ],
   },
@@ -321,11 +321,11 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
     entries: [
       {
         sig: 'culling: boolean | { threshold?: 300, margin?: 200 }',
-        doc: 'Above the node count, items outside the visible area (plus a screen-pixel margin) are not rendered, and their data ticks wait until they are visible. On by default.',
+        doc: 'At or above the node count, items outside the visible area (plus a screen-pixel margin) are not rendered, and their data ticks wait until they are visible. On by default.',
       },
       {
         sig: 'lod: false | { labels?: 0.4, overlays?: 0.35, ports?: 0.5 }',
-        doc: 'Below these zoom levels, labels, overlay cards and port dots are hidden (root classes pv-lod-labels / -overlays / -ports). On by default only while culling is active. View-only: the model and exports are unaffected.',
+        doc: 'Below these zoom levels, labels, overlay cards and port dots are hidden (root classes pv-lod-labels / -overlays / -ports). On by default only while culling is active; passing an lod object turns it on regardless. View-only: the model and exports are unaffected.',
       },
     ],
   },
