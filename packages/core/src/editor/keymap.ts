@@ -28,7 +28,17 @@ export interface KeyLike {
   altKey?: boolean;
 }
 
-/** Maps a keyboard event to an editor action. Ctrl and Cmd are interchangeable. */
+/**
+ * True for targets that take text input (inputs, textareas, selects, contenteditable). Hosts and the
+ * editor controller must not map keys from these targets, since Backspace, Enter and letters are bound.
+ */
+export function isEditableTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el || typeof el !== 'object' || !('tagName' in el)) return false;
+  return !!el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
+}
+
+/** Maps a keyboard event to an editor action. Ctrl and Cmd are interchangeable. Check `isEditableTarget` first. */
 export function actionForKey(e: KeyLike): EditorAction | null {
   const mod = !!(e.ctrlKey || e.metaKey);
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;

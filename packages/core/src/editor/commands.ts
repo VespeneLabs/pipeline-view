@@ -238,7 +238,10 @@ export class EditorCommands {
     );
   }
 
-  /** Applies a rotation/flip patch; ports move, so attached manual links go back to auto routing. */
+  /**
+   * Applies a rotation/flip patch. Ports move, so manual links attached to these nodes go back to
+   * auto routing and lose their waypoints (in the same undo step, so undo restores them).
+   */
   private transformNodes(ids: string[], patch: (n: NodeModel) => Partial<NodeModel>): void {
     const nodes = ids.map((id) => this.store.nodes.get(id)).filter((n): n is NodeModel => !!n);
     if (!nodes.length) return;
@@ -349,6 +352,20 @@ export class EditorCommands {
 
   /** True when a link of `kind` may join the two ports (port `accepts`, no duplicates, `canConnect`). */
   canConnect(from: LinkEnd, to: LinkEnd, kind = 'process'): boolean {
+    return this.canConnectWith(from, to, kind, this.connectedPairs());
+  }
+
+  /** Keys of every linked port pair, in both directions. */
+  private connectedPairs(): Set<string> {
+    const set = new Set<string>();
+    for (const l of this.store.links.values()) {
+      set.add(pairKey(l.from, l.to));
+      set.add(pairKey(l.to, l.from));
+    }
+    return set;
+  }
+
+  private canConnectWith(from: LinkEnd, to: LinkEnd, kind: string, pairs: Set<string>): boolean {
     if (from.node === to.node && from.port === to.port) return false;
     const a = this.store.nodes.get(from.node);
     const b = this.store.nodes.get(to.node);
@@ -361,11 +378,7 @@ export class EditorCommands {
       if (!def) return false;
       if (def.accepts && !def.accepts.includes(kind)) return false;
     }
-    for (const l of this.store.links.values()) {
-      const fwd = sameEnd(l.from, from) && sameEnd(l.to, to);
-      const back = sameEnd(l.from, to) && sameEnd(l.to, from);
-      if (fwd || back) return false;
-    }
+    if (pairs.has(pairKey(from, to))) return false;
     const hook = this.diagram.options.canConnect;
     return !hook || hook({ node: a, port: from.port }, { node: b, port: to.port }, kind);
   }
@@ -373,10 +386,11 @@ export class EditorCommands {
   /** Every port a link of `kind` starting at `from` may connect to (for highlighting). */
   compatiblePorts(from: LinkEnd, kind = 'process'): LinkEnd[] {
     const out: LinkEnd[] = [];
+    const pairs = this.connectedPairs();
     for (const n of this.store.nodes.values()) {
       for (const p of this.diagram.symbols.get(n.type)?.ports ?? []) {
         const to = { node: n.id, port: p.id };
-        if (this.canConnect(from, to, kind)) out.push(to);
+        if (this.canConnectWith(from, to, kind, pairs)) out.push(to);
       }
     }
     return out;
@@ -457,7 +471,8 @@ export class EditorCommands {
   }
 }
 
-const sameEnd = (a: LinkEnd, b: LinkEnd): boolean => a.node === b.node && a.port === b.port;
+const pairKey = (a: LinkEnd, b: LinkEnd): string =>
+  `${a.node}\u0000${a.port}\u0001${b.node}\u0000${b.port}`;
 
 /** `base_1`, `base_2`, ... : the first candidate that `taken` rejects is skipped. */
 export function uniqueId(base: string, taken: (id: string) => boolean): string {

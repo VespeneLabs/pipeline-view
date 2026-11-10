@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { alignmentSnap, snapPoint } from './guides';
-import { actionForKey } from './keymap';
+import { actionForKey, isEditableTarget } from './keymap';
 import {
   adjustWaypoints,
   cleanPath,
@@ -160,5 +160,19 @@ describe('keymap', () => {
     [{ key: 'z', altKey: true, ctrlKey: true }, null],
   ])('%o -> %s', (e, action) => {
     expect(actionForKey(e)).toBe(action);
+  });
+});
+
+describe('isEditableTarget', () => {
+  it('detects text inputs and contenteditable', () => {
+    const input = document.createElement('input');
+    const div = document.createElement('div');
+    const editable = document.createElement('div');
+    editable.contentEditable = 'true';
+    expect(isEditableTarget(input)).toBe(true);
+    expect(isEditableTarget(document.createElement('textarea'))).toBe(true);
+    expect(isEditableTarget(div)).toBe(false);
+    expect(isEditableTarget(null)).toBe(false);
+    expect(isEditableTarget(editable)).toBe(editable.isContentEditable);
   });
 });

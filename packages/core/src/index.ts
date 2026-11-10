@@ -15,5 +15,5 @@ export {
   type MoveOptions,
 } from './editor/commands';
 export { alignmentSnap, snapPoint, snapValue, type Guide } from './editor/guides';
-export { actionForKey, type EditorAction, type KeyLike } from './editor/keymap';
+export { actionForKey, isEditableTarget, type EditorAction, type KeyLike } from './editor/keymap';
 export * from './editor/waypoints';
