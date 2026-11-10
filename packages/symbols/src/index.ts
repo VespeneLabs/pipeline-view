@@ -1,7 +1,26 @@
-import type { SymbolDef } from '@pipeline-view/core';
+import { type SymbolRegistry, globalSymbols } from '@pipeline-view/core';
+import { gasSymbols } from './gas';
+import { processSymbols } from './process';
 
-/** All gas-service P&ID symbols (Figma refs 01-50). Filled in by the symbols workstream. */
-export const gasSymbols: SymbolDef[] = [];
+export * from './gas';
+export * from './process';
+export {
+  ACTUATION,
+  EQUIPMENT,
+  INSTRUMENTATION,
+  PIPING,
+  PROCESS,
+  VALVES,
+  type InstrumentData,
+  type ValveData,
+} from './shared';
 
-/** Process equipment from the water-treatment process diagram (tank, pump, control valve). */
-export const processSymbols: SymbolDef[] = [];
+/** Register all 50 gas-service symbols, globally by default or in the given registry. */
+export function registerGasSymbols(registry: SymbolRegistry = globalSymbols): void {
+  registry.register(...gasSymbols);
+}
+
+/** Register the process equipment symbols (tank, pump, control valve). */
+export function registerProcessSymbols(registry: SymbolRegistry = globalSymbols): void {
+  registry.register(...processSymbols);
+}
