@@ -67,6 +67,7 @@ export interface PipelineViewProps {
   onModelChange?: Handler<'modelChange'>;
   onViewportChange?: Handler<'viewportChange'>;
   onConnectRejected?: Handler<'connectRejected'>;
+  onChangeDropped?: Handler<'changeDropped'>;
   className?: string;
   style?: CSSProperties;
   /** Rendered after the canvas, inside the DiagramContext (toolbars, legends, palettes). */
@@ -83,6 +84,7 @@ const EVENT_PROPS = {
   modelChange: 'onModelChange',
   viewportChange: 'onViewportChange',
   connectRejected: 'onConnectRejected',
+  changeDropped: 'onChangeDropped',
 } as const satisfies Record<keyof DiagramEvents, keyof PipelineViewProps>;
 
 /**

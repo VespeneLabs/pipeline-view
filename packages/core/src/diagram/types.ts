@@ -226,6 +226,11 @@ export interface DiagramEvents {
   modelChange: { diff: ModelDiff; model: DiagramModel; patch?: ModelPatch };
   /** `final` is true once a pan, zoom or animation has settled, so hosts can save once (FR-47). */
   viewportChange: { viewport: Viewport; final?: boolean };
+  /**
+   * A change approved by an async `onBeforeDelete` / `beforeChange` wasn't applied, because the model
+   * changed while the Promise was pending (FR-43). `diff` is the change that was dropped.
+   */
+  changeDropped: { reason: 'stale'; diff: ModelDiff };
   /** A connect drop on a port or node was refused (FR-42). Drops on empty canvas are cancels and don't fire. */
   connectRejected: {
     from: LinkEnd;
