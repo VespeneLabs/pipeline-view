@@ -6,7 +6,7 @@
  */
 import type { Diagram } from '../diagram/diagram';
 import { findPort } from '../symbols/resolve';
-import { refusal } from '../diagram/validate';
+import { portLinkCounts, refusal } from '../diagram/validate';
 import type { DropCheck } from './commands';
 import { nodePorts, nodeSize, previewNode } from '../symbols/resolve';
 import { nodeBounds, portPoint } from '../diagram/geometry';
@@ -149,7 +149,14 @@ export class EditorController {
     this.cleanup.push(
       diagram.on('selectionChange', () => this.redraw()),
       diagram.internal.on('model', () => this.redraw()),
-      diagram.internal.on('load', () => this.redraw()),
+      diagram.internal.on('load', () => {
+        this.cancelKeyboardConnect();
+        this.redraw();
+      }),
+      diagram.internal.on('model', () => {
+        // The node being connected from went away (deleted, undone): end the flow.
+        if (this.kb && !diagram.store.nodes.has(this.kb.node)) this.cancelKeyboardConnect();
+      }),
       diagram.internal.on('placement', ({ type, init }) => this.startPlacement(type, init)),
       diagram.internal.on('viewport', () => {
         this.placeLabelEditor();
@@ -659,7 +666,10 @@ export class EditorController {
         break;
       case 'connect': {
         const [only, ...rest] = this.selectedNodes();
-        if (!only || rest.length) return;
+        if (!only || rest.length) {
+          this.announce('Select one node to connect from.');
+          break;
+        }
         this.startKeyboardConnect(only);
         break;
       }
@@ -757,6 +767,14 @@ export class EditorController {
     this.redraw();
   }
 
+  /** Ends the keyboard connect flow, if active, and says so. */
+  private cancelKeyboardConnect(): void {
+    if (!this.kb) return;
+    this.kb = null;
+    this.announce('Connect cancelled.');
+    this.redraw();
+  }
+
   /** True while the keyboard connect flow is active. */
   isConnecting(): boolean {
     return this.kb !== null;
@@ -826,7 +844,15 @@ export class EditorController {
       )
       .map((x) => x.t);
     if (!kb.targets.length) {
-      this.announce(`No compatible ports for ${this.describePort(from)}.`);
+      // Say why when the source itself is the problem (a full port); otherwise nothing fits.
+      const full =
+        def?.maxLinks !== undefined &&
+        (portLinkCounts(this.diagram).get(`${from.node}\u0000${from.port}`) ?? 0) >= def.maxLinks;
+      this.announce(
+        full
+          ? `${this.describePort(from)} already has the maximum number of links.`
+          : `No compatible ports for ${this.describePort(from)}.`,
+      );
       return;
     }
     kb.from = from;
@@ -1137,6 +1163,7 @@ export class EditorController {
           x: g.current.x + 12 * s,
           y: g.current.y - 10 * s,
           'font-size': 12 * s,
+          'stroke-width': 3 * s,
         });
         tip.textContent = drop.reason;
         out.push(tip);
@@ -1210,6 +1237,7 @@ export class EditorController {
           x: pos.x + size.width + 8 * s,
           y: pos.y - 6 * s,
           'font-size': 12 * s,
+          'stroke-width': 3 * s,
         });
         tip.textContent = pl.check.reason;
         out.push(tip);

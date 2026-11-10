@@ -89,7 +89,23 @@ describe('keyboard connect (FR-54)', () => {
     d.setSelection([{ kind: 'node', id: 'b' }]);
     key('c'); // b.in is full (maxLinks 1)
     key('Enter');
-    expect(live()).toBe('No compatible ports for port in of V-2 (Valve).');
+    expect(live()).toBe('port in of V-2 (Valve) already has the maximum number of links.');
+  });
+
+  it('asks for one selected node, and cancels when the document changes under the flow', () => {
+    d.setSelection([]);
+    key('c');
+    expect(live()).toBe('Select one node to connect from.');
+    d.setSelection([{ kind: 'node', id: 'a' }]);
+    key('c');
+    expect(getEditor(d)!.isConnecting()).toBe(true);
+    d.update((tx) => tx.removeNode('a'));
+    expect(getEditor(d)!.isConnecting()).toBe(false);
+    expect(live()).toBe('Connect cancelled.');
+    d.setSelection([{ kind: 'node', id: 'b' }]);
+    key('c');
+    d.load(d.toJSON());
+    expect(getEditor(d)!.isConnecting()).toBe(false);
   });
 
   it('announces pointer refusals through the same live region', () => {
