@@ -400,6 +400,11 @@ export class Diagram implements ImplementedApi {
     return unionRects(rects) ?? { x: 0, y: 0, width: 0, height: 0 };
   }
 
+  /** Rendered polyline of a link (port points included), as routed. Undefined before mount or the first render. */
+  getLinkPath(linkId: string): Point[] | undefined {
+    this.renderer?.flush();
+    return this.renderer?.getLinkPath(linkId);
+  }
   /** Maps a DOM element (an event target) to the diagram item it belongs to, using the data-*-id attributes. */
   hitTest(
     target: EventTarget | null,

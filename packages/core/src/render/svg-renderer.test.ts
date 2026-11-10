@@ -135,6 +135,13 @@ describe('SvgRenderer', () => {
     );
   });
 
+  it('exposes the routed polyline, port points included and up to date', () => {
+    expect(d.getLinkPath('ab')![0]).toEqual({ x: 40, y: 10 });
+    d.update((tx) => tx.updateNode('b', { position: { x: 300, y: 0 } }));
+    expect(d.getLinkPath('ab')!.at(-1)).toEqual({ x: 300, y: 10 });
+    expect(d.getLinkPath('nope')).toBeUndefined();
+  });
+
   it('adds a flow path when data.flowing is set', () => {
     d.update((tx) => tx.updateLink('ab', { data: { flowing: true } }));
     d.renderer!.flush();

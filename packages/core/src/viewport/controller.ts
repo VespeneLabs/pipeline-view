@@ -66,6 +66,14 @@ export class ViewportController {
 
   private onDown = (e: PointerEvent) => {
     const p = this.local(e);
+    // A primary press means no other pointer of this type is down. Drop entries whose pointerup we
+    // never saw (released outside the root without capture), or they would turn the next press into a pinch.
+    if (e.isPrimary) {
+      this.pointers.clear();
+      this.pinch = null;
+      this.pan = null;
+      this.suppressClick = false;
+    }
     this.pointers.set(e.pointerId, p);
     if (this.pointers.size === 2) {
       this.pan = null;
@@ -73,7 +81,6 @@ export class ViewportController {
       return;
     }
     if (this.pointers.size > 2 || !this.canPan(e)) return;
-    this.suppressClick = false;
     this.pan = { start: p, vp: this.host.getViewport(), moved: false };
     try {
       this.host.root.setPointerCapture(e.pointerId);

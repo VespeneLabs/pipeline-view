@@ -430,6 +430,11 @@ export class SvgRenderer {
     return el;
   }
 
+  /** Rendered polyline of a link in diagram coordinates, port points included. Undefined until routed. */
+  getLinkPath(id: string): Point[] | undefined {
+    return this.routes.get(id)?.map((p) => ({ ...p }));
+  }
+
   /** Re-reads CSS tokens (after a theme change) and redraws all links. */
   refreshTokens(): void {
     this.cssCache.clear();
