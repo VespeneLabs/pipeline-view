@@ -10,15 +10,17 @@
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = resolve(import.meta.dirname, '..');
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PACKAGES = [
   { dir: 'packages/core', extra: ['dist/styles.css'], attwExclude: ['styles.css'] },
   { dir: 'packages/symbols', extra: [], attwExclude: [] },
   { dir: 'packages/react', extra: [], attwExclude: [] },
 ];
-const ALLOWED = /^package\/(package\.json|README\.md|LICENSE|dist\/.+)$/;
+// CHANGELOG.md appears after `changeset version` and is always packed by npm/pnpm.
+const ALLOWED = /^package\/(package\.json|README\.md|CHANGELOG\.md|LICENSE|dist\/.+)$/;
 
 const outArg = process.argv.indexOf('--out');
 const out =
