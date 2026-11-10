@@ -53,12 +53,32 @@ describe('<PipelineView>', () => {
     expect(ref.current!.canUndo()).toBe(true);
   });
 
+  it('patches a new version of the same document instead of reloading it', () => {
+    const ref = createRef<Diagram>();
+    const { rerender } = render(<PipelineView ref={ref} model={model()} />);
+    act(() => ref.current!.setSelection([{ kind: 'node', id: 'b' }]));
+    const load = vi.spyOn(ref.current!, 'load');
+    const next = model();
+    next.nodes[0]!.position = { x: 0, y: 50 };
+    rerender(<PipelineView ref={ref} model={next} />);
+    expect(load).not.toHaveBeenCalled();
+    expect(ref.current!.toJSON().nodes[0]!.position).toEqual({ x: 0, y: 50 });
+    expect(ref.current!.getSelection()).toEqual([{ kind: 'node', id: 'b' }]);
+  });
+
   it('reloads when the host passes a new model', () => {
     const ref = createRef<Diagram>();
     const { rerender } = render(<PipelineView ref={ref} model={model()} />);
-    const next = { ...model(), nodes: [model().nodes[0]!] };
+    // A different document (no shared ids) is loaded from scratch.
+    const next = {
+      ...model(),
+      nodes: [{ id: 'z', type: 'x/box', position: { x: 0, y: 0 } }],
+      links: [],
+    };
+    const load = vi.spyOn(ref.current!, 'load');
     rerender(<PipelineView ref={ref} model={next} />);
-    expect(ref.current!.toJSON().nodes).toHaveLength(1);
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(ref.current!.toJSON().nodes.map((n) => n.id)).toEqual(['z']);
   });
 
   it('forwards events to the latest handler props and syncs mode/theme', () => {
