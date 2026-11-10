@@ -70,8 +70,6 @@ export interface InternalEvents {
   viewport: { viewport: Viewport };
   /** Node geometry changed outside the model (measured HTML node sizes): re-place and re-route. */
   geometry: { ids: string[] };
-  /** An approved async change wasn't applied because the model changed while the hook was pending. */
-  changeDropped: { reason: 'stale' };
 }
 
 const MAX_UNDO = 200;
@@ -261,7 +259,7 @@ export class Diagram implements DiagramApi {
     if (verdict !== false) {
       const at = this.epoch;
       void verdict.then((ok) => {
-        if (ok) this.replayIfUnchanged(at, () => apply(this.applyTracked(ops)));
+        if (ok) this.replayIfUnchanged(at, ops, () => apply(this.applyTracked(ops)));
       });
     }
   }
@@ -296,12 +294,12 @@ export class Diagram implements DiagramApi {
    * Re-applies a change whose async veto resolved true, but only if nothing changed meanwhile. The ops
    * were recorded against the earlier model: replaying them over newer edits could overwrite those edits
    * or reinsert items at stale positions. When the model moved (an edit, undo, load, or a gesture in
-   * progress), the change is dropped and the host is told through `changeDropped`.
+   * progress), the change is dropped and the public `changeDropped` event tells the host.
    */
-  private replayIfUnchanged(at: number, replay: () => void): void {
+  private replayIfUnchanged(at: number, ops: Op[], replay: () => void): void {
     if (this.destroyed) return;
     if (this.epoch !== at || this.previewOps) {
-      this.internal.emit('changeDropped', { reason: 'stale' });
+      this.events.emit('changeDropped', { reason: 'stale', diff: diffOf(ops) });
       return;
     }
     replay();
@@ -382,7 +380,7 @@ export class Diagram implements DiagramApi {
       const at = this.epoch;
       void verdict.then((ok) => {
         if (!ok) return;
-        this.replayIfUnchanged(at, () => {
+        this.replayIfUnchanged(at, ops, () => {
           const t = this.applyTracked(ops);
           this.pushUndo(ops, t);
           this.commit(ops, true, true, t);
