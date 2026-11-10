@@ -200,6 +200,46 @@ describe('removing ports removes their links in the same transaction', () => {
   });
 });
 
+describe('controlled mode (FR-44) never prunes', () => {
+  it('applies a host patch exactly, even when it keeps a link on a removed port', () => {
+    const d = new Diagram({ symbols: [manifold, pump] });
+    d.load(model());
+    const target = model();
+    target.nodes[2]!.data = { inputs: 2, outputs: 1 };
+    // The host still has link c on in-3: its document is the truth.
+    d.patch(target);
+    expect(d.toJSON()).toEqual(target);
+  });
+
+  it('replays host history entries that already carry the pruned links', () => {
+    const entries: { forward: unknown; inverse: unknown }[] = [];
+    let at = 0;
+    const history = {
+      push: (e: never) => {
+        entries.splice(at);
+        entries.push(e);
+        at = entries.length;
+      },
+      undo: () => (at > 0 ? (entries[--at] as never) : undefined),
+      redo: () => (at < entries.length ? (entries[at++] as never) : undefined),
+    };
+    const d = new Diagram({ symbols: [manifold, pump], history });
+    d.load(model());
+    d.update((tx) => tx.updateNode('m', { data: { inputs: 2, outputs: 1 } }));
+    expect(d.store.links.has('c')).toBe(false);
+    expect(JSON.stringify(entries[0]!.forward)).toContain('"removed":["c"]');
+    d.undo();
+    // Patches carry no item order, so compare links by id (order is not part of host history).
+    const byId = (m: DiagramModel) => ({
+      ...m,
+      links: [...m.links].sort((x, y) => x.id.localeCompare(y.id)),
+    });
+    expect(byId(d.toJSON())).toEqual(byId(model()));
+    d.redo();
+    expect([...d.store.links.keys()].sort()).toEqual(['a', 'legacy']);
+  });
+});
+
 describe('rendering per-node ports', () => {
   it('redraws ports, unrotated labels and reroutes attached links when data changes the size', () => {
     const container = document.createElement('div');

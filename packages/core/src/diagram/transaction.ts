@@ -9,6 +9,7 @@ import {
   type ModelStore,
 } from '../model/store';
 import type { ModelDiff, Transaction } from './types';
+import type { ChangeTracker } from './changes';
 
 /**
  * One primitive model change. Updates store only the patched keys (before and after),
@@ -75,16 +76,27 @@ export class TransactionImpl implements Transaction {
   readonly ops: Op[] = [];
 
   /**
-   * @param portIds Port ids of a node as currently resolved (per-node ports, FR-40), or undefined when
-   *   they can't be resolved (unknown symbol). When given, an updateNode that removes ports also removes
-   *   the links on those ports, in the same transaction.
+   * @param opts.tracker Records forward/inverse patches (controlled mode, FR-44).
+   * @param opts.portIds Port ids of a node as currently resolved (per-node ports, FR-40), or undefined
+   *   when they can't be resolved (unknown symbol). When given, an updateNode that removes ports also
+   *   removes the links on those ports, in the same transaction. Host-driven patches omit it.
    */
   constructor(
     private readonly store: ModelStore,
-    private readonly portIds?: (node: NodeModel) => ReadonlySet<string> | undefined,
-  ) {}
+    opts: {
+      tracker?: ChangeTracker;
+      portIds?: (node: NodeModel) => ReadonlySet<string> | undefined;
+    } = {},
+  ) {
+    this.tracker = opts.tracker;
+    this.portIds = opts.portIds;
+  }
+
+  private readonly tracker: ChangeTracker | undefined;
+  private readonly portIds: ((node: NodeModel) => ReadonlySet<string> | undefined) | undefined;
 
   private run(op: Op): void {
+    this.tracker?.note(this.store, op);
     applyOp(this.store, op);
     this.ops.push(op);
   }
