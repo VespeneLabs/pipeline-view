@@ -46,6 +46,13 @@ export interface PipelineViewProps {
    * ignored, so controlled usage costs nothing on every edit.
    */
   model?: DiagramModel;
+  /**
+   * Identifies the document shown, for example a saved diagram's id. When it changes, the new `model`
+   * is loaded from scratch: fit on load, cleared selection, fresh undo history and dirty baseline.
+   * While it stays the same, model updates are patched in. Without it, documents that share node or
+   * link ids are treated as one, so set it whenever your app switches between documents.
+   */
+  documentKey?: string | number;
   mode?: DiagramMode;
   theme?: ThemeName;
   /**
@@ -134,6 +141,7 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
     const [diagram, setDiagram] = useState<Diagram | null>(null);
     const lastEmitted = useRef<DiagramModel | undefined>(undefined);
     const loaded = useRef<DiagramModel | undefined>(undefined);
+    const loadedKey = useRef<string | number | undefined>(undefined);
 
     useImperativeHandle(ref, () => diagram as Diagram, [diagram]);
 
@@ -193,21 +201,27 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
       };
     }, [portals]);
 
-    const { model, mode, theme, compareWith, issues, symbols } = props;
+    const { model, mode, theme, compareWith, issues, symbols, documentKey } = props;
 
     useEffect(() => {
-      if (!diagram || !model || model === loaded.current || model === lastEmitted.current) return;
+      if (!diagram || !model) return;
+      const keyChanged = documentKey !== undefined && documentKey !== loadedKey.current;
+      if (!keyChanged && (model === loaded.current || model === lastEmitted.current)) return;
       const prev = loaded.current;
       loaded.current = model;
       // Controlled mode (FR-44): a new version of the same document is applied as a patch, so the
-      // viewport, selection, live data and untouched routes survive. A different document (no shared
-      // ids) is loaded from scratch.
-      if (prev && sharesItems(prev, model)) {
+      // viewport, selection, live data and untouched routes survive. A different document is loaded
+      // from scratch (fit, fresh selection, history and dirty baseline). `documentKey` says which is
+      // which; without it, shared node/link ids are the (weaker) heuristic.
+      const sameDocument =
+        documentKey !== undefined ? !keyChanged : !!prev && sharesItems(prev, model);
+      loadedKey.current = documentKey;
+      if (sameDocument) {
         diagram.patch(model);
         return;
       }
       diagram.load(model); // the diagram fits on load per fitOnLoad, after content is measured
-    }, [diagram, model]);
+    }, [diagram, model, documentKey]);
 
     useEffect(() => {
       if (diagram && mode) diagram.setMode(mode);

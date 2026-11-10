@@ -62,6 +62,7 @@ const useDoc = create<{ model: DiagramModel; past: ModelPatch[] }>(() => ({ mode
 />;
 ```
 
+- Pass `documentKey={doc.id}`: when it changes, the new document is loaded from scratch (fit, fresh selection, history and dirty baseline). Without it, the diagram guesses from shared node ids, which fails when documents reuse ids.
 - A new `model` from the store is applied with `diagram.patch()`: only the difference changes, untouched links aren't re-routed, and viewport, selection and live values (`setNodeData`) survive. Passing back the model you received in `onModelChange` costs nothing.
 - Prefer patches to whole models? Call `diagram.applyDiff(patch)` yourself. Every `modelChange` carries the JSON `patch` of the change.
 - Each `modelChange` has an `origin`: `'user'` (edits), `'history'` (undo/redo) or `'host'` (your own `patch()` / `applyDiff()`). `<PipelineView>` doesn't report `'host'` changes to `onModelChange`, so your store never sees its own edits echoed back (`emitHostChanges` opts in).
