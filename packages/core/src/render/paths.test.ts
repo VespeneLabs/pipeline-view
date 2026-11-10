@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arrowsPath, linkPath } from './paths';
+import { arrowsPath, linkPath, ticksPath } from './paths';
 
 describe('linkPath', () => {
   const h = [
@@ -61,5 +61,30 @@ describe('arrowsPath', () => {
       10,
     );
     expect(d).toBe('M45 3L55 0L45 -3');
+  });
+});
+
+describe('ticksPath', () => {
+  it('draws one centered pair of slanted ticks per period, like reference #50', () => {
+    const d = ticksPath(
+      [
+        { x: 0, y: 0 },
+        { x: 40, y: 0 },
+      ],
+      40,
+    );
+    expect(d).toBe('M12.5 8L20.5 -8M19.5 8L27.5 -8');
+  });
+
+  it('skips segments shorter than one period', () => {
+    expect(
+      ticksPath(
+        [
+          { x: 0, y: 0 },
+          { x: 30, y: 0 },
+        ],
+        40,
+      ),
+    ).toBe('');
   });
 });

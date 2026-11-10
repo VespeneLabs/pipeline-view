@@ -17,7 +17,7 @@ import {
   portPoint,
   symbolSize,
 } from '../diagram/geometry';
-import { arrowsPath, linkPath } from './paths';
+import { arrowsPath, linkPath, ticksPath } from './paths';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const LABEL_GAP = 16;
@@ -358,10 +358,10 @@ export class SvgRenderer {
       el.flow?.setAttribute('d', d);
     }
     const showArrows = l.arrows ?? l.kind === 'process';
-    el.arrows.setAttribute(
-      'd',
-      showArrows ? arrowsPath(points, this.cssNumber('--pv-arrow-size', 10)) : '',
-    );
+    // The marks path carries flow arrows and, for pneumatic links, the paired tick marks.
+    let marks = showArrows ? arrowsPath(points, this.cssNumber('--pv-arrow-size', 10)) : '';
+    if (l.kind === 'pneumatic') marks += ticksPath(points, this.cssNumber('--pv-tick-spacing', 40));
+    el.arrows.setAttribute('d', marks);
     const flowing = Boolean(l.data?.flowing);
     if (flowing && !el.flow) {
       el.flow = this.svg('path', { class: 'pv-link-flow', d }) as SVGPathElement;

@@ -17,8 +17,9 @@
   --pv-line-width: 2.4px;
   --pv-line-signal-dash: 4 5;
   --pv-line-electrical-dash: 10 7;
-  /* Reference #50 is a solid line with paired ticks. Core draws the dash fallback until ticks land. */
-  --pv-line-pneumatic-dash: 12 4 2 4;
+  /* Reference #50: a solid line with paired // ticks every --pv-tick-spacing units (drawn by core). */
+  --pv-line-pneumatic-dash: none;
+  --pv-tick-spacing: 40;
   --pv-symbol-stroke: #334d5b;
   --pv-symbol-stroke-width: 2.4px;
   --pv-symbol-fill: var(--pv-bg);
@@ -192,6 +193,15 @@
   .pv-link-flow {
     animation: none;
   }
+}
+.pv-link:is([data-kind='signal'], [data-kind='electrical'], [data-kind='pneumatic'])
+  .pv-link-arrows {
+  stroke: var(--pv-line-signal);
+}
+.pv-grid-line {
+  fill: none;
+  stroke: var(--pv-grid);
+  stroke-width: 1px;
 }
 .pv-link.pv-selected :is(.pv-link-line, .pv-link-arrows) {
   stroke: var(--pv-selection);
