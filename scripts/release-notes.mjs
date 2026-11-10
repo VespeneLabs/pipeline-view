@@ -27,7 +27,10 @@ export function section(changelog, v) {
     .trim();
 }
 
-const parts = [`Packages: ${PACKAGES.map((p) => `\`@pipeline-view/${p}@${version}\``).join(', ')}.`, ''];
+const parts = [
+  `Packages: ${PACKAGES.map((p) => `\`@pipeline-view/${p}@${version}\``).join(', ')}.`,
+  '',
+];
 let found = 0;
 for (const p of PACKAGES) {
   const file = join(root, 'packages', p, 'CHANGELOG.md');
@@ -35,9 +38,13 @@ for (const p of PACKAGES) {
   if (body) found++;
   parts.push(`## @pipeline-view/${p}`, '', body || '_No changes._', '');
 }
-parts.push('Install from the attached tarballs: `npm install ./pipeline-view-core-' + version + '.tgz …`');
+parts.push(
+  'Install from the attached tarballs: `npm install ./pipeline-view-core-' + version + '.tgz …`',
+);
 if (found === 0) {
-  console.error(`No CHANGELOG section "## ${version}" found. Did you run \`pnpm changeset version\`?`);
+  console.error(
+    `No CHANGELOG section "## ${version}" found. Did you run \`pnpm changeset version\`?`,
+  );
   process.exit(1);
 }
 console.log(parts.join('\n'));

@@ -9,7 +9,12 @@ const version = tag.replace(/^v/, '');
 let ok = /^\d+\.\d+\.\d+(-[\w.]+)?$/.test(version);
 if (!ok) console.error(`Tag "${tag}" is not vX.Y.Z[-pre]`);
 for (const p of ['core', 'symbols', 'react']) {
-  const pkg = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'packages', p, 'package.json'), 'utf8'));
+  const pkg = JSON.parse(
+    readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '..', 'packages', p, 'package.json'),
+      'utf8',
+    ),
+  );
   if (pkg.version !== version) {
     console.error(`${pkg.name} is ${pkg.version}, tag says ${version}`);
     ok = false;
