@@ -1,5 +1,23 @@
 # @vespenelabs/pipeline-view
 
+## 1.3.0
+
+### Minor Changes
+
+- 04c8a30: `<PipelineView documentKey>`: identify the document being shown, for example a saved diagram's id. When the key changes, the new `model` is loaded from scratch (fit on load, cleared selection, fresh undo history and dirty baseline). While it stays the same, model updates are patched in. Without `documentKey`, shared node/link ids are still the heuristic, which misfires when documents reuse ids (`n1`, `n2`, …), so set the key whenever your app switches documents.
+- 985e2f8: Drag from your own palette, and connect by command (FR-50, FR-54). `diagram.acceptDrop({ mimeType, toNode })` accepts HTML5 drops from any host element: `toNode(dataTransfer, point)` builds the node, `canDrop` checks it, and a taken id gets a `_N` suffix. `diagram.startPlacement(type, init)` starts placement mode: a preview starts at the centre of the view and follows the pointer, `canDrop` marks a refused spot (`data-refused` plus the reason), a click places it (touch: where the finger lifts), arrow keys nudge it, Enter places and Esc cancels. Panning is paused for touch while placing. `diagram.connect(from, to, kind)` applies every rule headlessly and returns `{ ok: true, id }` or `{ ok: false, code, reason, detail }`.
+- 6ecdb49: Whole-graph rules and graph helpers (FR-49). `noCycles` (all kinds, or `{ kinds }`) refuses a link that would close a loop, with code `cycle` and `detail.cycleNodes`. `maxLinksBetweenNodes` limits links between two nodes through any ports (code `max-links-between-nodes`). New pure helpers that work on a saved model or a live diagram: `upstreamOf` / `downstreamOf` (with `kinds` and a `through(node)` stop condition), `topologicalOrder`, `findCycles`, `connectedComponents` and `flowPath`. `validateConnect` and `isDirected` are exported for host forms.
+- 9dee451: `modelChange` now carries `origin`: `'user'` for `update()` and editor gestures, `'host'` for `patch()` / `applyDiff()`, and `'history'` for undo/redo (built-in or a `HistoryAdapter`). Hosts in controlled mode can tell their own changes apart from the user's.
+  
+  `<PipelineView>` no longer echoes the host's own model updates (a new `model` prop applied with `patch()`) through `onModelChange`, so a store doesn't record each of its own edits twice. Pass `emitHostChanges` to get them anyway.
+- 22e914a: Refusals are now always in flow order. `refusalMessages(code, ctx)`, `connectRejected` and the `from` / `to` returned with a refusal describe the link outlet → inlet, however the user dragged it. Before, built-in refusals used the drag order, so a drag from an inlet swapped the names in host messages. When the drag order differs, it's available as `dragFrom` / `dragTo` (additive fields). The `validateConnect` docs now spell out the check order: `maxLinksBetweenNodes` counts both directions and runs before the cycle check.
+- 467e8a0: `routingWorker: true` (or `{ createWorker }` for a bundler-specific worker import) routes the initial full pass of large diagrams (at least `culling.threshold` links) in a Web Worker (FR-55). Links show as straight placeholders until the routes arrive, and edits made meanwhile keep their main-thread routes. A newer load drops a stale result, a worker failure falls back to main-thread routing, and incremental re-routes stay on the main thread.
+- 7180ea7: Routing in a Web Worker (FR-55). `createRoutingWorker({ createWorker? })` returns `{ routeAll(obstacles, requests, options), terminate() }`. It routes a full pass off the main thread with the same results as a main-thread pass, and a newer job aborts the previous one (`AbortError`). `Router.adoptRoutes(requests, results)` (an additive, optional contract method) lets the main-thread router take over those routes, so later incremental updates behave as if it had routed them itself. The worker ships next to the code that loads it, plus a `@vespenelabs/pipeline-view/routing-worker` subpath for bundlers that need their own worker import. Nothing is created at import time, so it's SSR-safe.
+
+### Patch Changes
+
+- c5d7e41: A content-sized node whose size changes on a data tick no longer re-routes its links unless its ports actually move, or the resized node now covers a link's path. Live values in content-sized cards no longer cost a re-route per tick.
+
 ## 1.2.0
 
 ### Model
