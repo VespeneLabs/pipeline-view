@@ -211,6 +211,23 @@ describe('leader routing', () => {
   });
 });
 
+describe('leader waypoints ending on the node', () => {
+  it('ends at a final waypoint that lies on or inside the node bounds', () => {
+    d.update((tx) =>
+      tx.updateAnnotation('reading', {
+        position: { x: 200, y: -80 },
+        // Last waypoint (78,14) relative to the tank = (178,114): inside 100..200 x 100..150.
+        leaderWaypoints: [
+          { x: 78, y: -60 },
+          { x: 78, y: 14 },
+        ],
+      }),
+    );
+    flush();
+    expect($('.pv-leader')!.getAttribute('d')).toBe('M300 40L178 40L178 114');
+  });
+});
+
 describe('leaderPoints', () => {
   const node = { x: 100, y: 100, width: 100, height: 50 };
   it('is straight when the boxes overlap on one axis', () => {

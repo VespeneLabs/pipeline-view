@@ -271,7 +271,14 @@ export class OverlayRenderer {
         x: p.x + anchor.position.x,
         y: p.y + anchor.position.y,
       }));
-      return [edgeToward(card, wps[0]!), ...wps, edgeToward(node, wps.at(-1)!)];
+      const last = wps.at(-1)!;
+      // A final waypoint on or inside the node already marks where the leader meets it (e.g. a vessel shell).
+      const inside =
+        last.x >= node.x &&
+        last.x <= node.x + node.width &&
+        last.y >= node.y &&
+        last.y <= node.y + node.height;
+      return [edgeToward(card, wps[0]!), ...wps, ...(inside ? [] : [edgeToward(node, last)])];
     }
     const direct = leaderPoints(card, node);
     if (direct.length < 2) return direct;
