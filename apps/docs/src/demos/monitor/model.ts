@@ -20,24 +20,25 @@ export const terminal: SymbolDef = {
   svg: '',
 };
 
-/** Data shape of a reading card annotation. */
-export interface ReadingData extends Record<string, unknown> {
+/**
+ * Reading card annotation data. Live values live on the anchored node (`node.data[reading]`), because the
+ * overlay passes `{ ...node.data, ...annotation.data }` to the renderer and re-calls it on every data tick.
+ */
+export interface CardData extends Record<string, unknown> {
   tag: string;
-  value: number;
   unit: string;
   decimals: number;
+  /** Key of the live reading in the anchored node's data. */
+  reading: string;
 }
 
-const card = (
-  id: string,
-  node: string,
-  x: number,
-  y: number,
-  tag: string,
-  value: number,
-  unit: string,
-  status: string,
-) => ({
+/** A live reading stored in node data by the simulator. */
+export interface Reading {
+  value: number;
+  status: 'normal' | 'warning' | 'alarm' | 'stale';
+}
+
+const card = (id: string, node: string, x: number, y: number, tag: string, unit: string) => ({
   id,
   kind: 'html' as const,
   renderer: 'readingCard',
@@ -45,8 +46,7 @@ const card = (
   position: { x, y },
   size: { width: 160, height: 92 },
   leader: true,
-  status,
-  data: { tag, value, unit, decimals: 1 } satisfies ReadingData,
+  data: { tag, unit, decimals: 1, reading: id } satisfies CardData,
 });
 
 export const monitorModel: DiagramModel = {
@@ -193,10 +193,10 @@ export const monitorModel: DiagramModel = {
     },
   ],
   annotations: [
-    card('TI-101', 'MHWT', 308, -15, 'TI-101 · MHWT', 14.0, '°C', 'normal'),
-    card('FI-103', 'MPAT', 132, 3, 'FI-103 · Additive', 1.1, 'kg/h', 'normal'),
-    card('FI-101', 'FCV101', -136, -34, 'FI-101 · Feed flow', 2.1, 'kg/h', 'alarm'),
-    card('TI-102', 'MHT', 100, 20, 'TI-102 · MHT', 12.9, '°C', 'warning'),
+    card('TI-101', 'MHWT', 308, -15, 'TI-101 · MHWT', '°C'),
+    card('FI-103', 'MPAT', 132, 3, 'FI-103 · Additive', 'kg/h'),
+    card('FI-101', 'FCV101', -136, -34, 'FI-101 · Feed flow', 'kg/h'),
+    card('TI-102', 'MHT', 100, 20, 'TI-102 · MHT', '°C'),
     {
       id: 'P03-state',
       kind: 'html',
