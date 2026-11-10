@@ -118,3 +118,37 @@ export function leaderPoints(card: Rect, node: Rect): Point[] {
     { x, y: endY },
   ];
 }
+
+/**
+ * Paired "//" tick marks for pneumatic signal lines (Figma reference #50): every `period` units along
+ * each segment long enough to hold a pair, slanted like the reference (lower-left to upper-right going +x).
+ */
+export function ticksPath(points: readonly Point[], period = 40): string {
+  const along = 4;
+  const across = 8;
+  const gap = 3.5;
+  let d = '';
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!;
+    const b = points[i]!;
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (len < period) continue;
+    const ux = (b.x - a.x) / len;
+    const uy = (b.y - a.y) / len;
+    // Perpendicular, pointing to screen-down for +x travel.
+    const nx = -uy;
+    const ny = ux;
+    const count = Math.floor(len / period);
+    const start = (len - (count - 1) * period) / 2;
+    for (let k = 0; k < count; k++) {
+      const t = start + k * period;
+      for (const o of [-gap, gap]) {
+        const cx = a.x + ux * (t + o);
+        const cy = a.y + uy * (t + o);
+        d += `M${pt({ x: cx - ux * along + nx * across, y: cy - uy * along + ny * across })}`;
+        d += `L${pt({ x: cx + ux * along - nx * across, y: cy + uy * along - ny * across })}`;
+      }
+    }
+  }
+  return d;
+}
