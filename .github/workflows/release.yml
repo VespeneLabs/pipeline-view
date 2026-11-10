@@ -1,0 +1,58 @@
+name: Release
+
+# Runs when a version tag is pushed (e.g. v1.0.0) after `pnpm changeset version` was merged to main.
+# It builds and verifies, then creates a GitHub Release with the package tarballs and the changelog.
+# No npm publish.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Tag matches package versions
+        run: node scripts/check-release-version.mjs "$GITHUB_REF_NAME"
+
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm size
+
+      # Packs core / symbols / react into release/ and verifies them: tarball contents, no workspace:
+      # ranges left, metadata, and type resolution (attw). The verified tarballs are the ones attached.
+      - name: Pack and verify
+        run: |
+          pnpm check:packages --out "$GITHUB_WORKSPACE/release"
+          ls -l release
+
+      - name: Release notes
+        run: node scripts/release-notes.mjs "$GITHUB_REF_NAME" > release/NOTES.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          flags=()
+          [[ "$version" == *-* ]] && flags+=(--prerelease)
+          gh release create "$GITHUB_REF_NAME" release/*.tgz \
+            --verify-tag \
+            --title "pipeline-view $version" \
+            --notes-file release/NOTES.md \
+            "${flags[@]}"

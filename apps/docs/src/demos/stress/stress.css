@@ -1,0 +1,64 @@
+.stress-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.stress-toolbar button {
+  padding: 6px 12px;
+  border: 1px solid var(--pv-border);
+  border-radius: 6px;
+  background: var(--pv-bg);
+  color: var(--pv-ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.stress-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.stress-stats > div {
+  padding: 8px 12px;
+  border: 1px solid var(--pv-border);
+  border-radius: 6px;
+  background: var(--pv-bg);
+}
+
+.stress-stats dt {
+  color: var(--pv-muted);
+  font-size: 12px;
+}
+
+.stress-stats dd {
+  margin: 2px 0 0;
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Budget state is shown with text colour plus a glyph, never colour alone. */
+.stress-stats dd[data-state='ok']::after {
+  content: ' ✓';
+  color: #226a50;
+}
+
+.stress-stats dd[data-state='over']::after {
+  content: ' ✕ over budget';
+  color: #b62f38;
+  font-size: 12px;
+}
+
+.stress-frame {
+  height: 70vh;
+  min-height: 420px;
+  overflow: hidden;
+  border: 1px solid var(--pv-border);
+  border-radius: 10px;
+  background: var(--pv-bg);
+}

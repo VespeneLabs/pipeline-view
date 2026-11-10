@@ -26,6 +26,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm size
+      - run: pnpm check:packages
 
   e2e:
     runs-on: ubuntu-latest
