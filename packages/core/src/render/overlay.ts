@@ -128,6 +128,39 @@ export class OverlayRenderer {
     this.frame.schedule();
   }
 
+  /** @internal Culling (FR-55). */
+  isCulled: ((nodeId: string) => boolean) | undefined;
+  private readonly deferred = new Set<string>();
+
+  /** @internal Releases work deferred while these nodes were culled. */
+  catchUp(nodeIds: ReadonlySet<string>): void {
+    let any = false;
+    for (const key of this.deferred) {
+      const [kind, id] = key.split('\u0000') as ['a' | 'n', string];
+      const nodeId = kind === 'n' ? id : this.annotation(id)?.anchor?.node;
+      if (!nodeId || nodeIds.has(nodeId)) {
+        this.deferred.delete(key);
+        this.dirty.add(key);
+        this.structural.add(key);
+        any = true;
+      }
+    }
+    if (any) this.schedule();
+  }
+
+  /** @internal The overlay slots of a node: its own and those of annotations anchored to it. */
+  slotsOf(nodeId: string): HTMLElement[] {
+    const out: HTMLElement[] = [];
+    const own = this.items.get(nKey(nodeId));
+    if (own) out.push(own.el as HTMLElement);
+    for (const a of this.anchored.get(nodeId) ?? []) {
+      const it = this.items.get(aKey(a));
+      // Only HTML slots: text annotations are SVG and stay with the drawing.
+      if (it && it.el.namespaceURI !== SVG_NS) out.push(it.el as HTMLElement);
+    }
+    return out;
+  }
+
   flush(): void {
     this.frame.cancel();
     const store = this.diagram.store;
@@ -140,6 +173,12 @@ export class OverlayRenderer {
     }
     for (const key of this.dirty) {
       const [kind, id] = key.split('\u0000') as ['a' | 'n', string];
+      // Culling (FR-55): slots of culled nodes (and annotations anchored to them) wait until visible.
+      const nodeId = kind === 'n' ? id : this.annotation(id)?.anchor?.node;
+      if (nodeId && store.nodes.has(nodeId) && this.isCulled?.(nodeId)) {
+        this.deferred.add(key);
+        continue;
+      }
       if (kind === 'n') this.upsertNode(id);
       else this.upsertAnnotation(id);
     }

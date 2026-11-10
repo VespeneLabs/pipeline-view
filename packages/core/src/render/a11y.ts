@@ -74,6 +74,7 @@ export class KeyboardNavigation {
     }
     // The renderer may not have flushed a freshly added node yet.
     this.diagram.renderer?.flush();
+    this.diagram.culling?.reveal(id);
     const el = this.nodeEl(id);
     if (!el) return;
     el.setAttribute('tabindex', '0');

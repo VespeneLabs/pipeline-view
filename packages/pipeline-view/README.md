@@ -65,6 +65,10 @@ const useDoc = create<{ model: DiagramModel; past: ModelPatch[] }>(() => ({ mode
 - Want the store to hold undo entries instead? Pass `history: { push, undo, redo }`. The diagram pushes `{ forward, inverse }` patches and applies the one your `undo()`/`redo()` returns.
 - `diagram.isDirty()` / `markSaved()` track unsaved changes against the last save (live values don't count).
 
+## Large diagrams
+
+Above 300 nodes, the diagram renders only what's visible (plus a margin) and defers live-data updates for hidden nodes. Labels, cards and port dots are hidden when zoomed far out. Tune it with `culling: { threshold, margin }` and `lod: { labels, overlays, ports }` (minimum zoom per layer), or turn either off with `false`.
+
 For React (`<PipelineView>`), theming, the editor, export and SSR, see the [repository README](https://github.com/VespeneLabs/pipeline-view#readme) and the docs app.
 
 MIT © VespeneLabs

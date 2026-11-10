@@ -37,6 +37,7 @@ import { SvgRenderer } from '../render/svg-renderer';
 import { OverlayRenderer } from '../render/overlay';
 import { attachPointerEvents } from '../render/input';
 import { KeyboardNavigation } from '../render/a11y';
+import { CullingController } from '../render/culling';
 import { DiffLayer } from '../render/diff';
 import type { GetDiffOptions } from '../model/compare';
 import { IssueLayer } from '../render/issues';
@@ -120,6 +121,8 @@ export class Diagram implements DiagramApi {
   /** @internal Annotations and HTML overlays. Created on mount. */
   overlay: OverlayRenderer | undefined;
   private detachPointerEvents: (() => void) | undefined;
+  /** @internal Culling and level of detail for large diagrams (FR-55). Created on mount. */
+  culling: CullingController | undefined;
   /** @internal Keyboard focus navigation. Created on mount. */
   keyboard: KeyboardNavigation | undefined;
   /** @internal Comparison marks (FR-51). Created on mount. */
@@ -188,6 +191,7 @@ export class Diagram implements DiagramApi {
     this.overlay = new OverlayRenderer(this, view);
     this.detachPointerEvents = attachPointerEvents(this, view);
     this.keyboard = new KeyboardNavigation(this, view);
+    this.culling = new CullingController(this, view);
     this.diffLayer = new DiffLayer(this, view);
     if (this.diffBase) this.diffLayer.set(this.diffBase.base, this.diffBase.opts);
     this.issueLayer = new IssueLayer(this, view);
@@ -940,6 +944,7 @@ export class Diagram implements DiagramApi {
     this.cancelAnimation();
     if (this.fitFrame)
       this.view?.root.ownerDocument.defaultView?.cancelAnimationFrame(this.fitFrame);
+    this.culling?.destroy();
     this.keyboard?.destroy();
     this.diffLayer?.destroy();
     this.issueLayer?.destroy();

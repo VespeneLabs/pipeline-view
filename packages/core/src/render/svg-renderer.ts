@@ -285,7 +285,45 @@ export class SvgRenderer {
     if (g.getAttribute('aria-label') !== text) g.setAttribute('aria-label', text);
   }
 
+  /** @internal Culling (FR-55): data ticks for culled nodes wait until the node is visible again. */
+  isCulled: ((nodeId: string) => boolean) | undefined;
+  private readonly staleData = new Set<string>();
+
+  /** @internal Re-renders nodes whose data ticks were deferred while culled. */
+  catchUp(ids: Iterable<string>): void {
+    for (const id of ids) {
+      if (!this.staleData.delete(id)) continue;
+      this.renderNodeData(id);
+    }
+  }
+
+  /** @internal Bounds of a link's rendered route (diagram coordinates), for culling. */
+  linkBounds(id: string): { x: number; y: number; width: number; height: number } | undefined {
+    const pts = this.routes.get(id);
+    if (!pts?.length) return undefined;
+    let x1 = Infinity;
+    let y1 = Infinity;
+    let x2 = -Infinity;
+    let y2 = -Infinity;
+    for (const p of pts) {
+      if (p.x < x1) x1 = p.x;
+      if (p.y < y1) y1 = p.y;
+      if (p.x > x2) x2 = p.x;
+      if (p.y > y2) y2 = p.y;
+    }
+    return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
+  }
+
+  /** @internal Element of a node or link, for culling. */
+  elementOf(kind: 'node' | 'link', id: string): SVGGElement | undefined {
+    return kind === 'node' ? this.nodes.get(id)?.g : this.links.get(id)?.g;
+  }
+
   private renderNodeData(id: string): void {
+    if (this.isCulled?.(id)) {
+      this.staleData.add(id);
+      return;
+    }
     const el = this.nodes.get(id);
     const n = this.diagram.store.nodes.get(id);
     if (!el || !n || el.node === n) return;
