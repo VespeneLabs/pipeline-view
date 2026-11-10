@@ -3,6 +3,21 @@
   "version": "0.0.0",
   "description": "P&ID symbol packs for pipeline-view (gas service + process equipment)",
   "license": "MIT",
+  "author": "VespeneLabs",
+  "keywords": [
+    "p&id",
+    "pid",
+    "symbols",
+    "isa-5.1",
+    "gas",
+    "process",
+    "scada",
+    "svg"
+  ],
+  "homepage": "https://github.com/VespeneLabs/pipeline-view/tree/main/packages/symbols#readme",
+  "bugs": {
+    "url": "https://github.com/VespeneLabs/pipeline-view/issues"
+  },
   "type": "module",
   "sideEffects": false,
   "repository": {
@@ -28,5 +43,11 @@
   },
   "dependencies": {
     "@pipeline-view/core": "workspace:*"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

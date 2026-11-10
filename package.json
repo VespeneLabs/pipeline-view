@@ -15,9 +15,11 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "size": "size-limit",
-    "changeset": "changeset"
+    "changeset": "changeset",
+    "check:packages": "node scripts/check-packages.mjs"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
     "@changesets/cli": "^3.0.3",
     "@eslint/js": "^10.0.1",
     "@size-limit/preset-small-lib": "^14.3.0",

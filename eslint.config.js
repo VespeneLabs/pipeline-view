@@ -29,6 +29,11 @@ export default tseslint.config(
     },
   },
   {
+    // Node build scripts.
+    files: ['scripts/**/*.{js,mjs}'],
+    languageOptions: { globals: { process: 'readonly', console: 'readonly' } },
+  },
+  {
     rules: {
       '@typescript-eslint/no-unused-vars': [
         'error',
