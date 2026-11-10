@@ -107,6 +107,7 @@ pnpm dev        # http://localhost:5173
 
 - `#/monitor`: **Process monitor**, the Figma reference diagram with live simulated data, reading cards and the four example statuses (add `?static` for the reference state)
 - `#/editor`: **P&ID editor** with palette, port-to-port connect, link kinds, undo/redo and JSON save/load
+- `#/review`: **Validation & compare**, problem markers from a host validator (badges, F8 navigation) and a comparison with a saved version (changes marked, removed items as ghosts)
 - `#/stress`: **Stress test**, 500 nodes / 1,000 links / 2,000 values at 1 Hz with live perf metrics
 - `#/gallery`: every symbol with its ports, in light and dark
 - Guides: `#/getting-started`, `#/theming`, `#/custom-symbols`, `#/api`
