@@ -58,7 +58,11 @@ export function ProcessMonitor() {
   const [ready, setReady] = useState<Diagram | null>(null);
   // Runs after PipelineView's own effects of the same commit, so after it has loaded the model (a load
   // clears the selection). The Figma frame shows FCV101 selected.
-  useEffect(() => ready?.setSelection([{ kind: 'node', id: 'FCV101' }]), [ready]);
+  useEffect(() => {
+    if (ready?.toJSON().nodes.some((n) => n.id === 'FCV101')) {
+      ready.setSelection([{ kind: 'node', id: 'FCV101' }]);
+    }
+  }, [ready]);
 
   /** 1:1 with the Figma frame when it fits, otherwise zoom to fit. */
   const frameView = (d: Diagram) => {
@@ -102,21 +106,19 @@ export function ProcessMonitor() {
     return () => clearInterval(id);
   }, [running]);
 
-  const firstFlow = useRef(true);
+  // Flow animation toggle. Driven by the loaded diagram (`ready`), and it only touches links that exist, so it
+  // is safe under StrictMode's double effects and before or after any load.
   useEffect(() => {
-    const d = diagramRef.current;
-    if (!d || firstFlow.current) {
-      firstFlow.current = false;
-      return;
-    }
-    d.update(
+    if (!ready) return;
+    const links = ready.toJSON().links.filter((l) => !!l.data?.flowing !== flow);
+    if (!links.length) return;
+    ready.update(
       (tx) => {
-        for (const l of monitorModel.links)
-          tx.updateLink(l.id, { data: { ...l.data, flowing: flow } });
+        for (const l of links) tx.updateLink(l.id, { data: { ...l.data, flowing: flow } });
       },
       { undoable: false },
     );
-  }, [flow]);
+  }, [ready, flow]);
 
   const node = selected ? monitorModel.nodes.find((n) => n.id === selected) : undefined;
 
