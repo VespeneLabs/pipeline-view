@@ -1,5 +1,14 @@
-import type { DataRecord, DiagramModel, Point, Rect, Size } from '../model/types';
-import { ModelStore, applyPatch } from '../model/store';
+import type { DataRecord, DiagramModel, ModelPatch, Point, Rect, Size } from '../model/types';
+import { ModelStore, applyPatch, clone, validateModel } from '../model/store';
+import { migrateModel } from '../model/migrate';
+import {
+  ChangeTracker,
+  applyPatchTx,
+  diffModels,
+  documentOf,
+  isEmptyPatch,
+  type LiveState,
+} from './changes';
 import { SymbolRegistry, globalSymbols } from '../symbols/registry';
 import { ViewportController } from '../viewport/controller';
 import {
@@ -20,6 +29,7 @@ import { attachPointerEvents } from '../render/input';
 import { KeyboardNavigation } from '../render/a11y';
 import { DiffLayer } from '../render/diff';
 import type { GetDiffOptions } from '../model/compare';
+import { IssueLayer } from '../render/issues';
 import { exportPng, exportSvgString } from '../render/export';
 import { TransactionImpl, applyOp, diffOf, invertOp, isEmptyDiff, type Op } from './transaction';
 import type {
@@ -27,6 +37,7 @@ import type {
   DiagramEvents,
   DiagramMode,
   DiagramOptions,
+  IssueMap,
   ItemRef,
   ModelDiff,
   ThemeName,
@@ -70,6 +81,12 @@ export class Diagram implements DiagramApi {
   private theme: ThemeName;
   private inTransaction = false;
   private previewOps: Op[] | null = null;
+  private previewTracker: ChangeTracker | null = null;
+  /** Live-data keys per node (setNodeData), excluded from patch() and isDirty(). */
+  private readonly live = new Map<string, LiveState>();
+  private revision = 0;
+  private savedRevision = 0;
+  private savedDocument = '';
   private destroyed = false;
 
   /** DOM view. Undefined until mount(). */
@@ -86,6 +103,9 @@ export class Diagram implements DiagramApi {
   /** @internal Comparison marks (FR-51). Created on mount. */
   diffLayer: DiffLayer | undefined;
   private diffBase: { base: DiagramModel; opts: GetDiffOptions } | null = null;
+  /** @internal Problem markers (FR-48). Created on mount. */
+  issueLayer: IssueLayer | undefined;
+  private issues: IssueMap = {};
   private viewport: Viewport = { x: 0, y: 0, zoom: 1 };
   private size: Size = { width: 0, height: 0 };
   private readonly minZoom: number;
@@ -139,6 +159,8 @@ export class Diagram implements DiagramApi {
     this.keyboard = new KeyboardNavigation(this, view);
     this.diffLayer = new DiffLayer(this, view);
     if (this.diffBase) this.diffLayer.set(this.diffBase.base, this.diffBase.opts);
+    this.issueLayer = new IssueLayer(this, view);
+    this.issueLayer.set(this.issues);
     this.internal.emit('mount', { view });
     if (this.pendingFit) this.zoomToFit(this.pendingFit);
   }
@@ -159,15 +181,21 @@ export class Diagram implements DiagramApi {
 
   // ---- model ---------------------------------------------------------------
 
-  /** Replaces the model. Clears undo history and selection. Doesn't emit modelChange, since the host initiated it. */
+  /**
+   * Replaces the model. Clears undo history, selection, live-data tracking and the dirty baseline.
+   * Doesn't emit modelChange, since the host initiated it. To sync a host store without a reload, use patch().
+   */
   load(model: DiagramModel): void {
     this.assertAlive();
     this.store.load(model);
     this.previewOps = null;
+    this.previewTracker = null;
     this.undoStack = [];
     this.redoStack = [];
+    this.live.clear();
     this.internal.emit('load', {});
     this.setSelection([]);
+    this.markSaved();
   }
 
   toJSON(): DiagramModel {
@@ -176,10 +204,48 @@ export class Diagram implements DiagramApi {
 
   update(fn: (tx: Transaction) => void, opts: { undoable?: boolean } = {}): void {
     if (this.previewOps) throw new Error('Commit or cancel the active preview before update()');
-    const ops = this.runTx(fn);
+    const tracker = new ChangeTracker();
+    const ops = this.runTx(fn, tracker);
     if (ops.length === 0) return;
-    if (opts.undoable !== false) this.pushUndo(ops);
-    this.commit(ops);
+    if (opts.undoable !== false) this.pushUndo(ops, tracker);
+    this.commit(ops, true, true, tracker);
+  }
+
+  // ---- controlled mode (FR-44) -----------------------------------------------
+
+  /**
+   * Applies a patch as one transaction. Only the touched items change: untouched links aren't
+   * re-routed, the viewport stays, and selection and live data survive. `meta` is replaced outside
+   * the transaction (not undoable). Undoable by default.
+   */
+  applyDiff(patch: ModelPatch, opts: { undoable?: boolean } = {}): void {
+    if (patch.meta !== undefined)
+      this.store.meta = patch.meta === null ? undefined : clone(patch.meta);
+    this.update((tx) => applyPatchTx(tx, this.store, patch), opts);
+  }
+
+  /**
+   * Controlled mode: applies only the difference between the current model and `model` (for example a
+   * host store's document after the host applied an onModelChange patch). Live values written through
+   * setNodeData are kept. Not undoable by default (the host owns the history). Returns the applied patch.
+   */
+  patch(model: DiagramModel, opts: { undoable?: boolean } = {}): ModelPatch {
+    validateModel(model);
+    const diff = diffModels(this.store.toJSON(), migrateModel(model), this.live);
+    if (!isEmptyPatch(diff)) this.applyDiff(diff, { undoable: opts.undoable ?? false });
+    return diff;
+  }
+
+  /** True if the document changed since the last markSaved() or load(). Live values don't count. */
+  isDirty(): boolean {
+    if (this.revision === this.savedRevision) return false;
+    return documentOf(this.store.toJSON(), this.live) !== this.savedDocument;
+  }
+
+  /** Sets the dirty baseline to the current document. */
+  markSaved(): void {
+    this.savedRevision = this.revision;
+    this.savedDocument = documentOf(this.store.toJSON(), this.live);
   }
 
   /**
@@ -188,7 +254,8 @@ export class Diagram implements DiagramApi {
    * commitPreview() (one undo step, one modelChange) or cancelPreview() (everything reverted).
    */
   preview(fn: (tx: Transaction) => void): void {
-    const ops = this.runTx(fn);
+    this.previewTracker ??= new ChangeTracker();
+    const ops = this.runTx(fn, this.previewTracker);
     this.previewOps ??= [];
     this.previewOps.push(...ops);
     if (ops.length) this.commit(ops, false);
@@ -196,15 +263,18 @@ export class Diagram implements DiagramApi {
 
   commitPreview(): void {
     const ops = this.previewOps;
+    const tracker = this.previewTracker ?? undefined;
     this.previewOps = null;
+    this.previewTracker = null;
     if (!ops?.length) return;
-    this.pushUndo(ops);
-    this.commit(ops, true, false);
+    this.pushUndo(ops, tracker);
+    this.commit(ops, true, false, tracker);
   }
 
   cancelPreview(): void {
     const ops = this.previewOps;
     this.previewOps = null;
+    this.previewTracker = null;
     if (!ops?.length) return;
     const inverse = ops.map(invertOp).reverse();
     for (const op of inverse) applyOp(this.store, op);
@@ -215,10 +285,10 @@ export class Diagram implements DiagramApi {
     return this.previewOps !== null;
   }
 
-  private runTx(fn: (tx: Transaction) => void): Op[] {
+  private runTx(fn: (tx: Transaction) => void, tracker?: ChangeTracker): Op[] {
     this.assertAlive();
     if (this.inTransaction) throw new Error('diagram.update() cannot be nested');
-    const tx = new TransactionImpl(this.store);
+    const tx = new TransactionImpl(this.store, tracker);
     this.inTransaction = true;
     try {
       fn(tx);
@@ -231,7 +301,13 @@ export class Diagram implements DiagramApi {
     return tx.ops;
   }
 
-  private pushUndo(ops: Op[]): void {
+  private pushUndo(ops: Op[], tracker?: ChangeTracker): void {
+    const h = this.options.history;
+    if (h === false) return;
+    if (h) {
+      if (tracker && !tracker.empty) h.push(tracker.patches(this.store));
+      return;
+    }
     this.undoStack.push(ops);
     if (this.undoStack.length > MAX_UNDO) this.undoStack.shift();
     this.redoStack = [];
@@ -239,40 +315,79 @@ export class Diagram implements DiagramApi {
 
   undo(): void {
     if (this.previewOps) this.cancelPreview();
+    const h = this.options.history;
+    if (h === false) return;
+    if (h) {
+      const entry = h.undo();
+      if (entry) this.applyHistoryPatch(entry.inverse);
+      return;
+    }
     const ops = this.undoStack.pop();
     if (!ops) return;
     const inverse = ops.map(invertOp).reverse();
-    for (const op of inverse) applyOp(this.store, op);
+    const tracker = this.applyTracked(inverse);
     this.redoStack.push(ops);
-    this.commit(inverse);
+    this.commit(inverse, true, true, tracker);
   }
 
   redo(): void {
     if (this.previewOps) this.cancelPreview();
+    const h = this.options.history;
+    if (h === false) return;
+    if (h) {
+      const entry = h.redo();
+      if (entry) this.applyHistoryPatch(entry.forward);
+      return;
+    }
     const ops = this.redoStack.pop();
     if (!ops) return;
-    for (const op of ops) applyOp(this.store, op);
+    const tracker = this.applyTracked(ops);
     this.undoStack.push(ops);
-    this.commit(ops);
+    this.commit(ops, true, true, tracker);
   }
 
   canUndo(): boolean {
+    const h = this.options.history;
+    if (h === false) return false;
+    if (h) return h.canUndo?.() ?? true;
     return this.undoStack.length > 0;
   }
 
   canRedo(): boolean {
+    const h = this.options.history;
+    if (h === false) return false;
+    if (h) return h.canRedo?.() ?? true;
     return this.redoStack.length > 0;
   }
 
+  private applyTracked(ops: Op[]): ChangeTracker {
+    const tracker = new ChangeTracker();
+    for (const op of ops) {
+      tracker.note(this.store, op);
+      applyOp(this.store, op);
+    }
+    return tracker;
+  }
+
+  /** Applies a host history entry without pushing a new one. */
+  private applyHistoryPatch(patch: ModelPatch): void {
+    if (patch.meta !== undefined)
+      this.store.meta = patch.meta === null ? undefined : clone(patch.meta);
+    this.update((tx) => applyPatchTx(tx, this.store, patch), { undoable: false });
+  }
+
   /** Emits the net diff: `internal` for layers (render / re-route), `pub` for modelChange. */
-  private commit(ops: Op[], pub = true, internal = true): void {
+  private commit(ops: Op[], pub = true, internal = true, tracker?: ChangeTracker): void {
     const diff = diffOf(ops);
     if (isEmptyDiff(diff)) return;
+    if (pub) this.revision++;
     this.pruneSelection(diff);
     if (internal) this.internal.emit('model', { diff });
     if (pub && this.events.has('modelChange')) {
       // Snapshot eagerly, and only when someone listens, so async readers see the state at commit time.
-      this.events.emit('modelChange', { diff, model: this.store.toJSON() });
+      const payload: DiagramEvents['modelChange'] = { diff, model: this.store.toJSON() };
+      if (tracker) payload.patch = tracker.patches(this.store).forward;
+      this.events.emit('modelChange', payload);
     }
   }
 
@@ -307,6 +422,11 @@ export class Diagram implements DiagramApi {
     if (patch) next.data = { ...node.data, ...patch };
     if (status !== undefined) next.status = status;
     this.store.nodes.set(id, applyPatch(node, next));
+    // Remember what's live, so patch() keeps it and isDirty() ignores it (FR-44).
+    let l = this.live.get(id);
+    if (!l) this.live.set(id, (l = { keys: new Set(), status: false }));
+    if (patch) for (const k in patch) l.keys.add(k);
+    if (status !== undefined) l.status = true;
     return true;
   }
 
@@ -459,6 +579,13 @@ export class Diagram implements DiagramApi {
     if (node) return { kind: 'node', id: node.dataset.nodeId! };
     const link = el.closest<HTMLElement | SVGElement>('[data-link-id]');
     if (link) return { kind: 'link', id: link.dataset.linkId! };
+    const badge = el.closest<SVGElement>('[data-issue-node], [data-issue-link]');
+    if (badge) {
+      const nodeId = badge.getAttribute('data-issue-node');
+      return nodeId !== null
+        ? { kind: 'node', id: nodeId }
+        : { kind: 'link', id: badge.getAttribute('data-issue-link')! };
+    }
     const ann = el.closest<HTMLElement | SVGElement>('[data-annotation-id]');
     if (ann) return { kind: 'annotation', id: ann.dataset.annotationId! };
     return null;
@@ -501,6 +628,50 @@ export class Diagram implements DiagramApi {
   /** The base passed to showDiff(), or null when no comparison is shown. */
   getDiffBase(): DiagramModel | null {
     return this.diffBase?.base ?? null;
+  }
+
+  // ---- problem markers (FR-48) ---------------------------------------------
+
+  /**
+   * Replaces all problem markers. Issues are view state (validation results, save errors): they're never
+   * saved with the model, and they survive load() and edits for as long as their item exists.
+   */
+  setIssues(issues: IssueMap): void {
+    this.issues = { nodes: { ...issues.nodes }, links: { ...issues.links } };
+    this.issueLayer?.set(this.issues);
+  }
+
+  /** The current problem markers, as last passed to setIssues(). */
+  getIssues(): IssueMap {
+    return { nodes: { ...this.issues.nodes }, links: { ...this.issues.links } };
+  }
+
+  /**
+   * Steps to the next (or previous) item with issues, in reading order, starting after the current
+   * selection. Selects it, scrolls it into view and focuses it if it's a node. Returns the item, or null
+   * when no item has issues. Bound to F8 / Shift+F8.
+   */
+  nextIssue(direction: 1 | -1 = 1): ItemRef | null {
+    const items = this.issueLayer?.items() ?? [];
+    if (items.length === 0) return null;
+    const current = this.getSelection()[0];
+    const at = current
+      ? items.findIndex((i) => i.kind === current.kind && i.id === current.id)
+      : -1;
+    const index =
+      at < 0
+        ? direction > 0
+          ? 0
+          : items.length - 1
+        : (at + direction + items.length) % items.length;
+    const item = items[index]!;
+    this.setSelection([item]);
+    if (item.kind === 'node') this.keyboard?.setFocused(item.id);
+    else {
+      const b = this.itemBounds(item);
+      if (b) this.keyboard?.reveal(b);
+    }
+    return item;
   }
 
   // ---- selection -----------------------------------------------------------
@@ -558,6 +729,7 @@ export class Diagram implements DiagramApi {
     this.cancelAnimation();
     this.keyboard?.destroy();
     this.diffLayer?.destroy();
+    this.issueLayer?.destroy();
     this.detachPointerEvents?.();
     this.overlay?.destroy();
     this.renderer?.destroy();

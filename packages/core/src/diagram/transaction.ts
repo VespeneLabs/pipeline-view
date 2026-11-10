@@ -9,6 +9,7 @@ import {
   type ModelStore,
 } from '../model/store';
 import type { ModelDiff, Transaction } from './types';
+import type { ChangeTracker } from './changes';
 
 /**
  * One primitive model change. Updates store only the patched keys (before and after),
@@ -74,9 +75,13 @@ export const isEmptyDiff = (d: ModelDiff): boolean =>
 export class TransactionImpl implements Transaction {
   readonly ops: Op[] = [];
 
-  constructor(private readonly store: ModelStore) {}
+  constructor(
+    private readonly store: ModelStore,
+    private readonly tracker?: ChangeTracker,
+  ) {}
 
   private run(op: Op): void {
+    this.tracker?.note(this.store, op);
     applyOp(this.store, op);
     this.ops.push(op);
   }

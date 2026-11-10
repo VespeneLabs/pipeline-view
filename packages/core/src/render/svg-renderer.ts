@@ -217,6 +217,8 @@ export class SvgRenderer {
     if (!el) {
       const g = this.svg('g', { class: 'pv-node' }) as SVGGElement;
       g.dataset.nodeId = n.id;
+      // Stable test hooks (part of the public API, see @vespenelabs/pipeline-view/testing).
+      g.dataset.pvNodeId = n.id;
       // Roving tabindex: render/a11y.ts gives the focused node tabindex 0.
       g.setAttribute('role', 'button');
       g.setAttribute('tabindex', '-1');
@@ -290,6 +292,7 @@ export class SvgRenderer {
     for (const p of ports) {
       const c = this.svg('circle', { class: 'pv-port', cx: p.position.x, cy: p.position.y, r: 4 });
       c.dataset.portId = p.id;
+      c.dataset.pvPortId = p.id;
       el.body.append(c);
     }
   }
@@ -374,6 +377,7 @@ export class SvgRenderer {
     if (!el) {
       const g = this.svg('g', { class: 'pv-link' }) as SVGGElement;
       g.dataset.linkId = l.id;
+      g.dataset.pvLinkId = l.id;
       const hit = this.svg('path', { class: 'pv-link-hit' }) as SVGPathElement;
       const line = this.svg('path', { class: 'pv-link-line' }) as SVGPathElement;
       const arrows = this.svg('path', { class: 'pv-link-arrows' }) as SVGPathElement;

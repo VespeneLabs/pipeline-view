@@ -78,7 +78,7 @@ describe('OverlayRenderer', () => {
 
   it('mounts HTML annotations relative to their anchor with merged live data', () => {
     const el = $('.pv-overlay [data-annotation-id="reading"]') as HTMLElement;
-    expect(el.style.transform).toBe('translate(100px,20px)');
+    expect(el.style.transform.replace(/,\s+/g, ',')).toBe('translate(100px,20px)');
     expect(el.style.width).toBe('100px');
     expect(card).toHaveBeenCalledWith(el, {
       kind: 'annotation',
@@ -90,7 +90,7 @@ describe('OverlayRenderer', () => {
 
   it('mounts node overlays named by data.overlay over the node bounds', () => {
     const el = $('.pv-overlay [data-node-id="pump"]') as HTMLElement;
-    expect(el.style.transform).toBe('translate(400px,100px)');
+    expect(el.style.transform.replace(/,\s+/g, ',')).toBe('translate(400px,100px)');
     expect(el.textContent).toBe('pump: 7');
   });
 
@@ -148,9 +148,12 @@ describe('OverlayRenderer', () => {
     expect($('.pv-leader')!.getAttribute('d')).toBe('M150 60L150 100');
     d.update((tx) => tx.updateNode('tank', { position: { x: 200, y: 100 } }));
     flush();
-    expect(($('.pv-overlay [data-annotation-id="reading"]') as HTMLElement).style.transform).toBe(
-      'translate(200px,20px)',
-    );
+    expect(
+      ($('.pv-overlay [data-annotation-id="reading"]') as HTMLElement).style.transform.replace(
+        /,\s+/g,
+        ',',
+      ),
+    ).toBe('translate(200px,20px)');
     expect($('.pv-leader')!.getAttribute('d')).toBe('M250 60L250 100');
   });
 

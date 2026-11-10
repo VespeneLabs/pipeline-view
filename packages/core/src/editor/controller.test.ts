@@ -298,7 +298,9 @@ describe('EditorController', () => {
   });
 
   it('captures the pointer only once a press becomes a drag, so plain clicks keep their target', () => {
-    const spy = vi.spyOn(d.view!.root, 'setPointerCapture').mockImplementation(() => {});
+    const spy = vi
+      .spyOn(withCapture(d.view!.root), 'setPointerCapture')
+      .mockImplementation(() => {});
     const node = q('[data-node-id="b"]');
     pointer('pointerdown', node, 210, 105);
     pointer('pointermove', d.view!.root, 211, 106);
@@ -308,3 +310,11 @@ describe('EditorController', () => {
     expect(spy).toHaveBeenCalledOnce();
   });
 });
+
+/** jsdom has no setPointerCapture; give it a stub so the spy has something to wrap. */
+function withCapture<T extends Element>(el: T): T {
+  if (!('setPointerCapture' in el)) {
+    (el as unknown as { setPointerCapture: () => void }).setPointerCapture = () => {};
+  }
+  return el;
+}

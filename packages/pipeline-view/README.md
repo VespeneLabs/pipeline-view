@@ -29,6 +29,30 @@ diagram.zoomToFit();
 diagram.setNodeData('T1', { level: 0.62 }, 'normal'); // live values: no undo, no re-routing
 ```
 
+## Controlled mode (your own store)
+
+When your app keeps the document in its own store (Zustand, Redux, …), let the store own the truth and the history, and let the diagram apply differences:
+
+```tsx
+import { create } from 'zustand';
+import { PipelineView } from '@vespenelabs/pipeline-view/react';
+import type { DiagramModel, ModelPatch } from '@vespenelabs/pipeline-view';
+
+const useDoc = create<{ model: DiagramModel; past: ModelPatch[] }>(() => ({ model: initial, past: [] }));
+
+<PipelineView
+  model={useDoc((s) => s.model)}
+  options={{ history: false }}                        // the store owns undo
+  onModelChange={({ model, patch }) =>                // user edits: one JSON patch each
+    useDoc.setState((s) => ({ model, past: [...s.past, patch!] }))}
+/>;
+```
+
+- A new `model` from the store is applied with `diagram.patch()`: only the difference changes, untouched links aren't re-routed, and viewport, selection and live values (`setNodeData`) survive. Passing back the model you received in `onModelChange` costs nothing.
+- Prefer patches to whole models? Call `diagram.applyDiff(patch)` yourself. Every `modelChange` carries the JSON `patch` of the change.
+- Want the store to hold undo entries instead? Pass `history: { push, undo, redo }`. The diagram pushes `{ forward, inverse }` patches and applies the one your `undo()`/`redo()` returns.
+- `diagram.isDirty()` / `markSaved()` track unsaved changes against the last save (live values don't count).
+
 For React (`<PipelineView>`), theming, the editor, export and SSR, see the [repository README](https://github.com/VespeneLabs/pipeline-view#readme) and the docs app.
 
 MIT © VespeneLabs
