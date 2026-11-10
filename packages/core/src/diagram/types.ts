@@ -48,13 +48,32 @@ export type RefusalCode =
   | 'same-port'
   | 'direction'
   | 'cycle'
+  | 'self-loop'
+  | 'max-links-between-nodes'
+  | 'missing-port'
   | (string & {});
 
 /**
  * Result of a validation hook (FR-42). `true` allows, `false` refuses without a reason, and the object
  * form refuses with a message for the user and an optional machine-readable code.
  */
-export type ValidationResult = boolean | { ok: false; reason: string; code?: RefusalCode };
+export type ValidationResult =
+  | boolean
+  | {
+      ok: false;
+      reason: string;
+      code?: RefusalCode;
+      /** Machine-readable context, for example `{ cycleNodes: string[] }`. */
+      detail?: Record<string, unknown>;
+    };
+
+/** Context passed to `refusalMessages` for localizing a built-in refusal. */
+export interface RefusalContext {
+  from: LinkEnd;
+  to: LinkEnd;
+  kind: LinkKind;
+  detail?: Record<string, unknown>;
+}
 
 /** One step of undo history, as JSON-serializable patches (FR-44). */
 export interface HistoryEntry {
@@ -111,7 +130,8 @@ export interface ModelComparison {
 
 /** Result of a programmatic connect (FR-54). */
 export type ConnectResult =
-  { ok: true; id: string } | { ok: false; code: RefusalCode; reason: string };
+  | { ok: true; id: string }
+  | { ok: false; code: RefusalCode; reason: string; detail?: Record<string, unknown> };
 
 /** A drag-and-drop source from any element (FR-50). */
 export interface DropSource {
@@ -138,9 +158,16 @@ export interface DiagramOptions {
     kind: string,
   ) => ValidationResult;
   canDrop?: (type: string, position: Point) => ValidationResult;
-  /** Links always run from an 'out' port to an 'in' port, and arrows follow (FR-41). */
-  directed?: boolean;
-  /** Whole-graph rules (FR-49). Refusals use the codes 'cycle', 'same-port' and 'duplicate'. */
+  /**
+   * Links always run from an 'out' port to an 'in' port, and arrows follow (FR-41). With `kinds`, only
+   * links of those kinds are directed (for example process lines but not signals).
+   */
+  directed?: boolean | { kinds?: LinkKind[] };
+  /** Host-localized text for built-in refusals. Return undefined to keep the default message (FR-42). */
+  refusalMessages?: (code: RefusalCode, ctx: RefusalContext) => string | undefined;
+  /** Whether `canConnect` runs after (default) or before the built-in checks (FR-42). */
+  canConnectOrder?: 'after-builtins' | 'before-builtins';
+  /** Whole-graph rules (FR-49). Refusal codes: 'cycle', 'self-loop', 'max-links-between-nodes'. */
   noCycles?: boolean | { kinds?: LinkKind[] };
   noSelfLoops?: boolean;
   maxLinksBetweenNodes?: number;
@@ -201,7 +228,9 @@ export interface DiagramEvents {
     to: LinkEnd;
     kind: LinkKind;
     code: RefusalCode;
+    /** Final, possibly host-localized, message. */
     reason: string;
+    detail?: Record<string, unknown>;
     point: Point;
   };
 }

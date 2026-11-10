@@ -36,11 +36,15 @@ export interface SymbolDef<D extends DataRecord = DataRecord> {
   category: string;
   /** Reference number from the Figma sheet (1-50) where it applies. */
   ref?: number;
-  /** Unrotated size. A function computes it per node instance, for example from `node.data` (FR-40). */
+  /**
+   * Unrotated size. A function computes it per node instance, for example from `node.data` (FR-40).
+   * Functions must tolerate missing data: palettes and galleries call them with `previewNode(def)`.
+   */
   size: Size | ((node: NodeModel) => Size);
   /**
    * Ports, or a function computing them per node instance (FR-40). `node.ports` overrides both.
-   * Read them through `nodePorts(def, node)`, never directly.
+   * Read them through `nodePorts(def, node)`, never directly. Like `size`, a function must tolerate
+   * missing data (`previewNode(def)`).
    */
   ports: PortDef[] | ((node: NodeModel) => PortDef[]);
   /**
