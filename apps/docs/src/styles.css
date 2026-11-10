@@ -1,0 +1,184 @@
+/*
+ * Docs app styles. The --pv-* block mirrors the proposed core tokens (Figma node 1:21) until
+ * @pipeline-view/core ships styles.css; then it is replaced by `import '@pipeline-view/core/styles.css'`.
+ */
+:root {
+  color-scheme: light;
+  --pv-font: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --pv-bg: #ffffff;
+  --pv-border: #d8e1e5;
+  --pv-grid: #eef2f4;
+  --pv-line: #637783;
+  --pv-line-signal: #637783;
+  --pv-symbol-stroke: #334d5b;
+  --pv-ink: #192d38;
+  --pv-muted: #596c77;
+  --pv-selection: #185ac7;
+  --pv-selection-bg: #eef4ff;
+  --pv-card-bg: #f5f8f9;
+  --pv-card-border: #d8e1e5;
+  --pv-radius: 6px;
+
+  --docs-page: #f3f6f7;
+  --docs-sidebar: #ffffff;
+  --docs-accent: #185ac7;
+  --docs-code-bg: #f1f4f6;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --pv-bg: #0e171c;
+  --pv-border: #2a3a43;
+  --pv-grid: #172229;
+  --pv-line: #8a9eaa;
+  --pv-line-signal: #8a9eaa;
+  --pv-symbol-stroke: #b9c8d0;
+  --pv-ink: #e3ebef;
+  --pv-muted: #93a6b1;
+  --pv-selection: #6ea8ff;
+  --pv-selection-bg: #15243a;
+  --pv-card-bg: #152129;
+  --pv-card-border: #2a3a43;
+
+  --docs-page: #0a1115;
+  --docs-sidebar: #0e171c;
+  --docs-accent: #6ea8ff;
+  --docs-code-bg: #152129;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--pv-font);
+  color: var(--pv-ink);
+  background: var(--docs-page);
+  -webkit-font-smoothing: antialiased;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  padding: 24px 16px;
+  background: var(--docs-sidebar);
+  border-right: 1px solid var(--pv-border);
+}
+
+.brand {
+  margin: 0 8px 24px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.brand small {
+  display: block;
+  margin-top: 2px;
+  color: var(--pv-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.nav-group {
+  margin: 20px 8px 6px;
+  color: var(--pv-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.nav a {
+  display: block;
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: var(--pv-ink);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.nav a:hover {
+  background: var(--pv-card-bg);
+}
+
+.nav a[aria-current='page'] {
+  background: var(--pv-selection-bg);
+  color: var(--pv-selection);
+  font-weight: 600;
+}
+
+.theme-toggle {
+  margin: 24px 8px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--pv-border);
+  border-radius: 6px;
+  background: var(--pv-bg);
+  color: var(--pv-ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.content {
+  min-width: 0;
+  padding: 32px 40px 64px;
+}
+
+.content > h1 {
+  margin: 0 0 6px;
+  font-size: 30px;
+  font-weight: 600;
+}
+
+.lede {
+  max-width: 720px;
+  margin: 0 0 32px;
+  color: var(--pv-muted);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+code,
+pre {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 13px;
+}
+
+pre {
+  overflow-x: auto;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: var(--docs-code-bg);
+  line-height: 1.5;
+}
+
+:focus-visible {
+  outline: 2px solid var(--docs-accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: static;
+    height: auto;
+  }
+
+  .content {
+    padding: 24px 16px;
+  }
+}

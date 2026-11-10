@@ -1,0 +1,120 @@
+.gallery-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 32px;
+  font-size: 14px;
+}
+
+.gallery-toolbar input[type='search'] {
+  width: 260px;
+  max-width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--pv-border);
+  border-radius: 6px;
+  background: var(--pv-bg);
+  color: var(--pv-ink);
+  font: inherit;
+}
+
+.gallery-toolbar label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.gallery-section {
+  margin-bottom: 40px;
+}
+
+.gallery-section header {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.gallery-section h2 {
+  display: flex;
+  gap: 12px;
+  margin: 0;
+  font-size: 21px;
+  font-weight: 600;
+}
+
+.gallery-section h2 span {
+  color: var(--pv-muted);
+  font-weight: 500;
+}
+
+.gallery-section p {
+  margin: 4px 0 0;
+  color: var(--pv-muted);
+  font-size: 13px;
+}
+
+.gallery-range {
+  position: absolute;
+  top: 6px;
+  right: 0;
+  color: var(--pv-muted);
+  font-size: 13px;
+}
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 16px;
+}
+
+.symbol-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 176px;
+  margin: 0;
+  padding: 16px 12px 12px;
+  border: 1px solid var(--pv-border);
+  border-radius: 8px;
+  background: var(--pv-bg);
+}
+
+.symbol-ref {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  color: var(--pv-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.symbol-art {
+  flex: none;
+  margin: auto 0;
+  overflow: visible;
+  color: var(--pv-symbol-stroke);
+}
+
+.symbol-port {
+  fill: var(--pv-selection);
+  stroke: var(--pv-bg);
+  stroke-width: 1.5;
+}
+
+.symbol-card figcaption {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  margin-top: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.symbol-card figcaption code {
+  color: var(--pv-muted);
+  font-size: 11px;
+  font-weight: 400;
+}
