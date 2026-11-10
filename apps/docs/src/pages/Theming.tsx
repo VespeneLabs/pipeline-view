@@ -8,7 +8,7 @@ interface Token {
   swatch?: boolean;
 }
 
-/** The --pv-* tokens defined by @pipeline-view/core/styles.css (values from the Figma reference). */
+/** The --pv-* tokens defined by @vespenelabs/pipeline-view/styles.css (values from the Figma reference). */
 const TOKENS: Token[] = [
   { name: '--pv-bg', light: '#ffffff', dark: '#0e171c', use: 'Canvas background', swatch: true },
   { name: '--pv-border', light: '#d8e1e5', dark: '#2a3a43', use: 'Frame border', swatch: true },
@@ -127,6 +127,74 @@ const TOKENS: Token[] = [
   { name: '--pv-font-size-label', light: '14px', dark: '14px', use: 'Node labels (SemiBold)' },
   { name: '--pv-font-size-small', light: '12px', dark: '12px', use: 'Area labels, legends, cards' },
   { name: '--pv-font', light: 'Inter, system-ui, sans-serif', dark: '', use: 'All diagram text' },
+  {
+    name: '--pv-issue-error',
+    light: '#c62828',
+    dark: '#ff6b6b',
+    use: 'Problem marker badge: error',
+    swatch: true,
+  },
+  {
+    name: '--pv-issue-warning',
+    light: '#b26a00',
+    dark: '#f0a830',
+    use: 'Problem marker badge: warning',
+    swatch: true,
+  },
+  {
+    name: '--pv-issue-info',
+    light: '#1f6fb2',
+    dark: '#6ea8ff',
+    use: 'Problem marker badge: info',
+    swatch: true,
+  },
+  {
+    name: '--pv-issue-ink',
+    light: '#ffffff',
+    dark: '#0e171c',
+    use: 'Icon on a badge',
+    swatch: true,
+  },
+  {
+    name: '--pv-issue-badge-ring',
+    light: 'var(--pv-bg)',
+    dark: 'var(--pv-bg)',
+    use: 'Ring that separates a badge from lines',
+  },
+  {
+    name: '--pv-diff-added',
+    light: '#1b873f',
+    dark: '#4cc274',
+    use: 'Compare: added items',
+    swatch: true,
+  },
+  {
+    name: '--pv-diff-removed',
+    light: '#c62828',
+    dark: '#ff6b6b',
+    use: 'Compare: removed items (ghosts)',
+    swatch: true,
+  },
+  {
+    name: '--pv-diff-moved',
+    light: '#1f6fb2',
+    dark: '#6ea8ff',
+    use: 'Compare: moved items',
+    swatch: true,
+  },
+  {
+    name: '--pv-diff-changed',
+    light: '#b26a00',
+    dark: '#f0a830',
+    use: 'Compare: changed items',
+    swatch: true,
+  },
+  {
+    name: '--pv-diff-ghost-opacity',
+    light: '0.35',
+    dark: '0.35',
+    use: 'Opacity of removed-item ghosts',
+  },
 ];
 
 const OVERRIDE = `/* Brand the diagram: override any token on the container or an ancestor. */
@@ -160,9 +228,9 @@ export function Theming() {
       <h1>Theming</h1>
       <p className="lede">
         Every visual value is a CSS custom property, so restyling needs no JavaScript. Import{' '}
-        <code>@pipeline-view/core/styles.css</code> once; its tokens have zero specificity, so any
-        rule of yours wins. Symbols draw with <code>currentColor</code>; recolouring them is one
-        token.
+        <code>@vespenelabs/pipeline-view/styles.css</code> once; its tokens have zero specificity,
+        so any rule of yours wins. Symbols draw with <code>currentColor</code>; recolouring them is
+        one token.
       </p>
 
       <h2>Light and dark</h2>

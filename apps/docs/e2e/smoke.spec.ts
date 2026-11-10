@@ -8,6 +8,8 @@ const ROUTES = [
   'getting-started',
   'theming',
   'custom-symbols',
+  'controlled-guide',
+  'testing',
   'monitor',
   'editor',
   'controlled',

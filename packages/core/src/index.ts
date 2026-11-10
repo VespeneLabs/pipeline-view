@@ -46,3 +46,15 @@ export {
   type WorkerLike,
 } from './routing/worker-client';
 export { runRoutingJob, type RoutingJob, type RoutingReply } from './routing/worker-protocol';
+export {
+  upstreamOf,
+  downstreamOf,
+  topologicalOrder,
+  findCycles,
+  connectedComponents,
+  flowPath,
+  type GraphSource,
+  type GraphFilter,
+  type WalkOptions,
+} from './graph/graph';
+export { validateConnect, isDirected, type ConnectCheck } from './diagram/validate';

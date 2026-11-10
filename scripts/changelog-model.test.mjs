@@ -38,7 +38,7 @@ test('moves Model: paragraphs of the newest version into "### Model"', () => {
 
 ### Model
 
-- the saved model is now **version 2**. It adds the optional \`NodeModel.ports\`. v1 documents still load.
+- The saved model is now **version 2**. It adds the optional \`NodeModel.ports\`. v1 documents still load.
 - \`LinkModel.locked\` is new.
 
 ### Minor Changes
@@ -91,7 +91,7 @@ test('drops a heading left empty, and appends to an existing Model section', () 
 ### Model
 
 - Hand-written note.
-- only a model change.
+- Only a model change.
 
 ## 1.0.0
 `,
