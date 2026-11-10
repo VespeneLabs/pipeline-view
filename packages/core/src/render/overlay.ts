@@ -37,6 +37,8 @@ const nKey = (id: string) => `n\u0000${id}`;
 export class OverlayRenderer {
   private readonly items = new Map<string, Item>();
   private readonly dirty = new Set<string>();
+  /** Keys dirtied by structural changes (move, rotate, flip, type, edits). They never take the data-tick shortcut. */
+  private readonly structural = new Set<string>();
   private full = true;
   private frame = 0;
   private readonly unsubscribe: (() => void)[] = [];
@@ -57,7 +59,7 @@ export class OverlayRenderer {
       }),
       i.on('model', ({ diff }) => this.onModel(diff)),
       i.on('data', ({ ids }) => {
-        for (const id of ids) this.markNode(id);
+        for (const id of ids) this.markNode(id, true);
         this.schedule();
       }),
     );
@@ -73,14 +75,17 @@ export class OverlayRenderer {
       this.dirty.add(aKey(id));
     }
     for (const id of [...diff.added.nodes, ...diff.changed.nodes, ...diff.removed.nodes])
-      this.markNode(id);
+      this.markNode(id, false);
     this.schedule();
   }
 
   /** A node change affects its own overlay and every annotation anchored to it. */
-  private markNode(id: string): void {
+  private markNode(id: string, dataOnly: boolean): void {
     this.dirty.add(nKey(id));
-    for (const a of this.anchored.get(id) ?? []) this.dirty.add(aKey(a));
+    for (const a of this.anchored.get(id) ?? []) {
+      this.dirty.add(aKey(a));
+      if (!dataOnly) this.structural.add(aKey(a));
+    }
   }
 
   private setAnchor(annotationId: string, nodeId: string | undefined): void {
@@ -125,6 +130,7 @@ export class OverlayRenderer {
       else this.upsertAnnotation(id);
     }
     this.dirty.clear();
+    this.structural.clear();
   }
 
   // ---- nodes with data.overlay ----------------------------------------------
@@ -175,6 +181,7 @@ export class OverlayRenderer {
     // force layout). HTML cards still get the new data.
     if (
       item &&
+      !this.structural.has(key) &&
       item.source === a &&
       item.anchorPos === anchor?.position &&
       item.anchorStatus === anchor?.status

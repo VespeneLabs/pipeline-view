@@ -115,6 +115,15 @@ describe('OverlayRenderer', () => {
     expect($('.pv-overlay [data-annotation-id="reading"]')!.textContent).toBe('reading: 3');
   });
 
+  it('re-aims the leader when the anchor rotates (same position object)', () => {
+    d.update((tx) => tx.updateNode('tank', { position: { x: 100, y: 200 } }));
+    flush();
+    const before = $('.pv-leader')!.getAttribute('d');
+    d.update((tx) => tx.updateNode('tank', { rotation: 90 }));
+    flush();
+    expect($('.pv-leader')!.getAttribute('d')).not.toBe(before);
+  });
+
   it('tracks re-anchoring so data ticks reach the new anchor only', () => {
     d.update((tx) => tx.updateAnnotation('reading', { anchor: { node: 'pump' } }));
     flush();
