@@ -114,9 +114,16 @@ export function StressTest() {
       diagram: d,
       nodes: model.nodes.length,
       links: model.links.length,
+      /** Full cost of one data tick: the batch plus the render and overlay flushes it schedules. */
       tick: () => {
         const t0 = performance.now();
         d.setNodeDataBatch(tickValues(model, ++tickRef.current));
+        const internals = d as unknown as {
+          renderer?: { flush(): void };
+          overlay?: { flush(): void };
+        };
+        internals.renderer?.flush();
+        internals.overlay?.flush();
         return performance.now() - t0;
       },
       panTest: (ms?: number) => panTest(d, ms),
