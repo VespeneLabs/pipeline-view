@@ -103,6 +103,27 @@ describe('routing in a Web Worker (FR-55)', () => {
     d.destroy();
   });
 
+  it('re-routes pending links around a node that moved while the job was in flight', async () => {
+    const { w } = fakeWorker();
+    const d = mount({ routingWorker: { createWorker: () => w } });
+    // Drop node n1-5 right onto the straight path of l0-3 (row 0, between n0-2 and n0-3).
+    d.update((tx) => tx.updateNode('n1-5', { position: { x: 215, y: 0 } }));
+    await settle();
+    const box = { x: 215 - 4, y: 0 - 4, x2: 255 + 4, y2: 20 + 4 };
+    const pts = d.getLinkPath('l0-3')!;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1]!;
+      const b = pts[i]!;
+      const minX = Math.min(a.x, b.x);
+      const maxX = Math.max(a.x, b.x);
+      const minY = Math.min(a.y, b.y);
+      const maxY = Math.max(a.y, b.y);
+      const crosses = maxX > box.x && minX < box.x2 && maxY > box.y && minY < box.y2;
+      expect(crosses, `segment ${i} of l0-3 crosses the moved node`).toBe(false);
+    }
+    d.destroy();
+  });
+
   it('drops a result that arrives after a newer load', async () => {
     const replies: (() => void)[] = [];
     const { w } = fakeWorker((job) => {

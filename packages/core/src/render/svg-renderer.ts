@@ -182,6 +182,7 @@ export class SvgRenderer {
     this.router.setObstacles(obstacles);
     this.crossings = new Map();
     this.pendingWorker.clear();
+    this.movedDuringFlight.clear();
     const all = [...store.links.keys()];
     if (this.useWorker(all.length)) this.routeOffThread(obstacles, all);
     else this.routeLinks(all);
@@ -195,6 +196,8 @@ export class SvgRenderer {
   private routeEpoch = 0;
   /** Auto links drawn as placeholders, waiting for the worker's routes. */
   private readonly pendingWorker = new Set<string>();
+  /** Nodes moved, resized or removed while a job was in flight: their obstacle updates are replayed. */
+  private readonly movedDuringFlight = new Set<string>();
 
   private useWorker(linkCount: number): boolean {
     const opt = this.diagram.options.routingWorker;
@@ -246,9 +249,20 @@ export class SvgRenderer {
           this.routes.set(r.linkId, r.points);
           this.pendingWorker.delete(r.linkId);
         }
+        // Worker routes used the obstacles at job start. Replay obstacle updates for nodes that moved
+        // meanwhile, now that the adopted routes are stored, and re-route what they affect.
+        const reroute = new Set<string>();
+        for (const id of this.movedDuringFlight) {
+          const n = store.nodes.get(id);
+          const rect = n ? nodeBounds(n, this.def(n)) : null;
+          for (const l of this.router.updateObstacle(id, rect))
+            if (store.links.has(l)) reroute.add(l);
+        }
+        this.movedDuringFlight.clear();
+        if (reroute.size) this.routeLinks([...reroute]);
         // Manual links were drawn already; analyze them together with the adopted routes.
         const manual = ids.filter((id) => store.links.get(id)?.routing === 'manual');
-        this.finishRoutes([...keep, ...manual]);
+        this.finishRoutes([...keep, ...manual].filter((id) => !reroute.has(id)));
       },
       (err: Error) => {
         if (err.name === 'AbortError' || epoch !== this.routeEpoch || this.destroyed) return;
@@ -272,6 +286,7 @@ export class SvgRenderer {
       this.nodes.get(id)?.g.remove();
       this.nodes.delete(id);
       for (const l of this.router.updateObstacle(id, null)) this.reroute.add(l);
+      if (this.pendingWorker.size) this.movedDuringFlight.add(id);
     }
     for (const id of this.dirtyNodes) {
       const n = store.nodes.get(id);
@@ -295,6 +310,8 @@ export class SvgRenderer {
       if (geometryChanged) {
         for (const l of this.router.updateObstacle(id, nodeBounds(n, this.def(n))))
           this.reroute.add(l);
+        // The main router can't see pending (placeholder) links yet; replay this after adoption.
+        if (this.pendingWorker.size) this.movedDuringFlight.add(id);
         for (const l of store.linksOf(id)) this.reroute.add(l.id);
       }
     }
