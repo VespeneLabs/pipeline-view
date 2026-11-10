@@ -41,12 +41,21 @@ interface RefusedPort extends LinkEnd {
   code: string;
   reason: string;
   detail?: Record<string, unknown>;
+  /** The refusal's ends in flow order, and as dragged when different. */
+  ends?: { from?: LinkEnd; to?: LinkEnd; dragFrom?: LinkEnd; dragTo?: LinkEnd };
 }
 
 /** Where a connect drag ended: a port that accepts the link, or one that refuses it (FR-42). */
 type ConnectDrop =
   | { ok: true; end: LinkEnd }
-  | { ok: false; end: LinkEnd; code: string; reason: string; detail?: Record<string, unknown> };
+  | {
+      ok: false;
+      end: LinkEnd;
+      code: string;
+      reason: string;
+      detail?: Record<string, unknown>;
+      ends?: RefusedPort['ends'];
+    };
 
 type Gesture =
   | { type: 'move'; start: Point; lead: string; started: boolean; guides: Guide[] }
@@ -299,6 +308,12 @@ export class EditorController {
             code: check.code,
             reason: check.reason,
             detail: check.detail,
+            ends: {
+              from: check.from,
+              to: check.to,
+              dragFrom: check.dragFrom,
+              dragTo: check.dragTo,
+            },
           });
       }
       const marked = this.markRefused(refused);
@@ -419,9 +434,12 @@ export class EditorController {
         if (drop.ok) {
           this.commands.tryConnect(g.from, drop.end, g.kind);
         } else {
+          // Flow order (outlet → inlet), with the drag order alongside when it differs.
+          const e = drop.ends;
           this.diagram.emit('connectRejected', {
-            from: g.from,
-            to: drop.end,
+            from: e?.from ?? g.from,
+            to: e?.to ?? drop.end,
+            ...(e?.dragFrom ? { dragFrom: e.dragFrom, dragTo: e.dragTo } : {}),
             kind: g.kind,
             code: drop.code,
             reason: drop.reason,
@@ -1073,6 +1091,7 @@ function nearestDrop(
         code: r.code,
         reason: r.reason,
         ...(r.detail ? { detail: r.detail } : {}),
+        ...(r.ends ? { ends: r.ends } : {}),
       };
     }
   }
