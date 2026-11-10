@@ -106,22 +106,17 @@ describe('routing in a Web Worker (FR-55)', () => {
   it('re-routes pending links around a node that moved while the job was in flight', async () => {
     const { w } = fakeWorker();
     const d = mount({ routingWorker: { createWorker: () => w } });
-    // Drop node n1-5 right onto the straight path of l0-3 (row 0, between n0-2 and n0-3).
-    d.update((tx) => tx.updateNode('n1-5', { position: { x: 215, y: 0 } }));
+    // Move n1-5 next to l0-3 (n0-2 out (220,10) → n0-3 in (270,25)) while the job is in flight. The
+    // worker's answer predates the move, so l0-3 must be re-routed against the new obstacle after adoption.
+    const move = { position: { x: 225, y: -40 } };
+    d.update((tx) => tx.updateNode('n1-5', move));
     await settle();
-    const box = { x: 215 - 4, y: 0 - 4, x2: 255 + 4, y2: 20 + 4 };
-    const pts = d.getLinkPath('l0-3')!;
-    for (let i = 1; i < pts.length; i++) {
-      const a = pts[i - 1]!;
-      const b = pts[i]!;
-      const minX = Math.min(a.x, b.x);
-      const maxX = Math.max(a.x, b.x);
-      const minY = Math.min(a.y, b.y);
-      const maxY = Math.max(a.y, b.y);
-      const crosses = maxX > box.x && minX < box.x2 && maxY > box.y && minY < box.y2;
-      expect(crosses, `segment ${i} of l0-3 crosses the moved node`).toBe(false);
-    }
+    const sync = mount({ routingWorker: false });
+    sync.update((tx) => tx.updateNode('n1-5', move));
+    for (const id of ['l0-3', 'l1-5', 'l1-6', 'l0-4'])
+      expect(d.getLinkPath(id), id).toEqual(sync.getLinkPath(id));
     d.destroy();
+    sync.destroy();
   });
 
   it('drops a result that arrives after a newer load', async () => {
