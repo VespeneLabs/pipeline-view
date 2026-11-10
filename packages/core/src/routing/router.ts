@@ -44,6 +44,21 @@ interface LaneSeg {
   hi: number;
 }
 
+/** An interior segment that `spread` considered, with the corridor coordinate it started on. */
+interface SpreadSeg {
+  link: string;
+  k: number;
+  horizontal: boolean;
+  base: number;
+  lo: number;
+  hi: number;
+}
+
+interface BatchRoute {
+  req: RouteRequest;
+  pts: Point[];
+}
+
 /**
  * Orthogonal router: sparse-grid A* with bend penalties around inflated node boxes, followed by
  * greedy lane assignment that spreads parallel pipes sharing a corridor.
@@ -109,14 +124,17 @@ export class OrthogonalRouter implements Router {
 
   route(requests: RouteRequest[]): RouteResult[] {
     for (const req of requests) this.forget(req.linkId);
-    const results: RouteResult[] = [];
+    const batch = new Map<string, BatchRoute>();
+    const segs: SpreadSeg[] = [];
     for (const req of requests) {
       const raw = this.computePath(req);
-      const points = this.spread(req, raw);
-      this.store(req, points);
-      results.push({ linkId: req.linkId, points });
+      const pts = this.spread(req, raw, segs);
+      // Store a copy: `untangle` edits `pts` in place and must unregister the old lanes first.
+      this.store(req, pts.slice());
+      batch.set(req.linkId, { req, pts });
     }
-    return results;
+    this.untangle(batch, segs);
+    return requests.map((req) => ({ linkId: req.linkId, points: batch.get(req.linkId)!.pts }));
   }
 
   analyze(routes: RouteResult[]): { crossings: Crossing[]; junctions: Junction[] } {
@@ -259,7 +277,7 @@ export class OrthogonalRouter implements Router {
    * (offsets +s, -s, +2s, ...). Port segments never move. A lane is used only if the moved segment
    * and its two neighbours stay clear of every obstacle.
    */
-  private spread(req: RouteRequest, raw: Point[]): Point[] {
+  private spread(req: RouteRequest, raw: Point[], segs: SpreadSeg[]): Point[] {
     const pts = raw.map((p) => ({ x: p.x, y: p.y }));
     const n = pts.length;
     for (let k = 1; k + 2 < n; k++) {
@@ -270,23 +288,107 @@ export class OrthogonalRouter implements Router {
       const lo = horizontal ? Math.min(a.x, b.x) : Math.min(a.y, b.y);
       const hi = horizontal ? Math.max(a.x, b.x) : Math.max(a.y, b.y);
       const lanes = horizontal ? this.hLanes : this.vLanes;
+      segs.push({ link: req.linkId, k, horizontal, base: c, lo, hi });
       if (!occupied(lanes, c, lo, hi, req.linkId)) continue;
       for (let lane = 1; lane <= 2 * MAX_LANES; lane++) {
         const off = this.spacing * Math.ceil(lane / 2) * (lane % 2 ? 1 : -1);
         if (occupied(lanes, c + off, lo, hi, req.linkId)) continue;
-        if (this.tryShift(req, pts, k, horizontal, off)) break;
+        const moved = this.shifted(req, pts, k, horizontal, off);
+        if (moved) {
+          pts[k] = moved[k]!;
+          pts[k + 1] = moved[k + 1]!;
+          break;
+        }
       }
     }
     return pts;
   }
 
-  private tryShift(
+  /**
+   * Greedy spreading assigns lanes in request order, so parallel links can end up in the reverse of
+   * their nesting order and cross each other (a stack of manifold outputs turning the same way).
+   * For each bundle of segments spread from one corridor, swap lanes between members while that
+   * lowers the number of crossings among the bundle. Swaps keep every obstacle and lane rule.
+   */
+  private untangle(batch: Map<string, BatchRoute>, segs: SpreadSeg[]): void {
+    const groups = new Map<string, SpreadSeg[]>();
+    for (const s of segs) {
+      const key = `${s.horizontal ? 'h' : 'v'}${laneKey(s.base)}`;
+      let list = groups.get(key);
+      if (!list) groups.set(key, (list = []));
+      list.push(s);
+    }
+    const dirty = new Set<string>();
+    for (const list of groups.values()) {
+      if (list.length < 2) continue;
+      for (const bundle of overlapComponents(list)) {
+        if (bundle.length < 2 || new Set(bundle.map((s) => s.link)).size !== bundle.length)
+          continue;
+        if (this.untangleBundle(batch, bundle)) for (const s of bundle) dirty.add(s.link);
+      }
+    }
+    for (const id of dirty) {
+      const { req, pts } = batch.get(id)!;
+      this.forget(id);
+      this.store(req, pts);
+    }
+  }
+
+  private untangleBundle(batch: Map<string, BatchRoute>, bundle: SpreadSeg[]): boolean {
+    const paths = bundle.map((s) => batch.get(s.link)!);
+    const local = () => bundle.map((s, i) => paths[i]!.pts.slice(s.k - 1, s.k + 3));
+    const coord = (i: number) => {
+      const p = paths[i]!.pts[bundle[i]!.k]!;
+      return bundle[i]!.horizontal ? p.y : p.x;
+    };
+    let best = countCrossings(local());
+    if (best === 0) return false;
+    const members = new Set(bundle.map((s) => s.link));
+    const lanes = bundle[0]!.horizontal ? this.hLanes : this.vLanes;
+    let changed = false;
+    let improved = true;
+    for (let pass = 0; improved && pass < bundle.length * bundle.length; pass++) {
+      improved = false;
+      for (let i = 0; i < bundle.length && best > 0; i++) {
+        for (let j = i + 1; j < bundle.length && best > 0; j++) {
+          const a = bundle[i]!;
+          const b = bundle[j]!;
+          const ca = coord(i);
+          const cb = coord(j);
+          if (Math.abs(ca - cb) < EPS) continue;
+          if (occupiedExcept(lanes, cb, a.lo, a.hi, members)) continue;
+          if (occupiedExcept(lanes, ca, b.lo, b.hi, members)) continue;
+          const pa = paths[i]!;
+          const pb = paths[j]!;
+          const ma = this.shifted(pa.req, pa.pts, a.k, a.horizontal, cb - ca);
+          const mb = ma && this.shifted(pb.req, pb.pts, b.k, b.horizontal, ca - cb);
+          if (!ma || !mb) continue;
+          const saved = [pa.pts[a.k]!, pa.pts[a.k + 1]!, pb.pts[b.k]!, pb.pts[b.k + 1]!] as const;
+          pa.pts[a.k] = ma[a.k]!;
+          pa.pts[a.k + 1] = ma[a.k + 1]!;
+          pb.pts[b.k] = mb[b.k]!;
+          pb.pts[b.k + 1] = mb[b.k + 1]!;
+          const count = countCrossings(local());
+          if (count < best) {
+            best = count;
+            improved = changed = true;
+          } else {
+            [pa.pts[a.k], pa.pts[a.k + 1], pb.pts[b.k], pb.pts[b.k + 1]] = saved;
+          }
+        }
+      }
+    }
+    return changed;
+  }
+
+  /** The path with segment k moved by `off`, or null when that breaks a neighbour or hits a node. */
+  private shifted(
     req: RouteRequest,
     pts: Point[],
     k: number,
     horizontal: boolean,
     off: number,
-  ): boolean {
+  ): Point[] | null {
     const n = pts.length;
     const moved = pts.map((p, i) =>
       i === k || i === k + 1
@@ -302,8 +404,7 @@ export class OrthogonalRouter implements Router {
     ] as const) {
       const before = horizontal ? pts[j]!.y - pts[i]!.y : pts[j]!.x - pts[i]!.x;
       const after = horizontal ? moved[j]!.y - moved[i]!.y : moved[j]!.x - moved[i]!.x;
-      if (Math.sign(before) !== Math.sign(after) || Math.abs(after) < this.spacing / 2)
-        return false;
+      if (Math.sign(before) !== Math.sign(after) || Math.abs(after) < this.spacing / 2) return null;
     }
     const fromBox = this.boxes.get(req.from.nodeId);
     const toBox = this.boxes.get(req.to.nodeId);
@@ -319,12 +420,10 @@ export class OrthogonalRouter implements Router {
       for (const box of this.queryBoxes(region)) {
         // Port segments run inside their own node's clearance by design.
         if ((s === 0 && box === fromBox) || (s === n - 2 && box === toBox)) continue;
-        if (segmentHitsBox(a, b, box)) return false;
+        if (segmentHitsBox(a, b, box)) return null;
       }
     }
-    pts[k] = moved[k]!;
-    pts[k + 1] = moved[k + 1]!;
-    return true;
+    return moved;
   }
 
   // ---------------------------------------------------------------- bookkeeping
@@ -402,6 +501,72 @@ function occupied(
     if (s.link !== self && s.lo < hi - EPS && lo < s.hi - EPS) return true;
   }
   return false;
+}
+
+function occupiedExcept(
+  lanes: Map<number, LaneSeg[]>,
+  c: number,
+  lo: number,
+  hi: number,
+  except: Set<string>,
+): boolean {
+  const list = lanes.get(laneKey(c));
+  if (!list) return false;
+  for (const s of list) {
+    if (!except.has(s.link) && s.lo < hi - EPS && lo < s.hi - EPS) return true;
+  }
+  return false;
+}
+
+/** Splits segments on one corridor into groups whose spans overlap (transitively). */
+function overlapComponents(list: SpreadSeg[]): SpreadSeg[][] {
+  const sorted = [...list].sort((a, b) => a.lo - b.lo);
+  const out: SpreadSeg[][] = [];
+  let cur: SpreadSeg[] = [];
+  let end = -Infinity;
+  for (const s of sorted) {
+    if (cur.length && s.lo >= end - EPS) {
+      out.push(cur);
+      cur = [];
+      end = -Infinity;
+    }
+    cur.push(s);
+    end = Math.max(end, s.hi);
+  }
+  if (cur.length) out.push(cur);
+  return out;
+}
+
+/** Proper crossings between the polylines of different paths (shared endpoints don't count). */
+function countCrossings(paths: Point[][]): number {
+  let count = 0;
+  for (let i = 0; i < paths.length; i++) {
+    for (let j = i + 1; j < paths.length; j++) {
+      const p = paths[i]!;
+      const q = paths[j]!;
+      for (let a = 0; a + 1 < p.length; a++) {
+        for (let b = 0; b + 1 < q.length; b++) {
+          if (crosses(p[a]!, p[a + 1]!, q[b]!, q[b + 1]!)) count++;
+        }
+      }
+    }
+  }
+  return count;
+}
+
+function crosses(a: Point, b: Point, c: Point, d: Point): boolean {
+  const h1 = Math.abs(a.y - b.y) < EPS;
+  const h2 = Math.abs(c.y - d.y) < EPS;
+  if (h1 === h2) return false;
+  const [h0, h3, v0, v3] = h1 ? [a, b, c, d] : [c, d, a, b];
+  const y = h0.y;
+  const x = v0.x;
+  return (
+    x > Math.min(h0.x, h3.x) + EPS &&
+    x < Math.max(h0.x, h3.x) - EPS &&
+    y > Math.min(v0.y, v3.y) + EPS &&
+    y < Math.max(v0.y, v3.y) - EPS
+  );
 }
 
 function eachSeg(
