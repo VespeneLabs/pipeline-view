@@ -7,6 +7,11 @@ import {
   type DiagramOptions,
   type EditorControllerOptions,
   type HtmlRenderer,
+  type NodeRendererSpec,
+  type NodeModel,
+  type DataRecord,
+  type PortDef,
+  nodePorts,
   type IssueMap,
   type SymbolDef,
   type ThemeName,
@@ -23,6 +28,7 @@ import {
   useState,
   useSyncExternalStore,
   type CSSProperties,
+  type ComponentType,
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
@@ -56,12 +62,24 @@ export interface PipelineViewProps {
   symbols?: SymbolDef[];
   /** React overlay renderers, referenced by HtmlAnnotation.renderer or a node's data.overlay. */
   renderers?: Record<string, ReactRenderer>;
+  /**
+   * React components rendered inside nodes of these types (FR-45). The library draws the ports and the
+   * selection, and each node re-renders only when its own data, status or selection changes. Use
+   * `{ component, sizing: 'content' }` to size the node from its content. The set of types is read
+   * once, at creation; the components may change.
+   */
+  nodeRenderers?: Record<string, NodeRendererEntry>;
   /** Other DiagramOptions. Read once, when the diagram is created. */
   options?: Omit<DiagramOptions, 'mode' | 'theme' | 'symbols' | 'htmlRenderers'>;
   /** Editor options (guides, port snap). The editor attaches itself whenever mode is 'edit'. Read once. */
   editor?: EditorControllerOptions;
-  /** Zoom to fit after each model load. Default true. */
-  fitOnLoad?: boolean;
+  /**
+   * Zoom to fit after a model load, once HTML/React content has been measured (FR-47). `true` (the
+   * default) fits unless `initialViewport` is set; `'always'` also overrides it; `false` never fits.
+   */
+  fitOnLoad?: boolean | 'always' | 'if-no-viewport' | 'never';
+  /** The viewport to start with, for example one saved from `onViewportChange` when `final` is true. */
+  initialViewport?: DiagramOptions['initialViewport'];
   onReady?: (diagram: Diagram) => void;
   onNodeClick?: Handler<'nodeClick'>;
   onNodeDoubleClick?: Handler<'nodeDoubleClick'>;
@@ -72,6 +90,7 @@ export interface PipelineViewProps {
   onModelChange?: Handler<'modelChange'>;
   onViewportChange?: Handler<'viewportChange'>;
   onConnectRejected?: Handler<'connectRejected'>;
+  onChangeDropped?: Handler<'changeDropped'>;
   className?: string;
   style?: CSSProperties;
   /** Rendered after the canvas, inside the DiagramContext (toolbars, legends, palettes). */
@@ -88,6 +107,7 @@ const EVENT_PROPS = {
   modelChange: 'onModelChange',
   viewportChange: 'onViewportChange',
   connectRejected: 'onConnectRejected',
+  changeDropped: 'onChangeDropped',
 } as const satisfies Record<keyof DiagramEvents, keyof PipelineViewProps>;
 
 /**
@@ -122,12 +142,21 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
             ? portals.htmlRenderer(name)
             : undefined,
       });
+      const nodeRenderers: Record<string, NodeRendererSpec> = {};
+      for (const [type, entry] of Object.entries(p.nodeRenderers ?? {})) {
+        const render = portals.htmlRenderer(`node:${type}`);
+        nodeRenderers[type] = isComponent(entry) ? render : { render, sizing: entry.sizing };
+      }
+      const fit = p.fitOnLoad ?? true;
       const d = new Diagram({
         ...p.options,
+        initialViewport: p.initialViewport ?? p.options?.initialViewport,
+        fitOnLoad: fit === true ? 'if-no-viewport' : fit === false ? 'never' : fit,
         mode: p.mode,
         theme: p.theme,
         symbols: p.symbols,
         htmlRenderers,
+        nodeRenderers,
       });
       d.mount(host);
       // The editor follows setMode itself; it's idle in view mode.
@@ -154,7 +183,7 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
       };
     }, [portals]);
 
-    const { model, mode, theme, compareWith, issues, symbols, fitOnLoad = true } = props;
+    const { model, mode, theme, compareWith, issues, symbols } = props;
 
     useEffect(() => {
       if (!diagram || !model || model === loaded.current || model === lastEmitted.current) return;
@@ -167,9 +196,8 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
         diagram.patch(model);
         return;
       }
-      diagram.load(model);
-      if (fitOnLoad) diagram.zoomToFit();
-    }, [diagram, model, fitOnLoad]);
+      diagram.load(model); // the diagram fits on load per fitOnLoad, after content is measured
+    }, [diagram, model]);
 
     useEffect(() => {
       if (diagram && mode) diagram.setMode(mode);
@@ -200,9 +228,18 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
           className={props.className}
           style={{ position: 'relative', ...props.style }}
         />
-        {entries.map((e) => (
-          <PortalSlot key={e.key} entry={e} render={props.renderers?.[e.name]} />
-        ))}
+        {entries.map((e) =>
+          e.name.startsWith('node:') ? (
+            <NodeSlot
+              key={e.key}
+              entry={e}
+              diagram={diagram}
+              component={componentOf(props.nodeRenderers?.[e.name.slice(5)])}
+            />
+          ) : (
+            <PortalSlot key={e.key} entry={e} render={props.renderers?.[e.name]} />
+          ),
+        )}
         {props.children}
       </DiagramContext.Provider>
     );
@@ -213,6 +250,58 @@ const NO_ENTRIES: PortalEntry[] = [];
 const serverSnapshot = () => NO_ENTRIES;
 
 /** One overlay slot. Memoized on the entry object, which changes only when that slot's item changes. */
+/** Props of a React node renderer (FR-45). */
+export interface NodeRendererProps {
+  node: NodeModel;
+  data: DataRecord | undefined;
+  status?: string;
+  selected: boolean;
+  /** The node's ports, resolved for this instance. The library draws them; use them for layout hints. */
+  ports: PortDef[];
+}
+
+export type NodeRendererEntry =
+  | ComponentType<NodeRendererProps>
+  | { component: ComponentType<NodeRendererProps>; sizing?: 'fixed' | 'content' };
+
+const isComponent = (e: NodeRendererEntry): e is ComponentType<NodeRendererProps> =>
+  typeof e === 'function' || (typeof e === 'object' && e !== null && !('component' in e));
+const componentOf = (e: NodeRendererEntry | undefined) =>
+  e === undefined ? undefined : isComponent(e) ? e : e.component;
+
+const NO_SELECTION = () => () => {};
+
+/** One React node. Memoized on its entry, which changes only when that node's data or status changes. */
+const NodeSlot = memo(function NodeSlot({
+  entry,
+  diagram,
+  component: Component,
+}: {
+  entry: PortalEntry;
+  diagram: Diagram | null;
+  component: ComponentType<NodeRendererProps> | undefined;
+}) {
+  const id = entry.item.id;
+  const selected = useSyncExternalStore(
+    diagram ? (fn) => diagram.on('selectionChange', fn) : NO_SELECTION,
+    () => !!diagram?.getSelection().some((r) => r.kind === 'node' && r.id === id),
+    () => false,
+  );
+  const node = diagram?.store.nodes.get(id);
+  if (!Component || !node || !diagram) return null;
+  const ports = nodePorts(diagram.symbols.get(node.type), node);
+  return createPortal(
+    <Component
+      node={node}
+      data={entry.item.data}
+      status={entry.item.status}
+      selected={selected}
+      ports={ports}
+    />,
+    entry.el,
+  );
+});
+
 const PortalSlot = memo(function PortalSlot({
   entry,
   render,

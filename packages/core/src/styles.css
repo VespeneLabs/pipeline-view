@@ -290,6 +290,10 @@
   stroke-width: var(--pv-line-width);
   stroke-dasharray: var(--pv-line-signal-dash);
 }
+/* HTML node renderers (FR-45): the box is the node; the library still draws ports and selection. */
+.pv-overlay-item.pv-node-html {
+  box-sizing: border-box;
+}
 .pv-overlay-item {
   color: var(--pv-ink);
   font-family: var(--pv-font);
@@ -525,4 +529,56 @@
   stroke-width: 3px;
   stroke-linejoin: round;
   pointer-events: none;
+}
+
+/* ---- viewport controls (FR-47) ----------------------------------------- */
+
+.pv-viewport-controls {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius);
+  background: var(--pv-bg);
+  pointer-events: auto;
+}
+.pv-viewport-controls button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: calc(var(--pv-radius) - 2px);
+  background: transparent;
+  color: var(--pv-ink);
+  font: inherit;
+  cursor: pointer;
+}
+.pv-viewport-controls button:hover:not(:disabled) {
+  background: var(--pv-selection-bg);
+}
+.pv-viewport-controls button:focus-visible {
+  outline: 2px solid var(--pv-focus-ring);
+  outline-offset: -2px;
+}
+.pv-viewport-controls button:disabled {
+  color: var(--pv-muted);
+  cursor: default;
+}
+.pv-viewport-controls button[aria-pressed='true'] {
+  color: var(--pv-selection);
+}
+.pv-viewport-controls svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }

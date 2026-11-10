@@ -66,6 +66,8 @@ export class SvgRenderer {
   private readonly router: Router;
 
   private readonly dirtyNodes = new Set<string>();
+  /** Nodes whose size changed outside the model (measured HTML nodes). */
+  private readonly forceGeometry = new Set<string>();
   private readonly dataNodes = new Set<string>();
   private readonly reroute = new Set<string>();
   private readonly removedNodes = new Set<string>();
@@ -94,6 +96,13 @@ export class SvgRenderer {
     this.unsubscribe.push(
       i.on('load', () => this.markFull()),
       i.on('model', ({ diff }) => this.onModel(diff)),
+      i.on('geometry', ({ ids }) => {
+        for (const id of ids) {
+          this.dirtyNodes.add(id);
+          this.forceGeometry.add(id);
+        }
+        this.schedule();
+      }),
       i.on('data', ({ ids }) => {
         // Live data that changes a node's ports or size (FR-40) needs the structural path: redraw the
         // ports, update the routing obstacle and reroute attached links. Plain data ticks stay cheap.
@@ -198,6 +207,7 @@ export class SvgRenderer {
       const def = this.def(n);
       const geometryChanged =
         !prev ||
+        this.forceGeometry.has(id) ||
         prevPorts !== this.nodes.get(id)!.portSig ||
         !sameSize(nodeSize(def, prev), nodeSize(def, n)) ||
         prev.position !== n.position ||
@@ -215,6 +225,7 @@ export class SvgRenderer {
     this.removedLinks.clear();
     this.removedNodes.clear();
     this.dirtyNodes.clear();
+    this.forceGeometry.clear();
     this.reroute.clear();
     // Removing links alone must still refresh jumps and junction dots.
     if (ids.length || removed.length) this.routeLinks(ids, removed);

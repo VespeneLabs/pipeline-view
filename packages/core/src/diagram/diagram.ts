@@ -18,6 +18,7 @@ import {
   type LiveState,
 } from './changes';
 import { SymbolRegistry, globalSymbols } from '../symbols/registry';
+import { ViewRegistry } from '../symbols/view-registry';
 import { ViewportController } from '../viewport/controller';
 import {
   DEFAULT_MAX_ZOOM,
@@ -67,8 +68,8 @@ export interface InternalEvents {
   /** The DOM view was created (mount). Renderer layers attach here. */
   mount: { view: View };
   viewport: { viewport: Viewport };
-  /** An approved async change wasn't applied because the model changed while the hook was pending. */
-  changeDropped: { reason: 'stale' };
+  /** Node geometry changed outside the model (measured HTML node sizes): re-place and re-route. */
+  geometry: { ids: string[] };
 }
 
 const MAX_UNDO = 200;
@@ -81,6 +82,11 @@ export class Diagram implements DiagramApi {
   readonly store = new ModelStore();
   /** Instance registry layered over the global one (FR-7). */
   readonly symbols: SymbolRegistry;
+  /** Measured sizes of content-sized HTML nodes (FR-45). View state: never saved, never undone. */
+  private readonly measuredSizes = new Map<string, Size>();
+  private htmlTypesCache:
+    | { spec: DiagramOptions['nodeRenderers']; types: Record<string, 'fixed' | 'content'> }
+    | undefined;
   /** @internal */
   readonly internal = new Emitter<InternalEvents>();
 
@@ -129,13 +135,20 @@ export class Diagram implements DiagramApi {
   private resizeObserver: ResizeObserver | undefined;
   private animFrame = 0;
   private pendingFit: { padding?: number } | null = null;
+  /** A fit-on-load is wanted once the content (HTML/React included) has rendered and been measured. */
+  private fitWanted = false;
+  private fitFrame = 0;
+  /** A non-final viewport change happened since the last `final: true` event. */
+  private unsettled = false;
+  private viewportLocked = false;
 
   constructor(readonly options: DiagramOptions = {}) {
-    this.symbols = new SymbolRegistry(globalSymbols);
+    this.symbols = new ViewRegistry(globalSymbols, () => this.htmlNodeTypes(), this.measuredSizes);
     if (options.symbols?.length) this.symbols.register(...options.symbols);
     this.mode = options.mode ?? 'view';
     this.theme = options.theme ?? 'auto';
     this.minZoom = options.minZoom ?? DEFAULT_MIN_ZOOM;
+    if (options.initialViewport) this.viewport = { ...options.initialViewport };
     this.maxZoom = options.maxZoom ?? DEFAULT_MAX_ZOOM;
   }
 
@@ -160,6 +173,8 @@ export class Diagram implements DiagramApi {
       root: view.root,
       getViewport: () => this.getViewport(),
       applyViewport: (v) => this.applyViewport(v),
+      settle: () => this.applyViewport(this.viewport, true),
+      isLocked: () => this.viewportLocked,
       getMode: () => this.mode,
       minZoom: this.minZoom,
       maxZoom: this.maxZoom,
@@ -179,6 +194,38 @@ export class Diagram implements DiagramApi {
     this.issueLayer.set(this.issues);
     this.internal.emit('mount', { view });
     if (this.pendingFit) this.zoomToFit(this.pendingFit);
+    if (this.fitWanted) this.scheduleFit();
+  }
+
+  /**
+   * Fit-on-load (FR-47): waits two frames so HTML and React content has rendered and been measured,
+   * then fits. Any viewport change before that (user or host) cancels it.
+   */
+  private scheduleFit(): void {
+    this.fitWanted = true;
+    const win = this.view?.root.ownerDocument.defaultView;
+    if (!this.view || !win?.requestAnimationFrame) return; // mount() schedules it
+    if (this.fitFrame) win.cancelAnimationFrame(this.fitFrame);
+    this.fitFrame = win.requestAnimationFrame(() => {
+      this.fitFrame = win.requestAnimationFrame(() => {
+        this.fitFrame = 0;
+        if (!this.fitWanted || this.destroyed) return;
+        this.renderer?.flush();
+        this.overlay?.flush();
+        this.fitWanted = false;
+        this.zoomToFit();
+      });
+    });
+  }
+
+  /** Stops user pan and zoom (programmatic changes still apply), for example a locked dashboard (FR-47). */
+  lockViewport(locked: boolean): void {
+    this.viewportLocked = locked;
+    this.view?.root.toggleAttribute('data-viewport-locked', locked);
+  }
+
+  isViewportLocked(): boolean {
+    return this.viewportLocked;
   }
 
   private measure(): void {
@@ -213,6 +260,10 @@ export class Diagram implements DiagramApi {
     this.internal.emit('load', {});
     this.setSelection([]);
     this.markSaved();
+    const policy = this.options.fitOnLoad ?? 'if-no-viewport';
+    if (policy === 'always' || (policy === 'if-no-viewport' && !this.options.initialViewport)) {
+      this.scheduleFit();
+    }
   }
 
   toJSON(): DiagramModel {
@@ -253,7 +304,7 @@ export class Diagram implements DiagramApi {
     if (verdict !== false) {
       const at = this.epoch;
       void verdict.then((ok) => {
-        if (ok) this.replayIfUnchanged(at, () => apply(this.applyTracked(ops)));
+        if (ok) this.replayIfUnchanged(at, ops, () => apply(this.applyTracked(ops)));
       });
     }
   }
@@ -288,12 +339,12 @@ export class Diagram implements DiagramApi {
    * Re-applies a change whose async veto resolved true, but only if nothing changed meanwhile. The ops
    * were recorded against the earlier model: replaying them over newer edits could overwrite those edits
    * or reinsert items at stale positions. When the model moved (an edit, undo, load, or a gesture in
-   * progress), the change is dropped and the host is told through `changeDropped`.
+   * progress), the change is dropped and the public `changeDropped` event tells the host.
    */
-  private replayIfUnchanged(at: number, replay: () => void): void {
+  private replayIfUnchanged(at: number, ops: Op[], replay: () => void): void {
     if (this.destroyed) return;
     if (this.epoch !== at || this.previewOps) {
-      this.internal.emit('changeDropped', { reason: 'stale' });
+      this.events.emit('changeDropped', { reason: 'stale', diff: diffOf(ops) });
       return;
     }
     replay();
@@ -374,7 +425,7 @@ export class Diagram implements DiagramApi {
       const at = this.epoch;
       void verdict.then((ok) => {
         if (!ok) return;
-        this.replayIfUnchanged(at, () => {
+        this.replayIfUnchanged(at, ops, () => {
           const t = this.applyTracked(ops);
           this.pushUndo(ops, t);
           this.commit(ops, true, true, t);
@@ -592,26 +643,36 @@ export class Diagram implements DiagramApi {
     this.cancelAnimation();
     const win = this.view?.root.ownerDocument.defaultView;
     if (!opts.animate || !win?.requestAnimationFrame || prefersReducedMotion(win)) {
-      this.applyViewport(target);
+      this.applyViewport(target, true);
       return;
     }
     const from = this.getViewport();
     const start = win.performance.now();
     const step = (now: number) => {
       const t = Math.min(1, (now - start) / ANIMATION_MS);
-      this.applyViewport(t >= 1 ? target : lerpViewport(from, target, t));
+      this.applyViewport(t >= 1 ? target : lerpViewport(from, target, t), t >= 1);
       this.animFrame = t >= 1 ? 0 : win.requestAnimationFrame(step);
     };
     this.animFrame = win.requestAnimationFrame(step);
   }
 
-  /** @internal Sets the viewport now, with no clamping or animation (used by input). */
-  applyViewport(v: Viewport): void {
-    if (v.x === this.viewport.x && v.y === this.viewport.y && v.zoom === this.viewport.zoom) return;
-    this.viewport = { ...v };
-    if (this.view) applyViewportToView(this.view, v);
-    this.internal.emit('viewport', { viewport: this.getViewport() });
-    this.events.emit('viewportChange', { viewport: this.getViewport() });
+  /**
+   * @internal Sets the viewport now, with no clamping or animation (used by input). `final` marks the
+   * end of a gesture or animation (FR-47); a final call with an unchanged viewport still emits once to
+   * settle a gesture.
+   */
+  applyViewport(v: Viewport, final = false): void {
+    const changed =
+      v.x !== this.viewport.x || v.y !== this.viewport.y || v.zoom !== this.viewport.zoom;
+    if (!changed && !(final && this.unsettled)) return;
+    this.fitWanted = false; // someone positioned the view: don't jump to a fit later
+    if (changed) {
+      this.viewport = { ...v };
+      if (this.view) applyViewportToView(this.view, v);
+      this.internal.emit('viewport', { viewport: this.getViewport() });
+    }
+    this.unsettled = !final;
+    this.events.emit('viewportChange', { viewport: this.getViewport(), final });
   }
 
   private cancelAnimation(): void {
@@ -687,6 +748,33 @@ export class Diagram implements DiagramApi {
   exportPNG(opts?: { viewportOnly?: boolean; padding?: number; scale?: number }): Promise<Blob> {
     if (!this.view) return Promise.reject(new Error('exportPNG() needs a mounted diagram'));
     return exportPng(this, this.view, opts);
+  }
+
+  /** Node types rendered as HTML (FR-45) and their sizing. */
+  htmlNodeTypes(): Record<string, 'fixed' | 'content'> {
+    // Hot path (every symbol lookup goes through ViewRegistry): memoized on the option's identity.
+    const spec = this.options.nodeRenderers;
+    if (this.htmlTypesCache && this.htmlTypesCache.spec === spec) return this.htmlTypesCache.types;
+    const out: Record<string, 'fixed' | 'content'> = {};
+    for (const [type, spec] of Object.entries(this.options.nodeRenderers ?? {})) {
+      out[type] = typeof spec === 'function' ? 'fixed' : (spec.sizing ?? 'fixed');
+    }
+    this.htmlTypesCache = { spec, types: out };
+    return out;
+  }
+
+  /**
+   * @internal Reports the measured content size of an HTML node (FR-45). Bounds, ports and routes
+   * follow it. It's view state, so there's no modelChange and no undo step.
+   */
+  setMeasuredSize(id: string, size: Size | null): void {
+    const prev = this.measuredSizes.get(id);
+    if (size && prev && prev.width === size.width && prev.height === size.height) return;
+    if (!size && !prev) return;
+    if (size) this.measuredSizes.set(id, { width: size.width, height: size.height });
+    else this.measuredSizes.delete(id);
+    (this.symbols as ViewRegistry).refresh();
+    this.internal.emit('geometry', { ids: [id] });
   }
 
   /** Maps a DOM element (an event target) to the diagram item it belongs to, using the data-*-id attributes. */
@@ -850,6 +938,8 @@ export class Diagram implements DiagramApi {
     if (this.destroyed) return;
     this.destroyed = true;
     this.cancelAnimation();
+    if (this.fitFrame)
+      this.view?.root.ownerDocument.defaultView?.cancelAnimationFrame(this.fitFrame);
     this.keyboard?.destroy();
     this.diffLayer?.destroy();
     this.issueLayer?.destroy();

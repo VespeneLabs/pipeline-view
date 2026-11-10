@@ -127,8 +127,9 @@ export class KeyboardNavigation {
     else if (e.key === 'Home' || e.key === 'End') this.jumpEnd(e.key === 'End');
     else if (e.key === '+' || e.key === '=') this.zoomBy(ZOOM_STEP);
     else if (e.key === '-' || e.key === '_') this.zoomBy(1 / ZOOM_STEP);
-    else if (e.key === '0') d.zoomToFit({ animate: true });
-    else if (e.key === 'F8') d.nextIssue(e.shiftKey ? -1 : 1);
+    else if (e.key === '0') {
+      if (!d.isViewportLocked()) d.zoomToFit({ animate: true });
+    } else if (e.key === 'F8') d.nextIssue(e.shiftKey ? -1 : 1);
     else if (view && e.key === 'Enter' && this.focusedId) this.activate(this.focusedId);
     else if (view && e.key === 'Escape') d.setSelection([]);
     else handled = false;
@@ -183,6 +184,7 @@ export class KeyboardNavigation {
   }
 
   private zoomBy(factor: number): void {
+    if (this.diagram.isViewportLocked()) return;
     const v = this.diagram.getViewport();
     const r = this.view.root;
     const mid = { x: r.clientWidth / 2, y: r.clientHeight / 2 };
