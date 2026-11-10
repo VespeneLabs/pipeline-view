@@ -176,9 +176,13 @@ export interface DiagramOptions {
    * undo). An adapter: the host stores the entries.
    */
   history?: false | HistoryAdapter;
-  /** Asked before items are deleted in edit mode; resolve false to cancel (FR-43). */
+  /**
+   * Asked before items are deleted; resolve false to cancel (FR-43). While a returned Promise is pending,
+   * the change is rolled back. It's re-applied when the Promise resolves true, unless the model changed in
+   * the meantime: then the approved change is dropped rather than replayed over newer edits.
+   */
   onBeforeDelete?: (items: DeleteRequest) => boolean | Promise<boolean>;
-  /** Veto for any transaction, before it's committed (FR-43). */
+  /** Veto for any transaction, before it's committed (FR-43). Promises behave as for onBeforeDelete. */
   beforeChange?: (diff: ModelDiff, patch: ModelPatch) => boolean | Promise<boolean>;
   /** Viewport to start with (FR-47), for example one the host saved from `viewportChange` with `final`. */
   initialViewport?: Viewport;

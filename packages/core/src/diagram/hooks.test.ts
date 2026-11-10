@@ -88,6 +88,58 @@ describe('onBeforeDelete (FR-43)', () => {
   });
 });
 
+describe('async veto and concurrent edits', () => {
+  const deferred = () => {
+    let resolve!: (v: boolean) => void;
+    const promise = new Promise<boolean>((r) => (resolve = r));
+    return { promise, resolve };
+  };
+
+  it('drops an approved change if the model changed while the hook was pending', async () => {
+    const answer = deferred();
+    const { d } = setup({ onBeforeDelete: () => answer.promise });
+    const dropped = vi.fn();
+    d.internal.on('changeDropped', dropped);
+    d.update((tx) => tx.removeNode('a')); // pending: rolled back
+    d.update((tx) => tx.updateNode('a', { label: 'edited meanwhile' })); // a newer, unguarded-by-delete edit
+    answer.resolve(true);
+    await tick();
+    expect(d.store.nodes.has('a')).toBe(true);
+    expect(d.store.nodes.get('a')!.label).toBe('edited meanwhile');
+    expect(d.store.links.has('ab')).toBe(true);
+    expect(dropped).toHaveBeenCalledWith({ reason: 'stale' });
+  });
+
+  it('drops it after a load and while a gesture is in progress', async () => {
+    const a = deferred();
+    const { d } = setup({ onBeforeDelete: () => a.promise });
+    d.update((tx) => tx.removeLink('ab'));
+    d.load(model());
+    a.resolve(true);
+    await tick();
+    expect(d.store.links.has('ab')).toBe(true);
+
+    const b = deferred();
+    const { d: d2 } = setup({ onBeforeDelete: () => b.promise });
+    d2.update((tx) => tx.removeLink('ab'));
+    d2.preview((tx) => tx.updateNode('c', { position: { x: 401, y: 0 } }));
+    b.resolve(true);
+    await tick();
+    expect(d2.store.links.has('ab')).toBe(true);
+    d2.cancelPreview();
+  });
+
+  it('still applies when nothing changed meanwhile (live data ticks do not count)', async () => {
+    const answer = deferred();
+    const { d } = setup({ onBeforeDelete: () => answer.promise });
+    d.update((tx) => tx.removeLink('ab'));
+    d.setNodeData('a', { pressure: 3 });
+    answer.resolve(true);
+    await tick();
+    expect(d.store.links.has('ab')).toBe(false);
+  });
+});
+
 describe('beforeChange (FR-43)', () => {
   it('vetoes any transaction and receives diff + patch', () => {
     const beforeChange = vi.fn(() => false);
