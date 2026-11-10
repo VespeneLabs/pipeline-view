@@ -182,3 +182,97 @@ pre {
     padding: 24px 16px;
   }
 }
+
+.prose {
+  max-width: 860px;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.prose h2 {
+  margin: 36px 0 10px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.prose a {
+  color: var(--docs-accent);
+}
+
+.prose :not(pre) > code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--docs-code-bg);
+}
+
+.code {
+  position: relative;
+}
+
+.code-copy {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 3px 8px;
+  border: 1px solid var(--pv-border);
+  border-radius: 5px;
+  background: var(--pv-bg);
+  color: var(--pv-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.token-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.token-table th,
+.token-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--pv-border);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 8px;
+  border: 1px solid var(--pv-border);
+  border-radius: 3px;
+  vertical-align: -2px;
+}
+
+.example-row {
+  display: grid;
+  grid-template-columns: minmax(0, 260px);
+  margin: 16px 0;
+}
+
+.api-list {
+  margin: 0;
+}
+
+.api-list > div {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--pv-border);
+}
+
+.api-list dt code {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.api-list dd {
+  margin: 4px 0 0;
+  color: var(--pv-muted);
+  font-size: 14px;
+}

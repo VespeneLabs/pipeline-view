@@ -25,7 +25,7 @@ const SECTIONS = [
 
 const all = [...gasSymbols, ...processSymbols];
 
-function SymbolCard({ def, showPorts }: { def: SymbolDef; showPorts: boolean }) {
+export function SymbolCard({ def, showPorts }: { def: SymbolDef; showPorts: boolean }) {
   const { width, height } = def.size;
   return (
     <figure className="symbol-card" data-type={def.type}>
@@ -41,7 +41,7 @@ function SymbolCard({ def, showPorts }: { def: SymbolDef; showPorts: boolean }) 
         aria-label={def.name}
       >
         {/* Trusted markup from @pipeline-view/symbols. */}
-        <g dangerouslySetInnerHTML={{ __html: def.svg ?? '' }} />
+        <g dangerouslySetInnerHTML={{ __html: def.svg ?? def.render?.({ data: {} }) ?? '' }} />
         {showPorts &&
           def.ports.map((p) => (
             <circle key={p.id} className="symbol-port" cx={p.position.x} cy={p.position.y} r={3.5}>
