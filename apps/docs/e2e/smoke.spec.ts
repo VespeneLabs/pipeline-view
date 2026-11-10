@@ -12,6 +12,7 @@ const ROUTES = [
   'editor',
   'controlled',
   'review',
+  'react-nodes',
   'stress',
   'api',
   'gallery',
