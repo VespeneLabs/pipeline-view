@@ -272,8 +272,8 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
         doc: 'Placement mode for keyboard and touch users: a preview starts at the centre of the view and follows the pointer, canDrop marks a refused spot (data-refused with the reason), a click or tap places it, arrow keys nudge it, Enter places and Esc cancels.',
       },
       {
-        sig: 'connect(from, to, kind?) → { ok: true, id } | { ok: false, code, reason, detail? }',
-        doc: 'Connects two ports headlessly with every rule applied (roles, limits, direction, graph rules, canConnect), as one undo step. The link is stored in flow order.',
+        sig: "connect(from, to, kind = 'process') → { ok: true, id } | { ok: false, code, reason, detail? }",
+        doc: 'Connects two ports headlessly with every rule applied (roles, limits, direction, graph rules, canConnect), as one undo step. The link is stored in flow order. A refusal also carries from / to in flow order, plus dragFrom / dragTo when your argument order differed.',
       },
     ],
   },
