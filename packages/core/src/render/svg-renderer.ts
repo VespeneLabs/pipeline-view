@@ -216,6 +216,9 @@ export class SvgRenderer {
     if (!el) {
       const g = this.svg('g', { class: 'pv-node' }) as SVGGElement;
       g.dataset.nodeId = n.id;
+      // Roving tabindex: render/a11y.ts gives the focused node tabindex 0.
+      g.setAttribute('role', 'button');
+      g.setAttribute('tabindex', '-1');
       const body = this.svg('g', { class: 'pv-node-body' }) as SVGGElement;
       const symbol = this.svg('g', { class: 'pv-symbol' }) as SVGGElement;
       body.append(symbol);
@@ -233,16 +236,27 @@ export class SvgRenderer {
     el.g.dataset.type = n.type;
     el.body.setAttribute('transform', nodeTransform(n, def));
     this.setStatus(el.g, n.status);
+    this.setAriaLabel(el.g, n, def);
     this.renderSymbol(el, n, def);
     this.renderLabel(el, n, def);
+  }
+
+  /** "P-101, Centrifugal pump, alarm": label (or id), symbol name, then status (NFR-4). */
+  private setAriaLabel(g: Element, n: NodeModel, def: SymbolDef | undefined): void {
+    const parts = [n.label || n.id, def?.name ?? n.type];
+    if (n.status) parts.push(n.status);
+    const text = parts.join(', ');
+    if (g.getAttribute('aria-label') !== text) g.setAttribute('aria-label', text);
   }
 
   private renderNodeData(id: string): void {
     const el = this.nodes.get(id);
     const n = this.diagram.store.nodes.get(id);
     if (!el || !n || el.node === n) return;
+    const statusChanged = el.node.status !== n.status;
     el.node = n;
     this.setStatus(el.g, n.status);
+    if (statusChanged) this.setAriaLabel(el.g, n, this.def(n));
     this.renderSymbol(el, n, this.def(n));
   }
 
