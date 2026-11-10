@@ -66,6 +66,7 @@ describe('mount', () => {
       'pv-junctions',
       'pv-layer-nodes',
       'pv-layer-annotations',
+      'pv-layer-issues',
       'pv-layer-interaction',
     ]);
     expect(root.querySelector('.pv-overlay')).not.toBeNull();
