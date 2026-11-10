@@ -56,6 +56,8 @@ export interface InternalEvents {
   /** The DOM view was created (mount). Renderer layers attach here. */
   mount: { view: View };
   viewport: { viewport: Viewport };
+  /** An approved async change wasn't applied because the model changed while the hook was pending. */
+  changeDropped: { reason: 'stale' };
 }
 
 const MAX_UNDO = 200;
@@ -83,6 +85,11 @@ export class Diagram implements DiagramApi {
   /** Live-data keys per node (setNodeData), excluded from patch() and isDirty(). */
   private readonly live = new Map<string, LiveState>();
   private revision = 0;
+  /**
+   * Bumped by every applied change (commits, previews, loads). An async veto replays its ops only if
+   * this is unchanged when the hook resolves (see replayIfUnchanged).
+   */
+  private epoch = 0;
   private savedRevision = 0;
   private savedDocument = '';
   private destroyed = false;
@@ -181,6 +188,7 @@ export class Diagram implements DiagramApi {
   load(model: DiagramModel): void {
     this.assertAlive();
     this.store.load(model);
+    this.epoch++;
     this.previewOps = null;
     this.previewTracker = null;
     this.undoStack = [];
@@ -222,8 +230,9 @@ export class Diagram implements DiagramApi {
     // Vetoed (or pending): nothing was emitted yet, so a silent revert is enough.
     this.revertSilently(ops);
     if (verdict !== false) {
+      const at = this.epoch;
       void verdict.then((ok) => {
-        if (ok && !this.destroyed) apply(this.applyTracked(ops));
+        if (ok) this.replayIfUnchanged(at, () => apply(this.applyTracked(ops)));
       });
     }
   }
@@ -252,6 +261,21 @@ export class Diagram implements DiagramApi {
     if (!settle(first)) return false;
     const v = second();
     return v instanceof Promise ? v.then(settle, () => false) : settle(v);
+  }
+
+  /**
+   * Re-applies a change whose async veto resolved true, but only if nothing changed meanwhile. The ops
+   * were recorded against the earlier model: replaying them over newer edits could overwrite those edits
+   * or reinsert items at stale positions. When the model moved (an edit, undo, load, or a gesture in
+   * progress), the change is dropped and the host is told through `changeDropped`.
+   */
+  private replayIfUnchanged(at: number, replay: () => void): void {
+    if (this.destroyed) return;
+    if (this.epoch !== at || this.previewOps) {
+      this.internal.emit('changeDropped', { reason: 'stale' });
+      return;
+    }
+    replay();
   }
 
   private revertSilently(ops: Op[]): void {
@@ -326,11 +350,14 @@ export class Diagram implements DiagramApi {
     for (const op of inverse) applyOp(this.store, op);
     this.commit(inverse, false);
     if (verdict !== false) {
+      const at = this.epoch;
       void verdict.then((ok) => {
-        if (!ok || this.destroyed) return;
-        const t = this.applyTracked(ops);
-        this.pushUndo(ops, t);
-        this.commit(ops, true, true, t);
+        if (!ok) return;
+        this.replayIfUnchanged(at, () => {
+          const t = this.applyTracked(ops);
+          this.pushUndo(ops, t);
+          this.commit(ops, true, true, t);
+        });
       });
     }
   }
@@ -444,6 +471,7 @@ export class Diagram implements DiagramApi {
   private commit(ops: Op[], pub = true, internal = true, tracker?: ChangeTracker): void {
     const diff = diffOf(ops);
     if (isEmptyDiff(diff)) return;
+    this.epoch++;
     if (pub) this.revision++;
     this.pruneSelection(diff);
     if (internal) this.internal.emit('model', { diff });
