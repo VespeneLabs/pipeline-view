@@ -17,7 +17,7 @@ export class SymbolRegistry {
         if (ids.has(p.id)) throw new Error(`Symbol "${def.type}" has duplicate port id "${p.id}"`);
         ids.add(p.id);
       }
-      this.defs.set(def.type, def as SymbolDef);
+      this.defs.set(def.type, def);
     }
   }
 
