@@ -35,7 +35,7 @@ interface Item {
   leader?: SVGPathElement;
   /** Node renderer (FR-45); otherwise the item renders through htmlRenderers[rendererName]. */
   render?: HtmlRenderer;
-  /** Measures content-sized node renderers. */
+  /** Measures content-sized node renderers and HTML annotations. */
   resize?: ResizeObserver;
 }
 
@@ -232,6 +232,18 @@ export class OverlayRenderer {
     item.resize.observe(item.el as HTMLElement);
   }
 
+  /** A content-sized annotation re-places itself (leader, bounds) whenever its content resizes. */
+  private observeAnnotation(item: Item, key: string): void {
+    const RO = this.view.root.ownerDocument.defaultView?.ResizeObserver;
+    if (!RO) return;
+    item.resize = new RO(() => {
+      this.dirty.add(key);
+      this.structural.add(key);
+      this.schedule();
+    });
+    item.resize.observe(item.el as HTMLElement);
+  }
+
   /** Reports the content's layout size (diagram units: the overlay's scale isn't in offsetWidth). */
   private measure(item: Item): void {
     const el = item.el as HTMLElement;
@@ -301,7 +313,19 @@ export class OverlayRenderer {
     } else {
       item ??= this.createHtmlItem(key, 'annotation', id, a.renderer);
       const el = item.el as HTMLElement;
-      this.place(el, pos, a.size);
+      const contentSized = a.sizing === 'content';
+      this.place(el, pos, contentSized ? undefined : a.size);
+      if (contentSized) {
+        el.style.width = el.style.height = '';
+        el.style.minWidth = a.size ? `${a.size.width}px` : '';
+        el.style.minHeight = a.size ? `${a.size.height}px` : '';
+        if (!item.resize) this.observeAnnotation(item, key);
+      } else if (item.resize) {
+        item.resize.disconnect();
+        item.resize = undefined;
+        el.style.minWidth = el.style.minHeight = '';
+        this.diagram.setAnnotationSize(id, null);
+      }
       if (item.source !== a || item.anchorSource !== anchor) {
         item.source = a;
         item.anchorSource = anchor;
@@ -310,9 +334,11 @@ export class OverlayRenderer {
       }
       box = {
         ...pos,
-        width: a.size?.width ?? el.offsetWidth ?? 0,
-        height: a.size?.height ?? el.offsetHeight ?? 0,
+        width: (!contentSized && a.size?.width) || el.offsetWidth || 0,
+        height: (!contentSized && a.size?.height) || el.offsetHeight || 0,
       };
+      if (contentSized)
+        this.diagram.setAnnotationSize(id, { width: box.width, height: box.height });
     }
     item.anchorPos = anchor?.position;
     item.anchorStatus = anchor?.status;
@@ -457,8 +483,9 @@ export class OverlayRenderer {
     }
     if (item.resize) {
       item.resize.disconnect();
+      if (item.kind === 'annotation') this.diagram.setAnnotationSize(item.id, null);
       // Drop the measurement unless the node is merely re-mounting under another renderer.
-      if (!this.diagram.store.nodes.has(item.id)) this.diagram.setMeasuredSize(item.id, null);
+      else if (!this.diagram.store.nodes.has(item.id)) this.diagram.setMeasuredSize(item.id, null);
     }
     try {
       if (typeof item.cleanup === 'function') item.cleanup();

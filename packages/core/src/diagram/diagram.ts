@@ -93,6 +93,8 @@ export class Diagram implements DiagramApi {
   readonly symbols: SymbolRegistry;
   /** Measured sizes of content-sized HTML nodes (FR-45). View state: never saved, never undone. */
   private readonly measuredSizes = new Map<string, Size>();
+  /** Measured boxes of content-sized HTML annotations, by annotation id. */
+  private readonly annotationSizes = new Map<string, Size>();
   private htmlTypesCache:
     | { spec: DiagramOptions['nodeRenderers']; types: Record<string, 'fixed' | 'content'> }
     | undefined;
@@ -832,6 +834,12 @@ export class Diagram implements DiagramApi {
    * @internal Reports the measured content size of an HTML node (FR-45). Bounds, ports and routes
    * follow it. It's view state, so there's no modelChange and no undo step.
    */
+  /** @internal The overlay reports the measured box of a content-sized HTML annotation. */
+  setAnnotationSize(id: string, size: Size | null): void {
+    if (size) this.annotationSizes.set(id, size);
+    else this.annotationSizes.delete(id);
+  }
+
   setMeasuredSize(id: string, size: Size | null): void {
     const prev = this.measuredSizes.get(id);
     if (size && prev && prev.width === size.width && prev.height === size.height) return;
@@ -885,7 +893,7 @@ export class Diagram implements DiagramApi {
     const anchor = a.anchor && this.store.nodes.get(a.anchor.node);
     const x = a.position.x + (anchor?.position.x ?? 0);
     const y = a.position.y + (anchor?.position.y ?? 0);
-    const size = a.kind === 'html' ? a.size : undefined;
+    const size = a.kind === 'html' ? (this.annotationSizes.get(a.id) ?? a.size) : undefined;
     return { x, y, width: size?.width ?? 0, height: size?.height ?? 0 };
   }
 
