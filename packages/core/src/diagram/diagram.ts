@@ -778,8 +778,18 @@ export class Diagram implements DiagramApi {
    * it and Esc cancels. Needs edit mode and a mounted diagram.
    */
   startPlacement(type: string, init: Partial<NodeModel> = {}): void {
+    if (!this.internal.has('placement')) {
+      // No editor is listening (view mode, or not mounted yet): say so once instead of failing silently.
+      if (!this.warnedPlacement) {
+        this.warnedPlacement = true;
+        console.warn('[pipeline-view] startPlacement() needs a mounted diagram in edit mode.');
+      }
+      return;
+    }
     this.internal.emit('placement', { type, init });
   }
+
+  private warnedPlacement = false;
 
   /**
    * Connects two ports, applying every rule (roles, limits, direction, graph rules, `canConnect`), as

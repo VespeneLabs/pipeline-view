@@ -155,6 +155,34 @@ describe('startPlacement (FR-50)', () => {
   });
 });
 
+describe('placement and host drops: follow-ups', () => {
+  it('snaps host drops to the grid when snapping is on', () => {
+    setup({ grid: { size: 10, snap: true, visible: false } });
+    const MIME = 'application/x-host-symbol';
+    d.acceptDrop({
+      mimeType: MIME,
+      toNode: (_dt, p) => ({ id: 'h', type: 'test/valve', position: p }),
+    });
+    const e = new Event('drop', { bubbles: true, cancelable: true });
+    Object.assign(e, {
+      clientX: 123,
+      clientY: 47,
+      dataTransfer: { types: [MIME], getData: () => '' },
+    });
+    root().dispatchEvent(e);
+    expect(d.store.nodes.get('h')!.position).toEqual({ x: 120, y: 50 });
+  });
+
+  it('warns once when startPlacement has no editor to run in', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const h = new Diagram({ symbols: [valve] });
+    h.startPlacement('test/valve');
+    h.startPlacement('test/valve');
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
+  });
+});
+
 describe('diagram.connect (FR-54)', () => {
   it('validates and connects headlessly, in flow order, as one undo step', () => {
     const h = new Diagram({ symbols: [valve], noSelfLoops: true });

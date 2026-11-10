@@ -768,6 +768,8 @@ export class EditorController {
     const step = (d: number) => {
       if (!list.length) return;
       kb.index = (kb.index + d + list.length) % list.length;
+      // A culled (off-screen) node has no visible port: show it (FR-55).
+      this.diagram.culling?.reveal(list[kb.index]!.node);
       this.announce(`${this.describePort(list[kb.index]!)}, ${kb.index + 1} of ${list.length}.`);
     };
     switch (e.key) {
