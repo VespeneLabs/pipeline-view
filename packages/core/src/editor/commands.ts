@@ -9,8 +9,7 @@ import type { ConnectResult, ItemRef, Transaction } from '../diagram/types';
 import {
   type ConnectCheck,
   type ConnectIndexes,
-  linkedPairs,
-  portLinkCounts,
+  connectIndexes,
   validateConnect,
 } from '../diagram/validate';
 import type { AnnotationModel, LinkEnd, LinkModel, NodeModel, Point, Rect } from '../model/types';
@@ -403,7 +402,7 @@ export class EditorCommands {
 
   /** Indexes for checking many candidates during one gesture (see `checkConnect`). */
   connectIndexes(): ConnectIndexes {
-    return { counts: portLinkCounts(this.diagram), pairs: linkedPairs(this.diagram) };
+    return connectIndexes(this.diagram);
   }
 
   /** Every port a link of `kind` starting at `from` may connect to (for highlighting). */

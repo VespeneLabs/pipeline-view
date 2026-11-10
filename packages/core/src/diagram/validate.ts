@@ -7,11 +7,22 @@ import type { PortDef } from '../symbols/types';
 import { findPort } from '../symbols/resolve';
 import type { Diagram } from './diagram';
 import type { RefusalCode, RefusalContext, ValidationResult } from './types';
+import { type Graph, buildGraph, flowPathIn } from '../graph/graph';
 
 export type ConnectCheck =
   /** Allowed. `from` / `to` are in flow order (outlet → inlet), which may swap the arguments. */
   | { ok: true; from: LinkEnd; to: LinkEnd }
-  | { ok: false; code: RefusalCode; reason: string; detail?: Record<string, unknown> };
+  | {
+      ok: false;
+      code: RefusalCode;
+      reason: string;
+      detail?: Record<string, unknown>;
+      /** The ends in flow order (and as dragged, when different), as in RefusalContext. */
+      from?: LinkEnd;
+      to?: LinkEnd;
+      dragFrom?: LinkEnd;
+      dragTo?: LinkEnd;
+    };
 
 /** Default English messages for the built-in codes. Hosts replace them with `refusalMessages`. */
 const DEFAULT_REASONS: Record<string, (ctx: RefusalContext) => string> = {
@@ -63,13 +74,43 @@ export function linkedPairs(diagram: Diagram): Set<string> {
 export interface ConnectIndexes {
   counts?: Map<string, number>;
   pairs?: Set<string>;
+  /** Links per unordered node pair, for `maxLinksBetweenNodes`. */
+  between?: Map<string, number>;
+  /** Flow graph of the `noCycles` kinds, for the cycle check. */
+  graph?: Graph;
+}
+
+/** Number of links per unordered node pair (any ports, any direction). */
+export function linksBetweenNodes(diagram: Diagram): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const l of diagram.store.links.values()) {
+    const k = nodePairKey(l.from.node, l.to.node);
+    m.set(k, (m.get(k) ?? 0) + 1);
+  }
+  return m;
+}
+
+const nodePairKey = (a: string, b: string) => (a < b ? `${a}\u0000${b}` : `${b}\u0000${a}`);
+
+/** The kinds `noCycles` applies to, or null when it's off. An empty list means every kind. */
+function cycleKinds(diagram: Diagram): LinkKind[] | null {
+  const n = diagram.options.noCycles;
+  if (!n) return null;
+  return n === true ? [] : (n.kinds ?? []);
 }
 
 /**
  * Validates a connection between two ports. Built-in checks run first (unless
  * `canConnectOrder: 'before-builtins'`), in this order: missing port, same port, self-loop, kind,
- * direction, port full (from, then to), duplicate. Then the host's `canConnect`. The first refusal wins.
+ * direction, port full (from, then to), duplicate, links between nodes, cycle. Then the host's
+ * `canConnect`. The first refusal wins.
  * Pass prebuilt `indexes` when checking many candidates during one gesture.
+ *
+ * Notes on the order: `maxLinksBetweenNodes` counts links between the two nodes in BOTH directions and
+ * runs before the cycle check, so with `maxLinksBetweenNodes: 1` a reverse link B→A next to an existing
+ * A→B reports `max-links-between-nodes`, not `cycle`. Refusal contexts (`refusalMessages`,
+ * `connectRejected`, the returned `from` / `to`) are always in flow order; `dragFrom` / `dragTo` give the
+ * drag order when it differs.
  */
 export function validateConnect(
   diagram: Diagram,
@@ -83,17 +124,17 @@ export function validateConnect(
   const b = diagram.store.nodes.get(to.node);
   const pa = a && findPort(diagram.symbols.get(a.type), a, from.port);
   const pb = b && findPort(diagram.symbols.get(b.type), b, to.port);
-  const refuse = (code: RefusalCode, detail?: Record<string, unknown>, reason?: string) =>
-    refusal(diagram, code, { from, to, kind, ...(detail ? { detail } : {}) }, reason);
-
   // Flow order (outlet → inlet): an inlet can start the drag, or the drag can end on an outlet, but the
-  // link, the checks below and the host hook all see source → target.
+  // link, the checks below, the host hook and every refusal context all see source → target.
   const swap =
     !!pa &&
     !!pb &&
     ((role(pa) === 'in' && role(pb) !== 'in') || (role(pb) === 'out' && role(pa) !== 'out'));
   const src = swap ? to : from;
   const dst = swap ? from : to;
+  const ends = { from: src, to: dst, ...(swap ? { dragFrom: from, dragTo: to } : {}) };
+  const refuse = (code: RefusalCode, detail?: Record<string, unknown>, reason?: string) =>
+    refusal(diagram, code, { ...ends, kind, ...(detail ? { detail } : {}) }, reason);
   // Read only after the missing-port check below.
   const ps = (swap ? pb : pa)!;
   const pd = (swap ? pa : pb)!;
@@ -103,7 +144,7 @@ export function validateConnect(
     const na = swap ? b : a;
     const nb = swap ? a : b;
     const r = opts.canConnect({ node: na, port: src.port }, { node: nb, port: dst.port }, kind);
-    return fromValidation(diagram, r, { from: src, to: dst, kind });
+    return fromValidation(diagram, r, { ...ends, kind });
   };
 
   if (opts.canConnectOrder === 'before-builtins') {
@@ -146,6 +187,22 @@ export function validateConnect(
   const pairs = indexes.pairs ?? linkedPairs(diagram);
   if (pairs.has(`${portKey(src)}\u0001${portKey(dst)}`)) return refuse('duplicate');
 
+  // Whole-graph rules (FR-49).
+  const maxBetween = opts.maxLinksBetweenNodes;
+  if (maxBetween !== undefined) {
+    const between = indexes.between ?? linksBetweenNodes(diagram);
+    if ((between.get(nodePairKey(src.node, dst.node)) ?? 0) >= maxBetween) {
+      return refuse('max-links-between-nodes', { nodes: [src.node, dst.node], max: maxBetween });
+    }
+  }
+  const kinds = cycleKinds(diagram);
+  if (kinds && (kinds.length === 0 || kinds.includes(kind))) {
+    const graph = indexes.graph ?? buildGraph(diagram, kinds.length ? { kinds } : {});
+    // The new link dst ← src closes a loop if dst already reaches src along the flow.
+    const path = flowPathIn(graph, dst.node, src.node);
+    if (path) return refuse('cycle', { cycleNodes: path });
+  }
+
   if (opts.canConnectOrder !== 'before-builtins') {
     const h = runHook();
     if (h && !h.ok) return h;
@@ -165,7 +222,15 @@ export function refusal(
     fallbackReason ??
     DEFAULT_REASONS[code]?.(ctx) ??
     DEFAULT_REASONS.refused!(ctx);
-  return { ok: false, code, reason, ...(ctx.detail ? { detail: ctx.detail } : {}) };
+  return {
+    ok: false,
+    code,
+    reason,
+    ...(ctx.detail ? { detail: ctx.detail } : {}),
+    from: ctx.from,
+    to: ctx.to,
+    ...(ctx.dragFrom ? { dragFrom: ctx.dragFrom, dragTo: ctx.dragTo } : {}),
+  };
 }
 
 /** Turns a host hook result into a check: `true` allows, anything else refuses with a code. */
@@ -187,4 +252,17 @@ export function fromValidation(
 /** Resolves a node's port for callers that only have ids. */
 export function portOf(diagram: Diagram, node: NodeModel, port: string): PortDef | undefined {
   return findPort(diagram.symbols.get(node.type), node, port);
+}
+
+/** Every index `validateConnect` uses, built once for a gesture that checks many candidates. */
+export function connectIndexes(diagram: Diagram): ConnectIndexes {
+  const kinds = cycleKinds(diagram);
+  return {
+    counts: portLinkCounts(diagram),
+    pairs: linkedPairs(diagram),
+    ...(diagram.options.maxLinksBetweenNodes !== undefined
+      ? { between: linksBetweenNodes(diagram) }
+      : {}),
+    ...(kinds ? { graph: buildGraph(diagram, kinds.length ? { kinds } : {}) } : {}),
+  };
 }

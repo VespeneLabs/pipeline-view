@@ -5,11 +5,14 @@ import { PidEditor } from './demos/editor/Editor';
 import { StressTest } from './demos/stress/StressTest';
 import { ControlledDemo } from './demos/controlled/Controlled';
 import { ReviewDemo } from './demos/review/Review';
+import { ReactNodesDemo } from './demos/react-nodes/ReactNodes';
 import { ApiReference } from './pages/ApiReference';
 import { CustomSymbols } from './pages/CustomSymbols';
 import { Gallery } from './pages/Gallery';
 import { GettingStarted } from './pages/GettingStarted';
 import { Theming } from './pages/Theming';
+import { Testing } from './pages/Testing';
+import { ControlledGuide } from './pages/ControlledGuide';
 import { useRoute } from './router';
 import { applyTheme, initialTheme, type Theme } from './theme';
 import '@fontsource-variable/inter';
@@ -27,10 +30,18 @@ const PAGES: Page[] = [
   { path: 'getting-started', title: 'Getting started', group: 'Guides', component: GettingStarted },
   { path: 'theming', title: 'Theming', group: 'Guides', component: Theming },
   { path: 'custom-symbols', title: 'Custom symbols', group: 'Guides', component: CustomSymbols },
+  {
+    path: 'controlled-guide',
+    title: 'Controlled mode with Zustand',
+    group: 'Guides',
+    component: ControlledGuide,
+  },
+  { path: 'testing', title: 'Testing', group: 'Guides', component: Testing },
   { path: 'monitor', title: 'Process monitor', group: 'Demos', component: ProcessMonitor },
   { path: 'editor', title: 'P&ID editor', group: 'Demos', component: PidEditor },
   { path: 'controlled', title: 'Controlled mode', group: 'Demos', component: ControlledDemo },
   { path: 'review', title: 'Validation & compare', group: 'Demos', component: ReviewDemo },
+  { path: 'react-nodes', title: 'React nodes', group: 'Demos', component: ReactNodesDemo },
   { path: 'stress', title: 'Stress test', group: 'Demos', component: StressTest },
   { path: 'api', title: 'API reference', group: 'Reference', component: ApiReference },
   { path: 'gallery', title: 'Symbol gallery', group: 'Reference', component: Gallery },
