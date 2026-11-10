@@ -107,7 +107,6 @@ export function applyViewportToView(view: View, v: Viewport): void {
   const y = Math.round(v.y * 100) / 100;
   view.scene.setAttribute('transform', `translate(${x},${y}) scale(${v.zoom})`);
   view.overlay.style.transform = `translate(${x}px,${y}px) scale(${v.zoom})`;
-  view.root.style.setProperty('--pv-zoom', String(v.zoom));
   if (view.grid) {
     const step = view.grid.size * v.zoom;
     const g = view.grid;
