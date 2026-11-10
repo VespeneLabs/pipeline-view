@@ -3,6 +3,23 @@
   "version": "0.0.0",
   "description": "Framework-agnostic engine for interactive P&ID / process diagrams",
   "license": "MIT",
+  "author": "VespeneLabs",
+  "keywords": [
+    "diagram",
+    "p&id",
+    "pid",
+    "scada",
+    "process",
+    "hmi",
+    "svg",
+    "orthogonal-routing",
+    "monitoring",
+    "editor"
+  ],
+  "homepage": "https://github.com/VespeneLabs/pipeline-view/tree/main/packages/core#readme",
+  "bugs": {
+    "url": "https://github.com/VespeneLabs/pipeline-view/issues"
+  },
   "type": "module",
   "sideEffects": [
     "**/*.css"
@@ -31,5 +48,11 @@
   },
   "devDependencies": {
     "fast-check": "^4.10.2"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

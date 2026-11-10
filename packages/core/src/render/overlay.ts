@@ -11,6 +11,7 @@ import type { AnnotationModel, DataRecord, NodeModel, Point, Rect } from '../mod
 import type { HtmlRenderer, ModelDiff } from '../diagram/types';
 import type { Diagram } from '../diagram/diagram';
 import type { View } from '../viewport/view';
+import { FrameTask } from './frame';
 import { nodeBounds } from '../diagram/geometry';
 import { leaderPoints, linkPath } from './paths';
 import { createRouter } from '../routing/router';
@@ -43,7 +44,10 @@ export class OverlayRenderer {
   /** Keys dirtied by structural changes (move, rotate, flip, type, edits). They never take the data-tick shortcut. */
   private readonly structural = new Set<string>();
   private full = true;
-  private frame = 0;
+  private readonly frame = new FrameTask(
+    () => this.view.root.ownerDocument.defaultView,
+    () => this.flush(),
+  );
   private readonly unsubscribe: (() => void)[] = [];
   private readonly warned = new Set<string>();
   /** node id -> ids of annotations anchored to it, so a data tick touches only its own cards. */
@@ -113,18 +117,11 @@ export class OverlayRenderer {
   }
 
   private schedule(): void {
-    if (this.frame) return;
-    const win = this.view.root.ownerDocument.defaultView;
-    if (win?.requestAnimationFrame) this.frame = win.requestAnimationFrame(() => this.flush());
-    else this.frame = setTimeout(() => this.flush(), 0) as unknown as number;
+    this.frame.schedule();
   }
 
   flush(): void {
-    if (this.frame) {
-      this.view.root.ownerDocument.defaultView?.cancelAnimationFrame?.(this.frame);
-      clearTimeout(this.frame);
-      this.frame = 0;
-    }
+    this.frame.cancel();
     const store = this.diagram.store;
     if (this.full) {
       this.full = false;
@@ -274,7 +271,14 @@ export class OverlayRenderer {
         x: p.x + anchor.position.x,
         y: p.y + anchor.position.y,
       }));
-      return [edgeToward(card, wps[0]!), ...wps, edgeToward(node, wps.at(-1)!)];
+      const last = wps.at(-1)!;
+      // A final waypoint on or inside the node already marks where the leader meets it (e.g. a vessel shell).
+      const inside =
+        last.x >= node.x &&
+        last.x <= node.x + node.width &&
+        last.y >= node.y &&
+        last.y <= node.y + node.height;
+      return [edgeToward(card, wps[0]!), ...wps, ...(inside ? [] : [edgeToward(node, last)])];
     }
     const direct = leaderPoints(card, node);
     if (direct.length < 2) return direct;
@@ -381,10 +385,7 @@ export class OverlayRenderer {
 
   destroy(): void {
     for (const u of this.unsubscribe) u();
-    if (this.frame) {
-      this.view.root.ownerDocument.defaultView?.cancelAnimationFrame?.(this.frame);
-      clearTimeout(this.frame);
-    }
+    this.frame.cancel();
     for (const key of [...this.items.keys()]) this.remove(key);
   }
 }

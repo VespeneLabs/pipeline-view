@@ -3,6 +3,20 @@
   "version": "0.0.0",
   "description": "React bindings for pipeline-view",
   "license": "MIT",
+  "author": "VespeneLabs",
+  "keywords": [
+    "react",
+    "diagram",
+    "p&id",
+    "scada",
+    "process",
+    "hmi",
+    "svg"
+  ],
+  "homepage": "https://github.com/VespeneLabs/pipeline-view/tree/main/packages/react#readme",
+  "bugs": {
+    "url": "https://github.com/VespeneLabs/pipeline-view/issues"
+  },
   "type": "module",
   "sideEffects": false,
   "repository": {
@@ -39,5 +53,11 @@
     "@types/react-dom": "^19.3.0",
     "react": ">=18",
     "react-dom": ">=18"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

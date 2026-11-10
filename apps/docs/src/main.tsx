@@ -1,6 +1,7 @@
 import { StrictMode, useEffect, useState, type ComponentType } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PidEditor } from './demos/editor/Editor';
+import { StressTest } from './demos/stress/StressTest';
 import { ApiReference } from './pages/ApiReference';
 import { CustomSymbols } from './pages/CustomSymbols';
 import { Gallery } from './pages/Gallery';
@@ -23,6 +24,7 @@ const PAGES: Page[] = [
   { path: 'theming', title: 'Theming', group: 'Guides', component: Theming },
   { path: 'custom-symbols', title: 'Custom symbols', group: 'Guides', component: CustomSymbols },
   { path: 'editor', title: 'P&ID editor', group: 'Demos', component: PidEditor },
+  { path: 'stress', title: 'Stress test', group: 'Demos', component: StressTest },
   { path: 'api', title: 'API reference', group: 'Reference', component: ApiReference },
   { path: 'gallery', title: 'Symbol gallery', group: 'Reference', component: Gallery },
 ];
