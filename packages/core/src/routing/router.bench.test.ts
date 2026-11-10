@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { RouteAnalyzer } from './analyze';
 import { createRouter } from './router';
 import { generateScene, requestsFor } from './test-scene';
 
@@ -32,7 +33,9 @@ describe('router benchmark (500 nodes / 1,000 links)', () => {
   it(`re-routes links touched by one dragged node within ${DRAG_BUDGET_MS} ms`, () => {
     const router = createRouter();
     router.setObstacles(nodes);
-    router.route(requestsFor(nodes, links));
+    const analyzer = new RouteAnalyzer().update(
+      router.route(requestsFor(nodes, links)).map((r) => [r.linkId, r.points] as const),
+    );
 
     // Drag the busiest node along a path of small steps, like pointermove events.
     const degree = new Map<string, number>();
@@ -51,19 +54,21 @@ describe('router benchmark (500 nodes / 1,000 links)', () => {
       live.set(dragged, rect);
       const t0 = performance.now();
       const affected = router.updateObstacle(dragged, rect);
-      router.route(
+      const rerouted = router.route(
         requestsFor(
           live,
           affected.map((id) => byId.get(id)!),
         ),
       );
+      // Line jumps and junctions are part of the drag budget: re-analyze only the changed links.
+      analyzer.update(rerouted.map((r) => [r.linkId, r.points] as const)).result();
       times.push(performance.now() - t0);
       touched = Math.max(touched, affected.length);
     }
     const med = median(times);
     const max = Math.max(...times);
     console.info(
-      `drag re-route (${dragged}, degree ${degree.get(dragged)}, up to ${touched} links): median ${med.toFixed(2)} ms, max ${max.toFixed(2)} ms`,
+      `drag re-route + analyze (${dragged}, degree ${degree.get(dragged)}, up to ${touched} links): median ${med.toFixed(2)} ms, max ${max.toFixed(2)} ms`,
     );
     expect(med).toBeLessThanOrEqual(DRAG_BUDGET_MS);
   });
