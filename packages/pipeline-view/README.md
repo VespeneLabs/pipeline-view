@@ -75,11 +75,15 @@ Above 300 nodes, the diagram renders only what's visible (plus a margin) and def
 
 For React (`<PipelineView>`), theming, the editor, export and SSR, see the [repository README](https://github.com/VespeneLabs/pipeline-view#readme) and the docs app.
 
-MIT © VespeneLabs
-
 ### Routing in a Web Worker
 
-`createRoutingWorker()` runs a full routing pass off the main thread. Incremental re-routes while dragging stay on the main thread, because they take about 1 ms.
+For large diagrams, `routingWorker: true` routes the initial full pass (at least `culling.threshold` links) off the main thread. Links show as straight placeholders until the routes arrive:
+
+```ts
+const diagram = new Diagram({ routingWorker: true }); // or { createWorker } for your bundler, see below
+```
+
+Lower level, `createRoutingWorker()` runs a full routing pass off the main thread. Incremental re-routes while dragging stay on the main thread, because they take about 1 ms.
 
 ```ts
 import { createRoutingWorker } from '@vespenelabs/pipeline-view';
@@ -96,3 +100,5 @@ By default the worker loads with `new Worker(new URL('./routing.worker.js', impo
 import RoutingWorker from '@vespenelabs/pipeline-view/routing-worker?worker'; // Vite
 const worker = createRoutingWorker({ createWorker: () => new RoutingWorker() });
 ```
+
+MIT © VespeneLabs
