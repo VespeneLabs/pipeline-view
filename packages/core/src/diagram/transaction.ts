@@ -160,9 +160,20 @@ export class TransactionImpl implements Transaction {
     if (!after) return;
     const lost = (port: string) => before.has(port) && !after.has(port);
     for (const l of this.store.linksOf(id)) {
-      if ((l.from.node === id && lost(l.from.port)) || (l.to.node === id && lost(l.to.port))) {
-        this.remove('links', l.id);
+      const end =
+        l.from.node === id && lost(l.from.port)
+          ? l.from
+          : l.to.node === id && lost(l.to.port)
+            ? l.to
+            : null;
+      if (!end) continue;
+      // A locked link can't be removed in edit mode (FR-43): refuse the edit, the transaction rolls back.
+      if (l.locked) {
+        throw new Error(
+          `Cannot remove port "${end.port}" of node "${id}": link "${l.id}" is locked`,
+        );
       }
+      this.remove('links', l.id);
     }
   }
   /** Also removes the node's links and the annotations anchored to it. */

@@ -173,6 +173,16 @@ describe('removing ports removes their links in the same transaction', () => {
     expect(d.toJSON()).toEqual(model());
   });
 
+  it('refuses to remove a port that has a locked link, rolling back the edit', () => {
+    const d = setup();
+    d.update((tx) => tx.updateLink('c', { locked: true }));
+    expect(() => d.update((tx) => tx.updateNode('m', { data: { inputs: 2, outputs: 1 } }))).toThrow(
+      'Cannot remove port "in-3" of node "m": link "c" is locked',
+    );
+    expect(d.store.nodes.get('m')!.data).toEqual({ inputs: 3, outputs: 1 });
+    expect(d.store.links.has('c')).toBe(true);
+  });
+
   it('also prunes when the per-node ports override changes', () => {
     const d = setup();
     d.update((tx) =>
