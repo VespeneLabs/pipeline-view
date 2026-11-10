@@ -17,9 +17,10 @@ import {
   nodeBounds,
   nodeTransform,
   portPoint,
+  resolvePorts,
   symbolSize,
 } from '../diagram/geometry';
-import { nodePorts } from '../symbols/resolve';
+import { nodePorts, nodeSize } from '../symbols/resolve';
 import type { PortDef } from '../symbols/types';
 import { arrowsPath, linkPath, ticksPath } from './paths';
 
@@ -182,10 +183,16 @@ export class SvgRenderer {
     for (const id of this.dirtyNodes) {
       const n = store.nodes.get(id);
       if (!n) continue;
-      const prev = this.nodes.get(id)?.node;
+      const prevEl = this.nodes.get(id);
+      const prev = prevEl?.node;
+      const prevPorts = prevEl?.portSig;
       this.upsertNode(n);
+      // Per-node size and ports (FR-40) can change with data: the obstacle and attached links follow.
+      const def = this.def(n);
       const geometryChanged =
         !prev ||
+        prevPorts !== this.nodes.get(id)!.portSig ||
+        !sameSize(nodeSize(def, prev), nodeSize(def, n)) ||
         prev.position !== n.position ||
         prev.rotation !== n.rotation ||
         prev.flipX !== n.flipX ||
@@ -247,6 +254,7 @@ export class SvgRenderer {
     this.setAriaLabel(el.g, n, def);
     this.renderSymbol(el, n, def);
     this.renderLabel(el, n, def);
+    this.renderPortLabels(el, n, def);
     if (this.selected.has(refKey({ kind: 'node', id: n.id }))) this.placeSelectionBox(n.id);
   }
 
@@ -292,6 +300,35 @@ export class SvgRenderer {
       c.dataset.portId = p.id;
       el.body.append(c);
     }
+  }
+
+  /** Port labels (FR-40), like node labels, sit outside the transformed body so they never rotate or mirror. */
+  private renderPortLabels(el: NodeEl, n: NodeModel, def: SymbolDef | undefined): void {
+    for (const t of el.g.querySelectorAll(':scope > .pv-port-label')) t.remove();
+    const ports = nodePorts(def, n);
+    if (!ports.some((p) => p.label)) return;
+    const resolved = resolvePorts(n, def);
+    ports.forEach((p, i) => {
+      if (!p.label) return;
+      const r = resolved[i]!;
+      // Inside the symbol, next to the port: step back against the outward direction.
+      const d = PORT_LABEL_INSET;
+      const at = {
+        x: r.point.x + (r.direction === 'left' ? d : r.direction === 'right' ? -d : 0),
+        y: r.point.y + (r.direction === 'top' ? d : r.direction === 'bottom' ? -d : 0),
+      };
+      const t = this.svg('text', {
+        class: 'pv-port-label',
+        x: at.x,
+        y: at.y,
+        'text-anchor':
+          r.direction === 'left' ? 'start' : r.direction === 'right' ? 'end' : 'middle',
+        'dominant-baseline': 'middle',
+      });
+      t.dataset.portId = p.id;
+      t.textContent = p.label;
+      el.g.append(t);
+    });
   }
 
   /** Labels sit in diagram coordinates outside the transformed body, so they never rotate or mirror. */
@@ -529,4 +566,9 @@ function groupCrossings(crossings: Crossing[]): Map<string, Point[]> {
 }
 
 const portSignature = (ports: PortDef[]) =>
-  ports.map((p) => `${p.id}@${p.position.x},${p.position.y}`).join('|');
+  ports
+    .map((p) => `${p.id}@${p.position.x},${p.position.y}:${p.direction}:${p.label ?? ''}`)
+    .join('|');
+const sameSize = (a: { width: number; height: number }, b: { width: number; height: number }) =>
+  a.width === b.width && a.height === b.height;
+const PORT_LABEL_INSET = 8;

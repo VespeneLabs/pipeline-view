@@ -74,7 +74,15 @@ export const isEmptyDiff = (d: ModelDiff): boolean =>
 export class TransactionImpl implements Transaction {
   readonly ops: Op[] = [];
 
-  constructor(private readonly store: ModelStore) {}
+  /**
+   * @param portIds Port ids of a node as currently resolved (per-node ports, FR-40), or undefined when
+   *   they can't be resolved (unknown symbol). When given, an updateNode that removes ports also removes
+   *   the links on those ports, in the same transaction.
+   */
+  constructor(
+    private readonly store: ModelStore,
+    private readonly portIds?: (node: NodeModel) => ReadonlySet<string> | undefined,
+  ) {}
 
   private run(op: Op): void {
     applyOp(this.store, op);
@@ -117,7 +125,33 @@ export class TransactionImpl implements Transaction {
   }
   /** `data` in a patch replaces the whole record, and undo restores the previous record, including live values written in between. Use setNodeData for live values. */
   updateNode(id: string, patch: Partial<Omit<NodeModel, 'id'>>): void {
+    // Per-node ports derive from type, data or the ports override (FR-40).
+    const portsMayChange =
+      this.portIds !== undefined && ('data' in patch || 'ports' in patch || 'type' in patch);
+    const before = portsMayChange ? this.portIdsOf(id) : undefined;
     this.patch('nodes', id, patch);
+    if (before) this.removeLinksOnLostPorts(id, before);
+  }
+
+  private portIdsOf(id: string): ReadonlySet<string> | undefined {
+    const node = this.store.nodes.get(id);
+    return node && this.portIds!(node);
+  }
+
+  /**
+   * Removes the links attached to ports that existed before an update and are gone after it, so they're
+   * part of the same undo step and of the modelChange diff. Links that already pointed at an unknown
+   * port are left alone.
+   */
+  private removeLinksOnLostPorts(id: string, before: ReadonlySet<string>): void {
+    const after = this.portIdsOf(id);
+    if (!after) return;
+    const lost = (port: string) => before.has(port) && !after.has(port);
+    for (const l of this.store.linksOf(id)) {
+      if ((l.from.node === id && lost(l.from.port)) || (l.to.node === id && lost(l.to.port))) {
+        this.remove('links', l.id);
+      }
+    }
   }
   /** Also removes the node's links and the annotations anchored to it. */
   removeNode(id: string): void {

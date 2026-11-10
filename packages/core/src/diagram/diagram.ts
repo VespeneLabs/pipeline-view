@@ -14,6 +14,7 @@ import {
 import { applyViewportToView, createView, type View } from '../viewport/view';
 import { Emitter } from './emitter';
 import { nodeBounds, unionRects } from './geometry';
+import { nodePorts } from '../symbols/resolve';
 import { SvgRenderer } from '../render/svg-renderer';
 import { OverlayRenderer } from '../render/overlay';
 import { attachPointerEvents } from '../render/input';
@@ -211,7 +212,10 @@ export class Diagram implements DiagramApi {
   private runTx(fn: (tx: Transaction) => void): Op[] {
     this.assertAlive();
     if (this.inTransaction) throw new Error('diagram.update() cannot be nested');
-    const tx = new TransactionImpl(this.store);
+    const tx = new TransactionImpl(this.store, (node) => {
+      const def = this.symbols.get(node.type);
+      return def || node.ports ? new Set(nodePorts(def, node).map((p) => p.id)) : undefined;
+    });
     this.inTransaction = true;
     try {
       fn(tx);

@@ -401,3 +401,11 @@
   font-size: var(--pv-font-size-small);
   color: var(--pv-muted);
 }
+
+/* ---- port labels (per-node ports, FR-40) ---------------------------------- */
+
+.pv-port-label {
+  fill: var(--pv-muted);
+  font: 500 var(--pv-font-size-small) var(--pv-font);
+  pointer-events: none;
+}
