@@ -117,6 +117,23 @@ describe('controlled mode (FR-44)', () => {
     expect(mirror.toJSON()).toEqual(d.toJSON());
   });
 
+  it('labels modelChange with its origin: user, host or history', () => {
+    const d = new Diagram({ symbols: [box] });
+    d.load(model());
+    const origins: string[] = [];
+    d.on('modelChange', (e) => origins.push(e.origin));
+    d.update((tx) => tx.updateNode('a', { label: 'X' }));
+    d.undo();
+    d.redo();
+    d.applyDiff({ nodes: { changed: [{ id: 'b', label: 'B' }] } });
+    const next = d.toJSON();
+    next.nodes[2]!.label = 'C';
+    d.patch(next);
+    d.preview((tx) => tx.updateNode('a', { position: { x: 3, y: 3 } }));
+    d.commitPreview();
+    expect(origins).toEqual(['user', 'history', 'history', 'host', 'host', 'user']);
+  });
+
   it('history: false disables undo', () => {
     const d = new Diagram({ symbols: [box], history: false });
     d.load(model());
