@@ -15,6 +15,8 @@ import { applyViewportToView, createView, type View } from '../viewport/view';
 import { Emitter } from './emitter';
 import { nodeBounds, unionRects } from './geometry';
 import { SvgRenderer } from '../render/svg-renderer';
+import { OverlayRenderer } from '../render/overlay';
+import { attachPointerEvents } from '../render/input';
 import { TransactionImpl, applyOp, diffOf, invertOp, isEmptyDiff, type Op } from './transaction';
 import type {
   DiagramApi,
@@ -75,6 +77,9 @@ export class Diagram implements ImplementedApi {
   viewportController: ViewportController | undefined;
   /** @internal SVG renderer. Created on mount. */
   renderer: SvgRenderer | undefined;
+  /** @internal Annotations and HTML overlays. Created on mount. */
+  overlay: OverlayRenderer | undefined;
+  private detachPointerEvents: (() => void) | undefined;
   private viewport: Viewport = { x: 0, y: 0, zoom: 1 };
   private size: Size = { width: 0, height: 0 };
   private readonly minZoom: number;
@@ -118,6 +123,8 @@ export class Diagram implements ImplementedApi {
       this.resizeObserver.observe(view.root);
     }
     this.renderer = new SvgRenderer(this, view);
+    this.overlay = new OverlayRenderer(this, view);
+    this.detachPointerEvents = attachPointerEvents(this, view);
     this.internal.emit('mount', { view });
     if (this.pendingFit) this.zoomToFit(this.pendingFit);
   }
@@ -498,6 +505,8 @@ export class Diagram implements ImplementedApi {
     if (this.destroyed) return;
     this.destroyed = true;
     this.cancelAnimation();
+    this.detachPointerEvents?.();
+    this.overlay?.destroy();
     this.renderer?.destroy();
     this.viewportController?.destroy();
     this.resizeObserver?.disconnect();

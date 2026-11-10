@@ -26,6 +26,11 @@ export interface Viewport {
 /**
  * Mounts host content into an HTML overlay slot. It returns a cleanup function.
  * React bindings implement it with portals. Vanilla users write into `el` directly.
+ *
+ * Lifecycle: it's called once when the item appears, then again with the same `el` whenever the item's
+ * data or status changes. Implementations must be idempotent. Only the cleanup returned by the first
+ * call is kept, and it runs when the item is removed. For annotations anchored to a node, `data` is the
+ * node's live data merged under the annotation's own data, and `status` falls back to the node's.
  */
 export type HtmlRenderer = (
   el: HTMLElement,

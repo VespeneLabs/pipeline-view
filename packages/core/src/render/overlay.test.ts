@@ -1,0 +1,210 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Diagram } from '../diagram/diagram';
+import type { HtmlRenderer } from '../diagram/types';
+import type { SymbolDef } from '../symbols/types';
+import { leaderPoints } from './paths';
+
+const box: SymbolDef = {
+  type: 'test/box',
+  name: 'Box',
+  category: 'Test',
+  size: { width: 100, height: 50 },
+  ports: [{ id: 'in', position: { x: 0, y: 25 }, direction: 'left' }],
+  svg: '<rect width="100" height="50"/>',
+};
+
+let container: HTMLDivElement;
+let d: Diagram;
+let card: ReturnType<typeof vi.fn<HtmlRenderer>>;
+let cleanup: ReturnType<typeof vi.fn>;
+const $ = (s: string) => container.querySelector(s);
+
+const flush = () => {
+  d.renderer!.flush();
+  d.overlay!.flush();
+};
+
+beforeEach(() => {
+  container = document.createElement('div');
+  document.body.append(container);
+  cleanup = vi.fn();
+  card = vi.fn<HtmlRenderer>((el, item) => {
+    el.textContent = `${item.id}: ${String(item.data?.value)}`;
+    return cleanup;
+  });
+  d = new Diagram({ symbols: [box], htmlRenderers: { card } });
+  d.load({
+    version: 1,
+    nodes: [
+      { id: 'tank', type: 'test/box', position: { x: 100, y: 100 }, data: { value: 1 } },
+      {
+        id: 'pump',
+        type: 'test/box',
+        position: { x: 400, y: 100 },
+        data: { overlay: 'card', value: 7 },
+      },
+    ],
+    links: [],
+    annotations: [
+      { id: 'title', kind: 'text', text: 'Area 1', variant: 'area', position: { x: 0, y: 0 } },
+      {
+        id: 'reading',
+        kind: 'html',
+        renderer: 'card',
+        position: { x: 0, y: -80 },
+        size: { width: 100, height: 40 },
+        anchor: { node: 'tank' },
+        leader: true,
+        data: { unit: 'bar' },
+      },
+    ],
+  });
+  d.mount(container);
+  flush();
+});
+
+afterEach(() => {
+  d.destroy();
+  container.remove();
+});
+
+describe('OverlayRenderer', () => {
+  it('renders text annotations as SVG text', () => {
+    const t = $('[data-annotation-id="title"]')!;
+    expect(t.tagName.toLowerCase()).toBe('text');
+    expect(t.textContent).toBe('Area 1');
+    expect(t.getAttribute('data-variant')).toBe('area');
+  });
+
+  it('mounts HTML annotations relative to their anchor with merged live data', () => {
+    const el = $('.pv-overlay [data-annotation-id="reading"]') as HTMLElement;
+    expect(el.style.transform).toBe('translate(100px,20px)');
+    expect(el.style.width).toBe('100px');
+    expect(card).toHaveBeenCalledWith(el, {
+      kind: 'annotation',
+      id: 'reading',
+      data: { value: 1, unit: 'bar' },
+      status: undefined,
+    });
+  });
+
+  it('mounts node overlays named by data.overlay over the node bounds', () => {
+    const el = $('.pv-overlay [data-node-id="pump"]') as HTMLElement;
+    expect(el.style.transform).toBe('translate(400px,100px)');
+    expect(el.textContent).toBe('pump: 7');
+  });
+
+  it('re-calls the renderer on live data without remounting, and keeps the first cleanup', () => {
+    const el = $('.pv-overlay [data-annotation-id="reading"]');
+    card.mockClear();
+    d.setNodeData('tank', { value: 2 }, 'alarm');
+    flush();
+    expect(card).toHaveBeenCalledTimes(1);
+    expect($('.pv-overlay [data-annotation-id="reading"]')).toBe(el);
+    expect(el!.textContent).toBe('reading: 2');
+    expect(el!.getAttribute('data-status')).toBe('alarm');
+    expect(cleanup).not.toHaveBeenCalled();
+  });
+
+  it('does not re-call renderers for unrelated data ticks', () => {
+    card.mockClear();
+    d.setNodeData('pump', { value: 8 });
+    flush();
+    expect(card).toHaveBeenCalledTimes(1);
+    expect(card.mock.calls[0]![1].id).toBe('pump');
+  });
+
+  it('follows the anchor when it moves and draws a leader to it', () => {
+    expect($('.pv-leader')!.getAttribute('d')).toBe('M150 60L150 100');
+    d.update((tx) => tx.updateNode('tank', { position: { x: 200, y: 100 } }));
+    flush();
+    expect(($('.pv-overlay [data-annotation-id="reading"]') as HTMLElement).style.transform).toBe(
+      'translate(200px,20px)',
+    );
+    expect($('.pv-leader')!.getAttribute('d')).toBe('M250 60L250 100');
+  });
+
+  it('runs cleanup and removes elements when items go away', () => {
+    d.update((tx) => tx.removeNode('tank'));
+    flush();
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect($('[data-annotation-id="reading"]')).toBeNull();
+    expect($('.pv-leader')).toBeNull();
+    d.update((tx) => tx.updateNode('pump', { data: {} }));
+    flush();
+    expect($('.pv-overlay [data-node-id="pump"]')).toBeNull();
+  });
+
+  it('warns once for an unknown renderer instead of throwing', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    d.update((tx) => {
+      tx.addAnnotation({ id: 'x1', kind: 'html', renderer: 'nope', position: { x: 0, y: 0 } });
+      tx.addAnnotation({ id: 'x2', kind: 'html', renderer: 'nope', position: { x: 0, y: 0 } });
+    });
+    flush();
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+});
+
+describe('leaderPoints', () => {
+  const node = { x: 100, y: 100, width: 100, height: 50 };
+  it('is straight when the boxes overlap on one axis', () => {
+    expect(leaderPoints({ x: 120, y: 0, width: 40, height: 20 }, node)).toEqual([
+      { x: 140, y: 20 },
+      { x: 140, y: 100 },
+    ]);
+    expect(leaderPoints({ x: 300, y: 110, width: 40, height: 20 }, node)).toEqual([
+      { x: 300, y: 120 },
+      { x: 200, y: 120 },
+    ]);
+  });
+  it('uses one elbow otherwise, and nothing when the boxes intersect', () => {
+    expect(leaderPoints({ x: 300, y: 0, width: 40, height: 20 }, node)).toEqual([
+      { x: 300, y: 10 },
+      { x: 150, y: 10 },
+      { x: 150, y: 100 },
+    ]);
+    expect(leaderPoints({ x: 110, y: 110, width: 10, height: 10 }, node)).toEqual([]);
+  });
+});
+
+describe('pointer events', () => {
+  const click = (target: Element, type = 'click') =>
+    target.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX: 10, clientY: 10 }));
+
+  it('emits nodeClick for symbols and ports, and selects in view mode', () => {
+    const onClick = vi.fn();
+    d.on('nodeClick', onClick);
+    click($('[data-node-id="tank"] .pv-symbol rect')!);
+    expect(onClick.mock.calls[0]![0].item).toEqual({ kind: 'node', id: 'tank' });
+    expect(d.getSelection()).toEqual([{ kind: 'node', id: 'tank' }]);
+    click($('[data-node-id="tank"] .pv-port')!);
+    expect(onClick).toHaveBeenCalledTimes(2);
+    click(d.view!.svg);
+    expect(d.getSelection()).toEqual([]);
+  });
+
+  it('does not change the selection in edit mode', () => {
+    d.setMode('edit');
+    click($('[data-node-id="tank"] .pv-symbol rect')!);
+    expect(d.getSelection()).toEqual([]);
+  });
+
+  it('emits contextMenu with or without an item, and hover only on change', () => {
+    const onMenu = vi.fn();
+    const onHover = vi.fn();
+    d.on('contextMenu', onMenu);
+    d.on('hover', onHover);
+    click(d.view!.svg, 'contextmenu');
+    expect(onMenu.mock.calls[0]![0].item).toBeNull();
+    const target = $('[data-node-id="tank"] .pv-symbol rect')!;
+    for (let i = 0; i < 3; i++) {
+      target.dispatchEvent(
+        new PointerEvent('pointermove', { bubbles: true, pointerType: 'mouse' }),
+      );
+    }
+    expect(onHover).toHaveBeenCalledTimes(1);
+    expect(onHover.mock.calls[0]![0].item).toEqual({ kind: 'node', id: 'tank' });
+  });
+});

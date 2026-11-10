@@ -86,15 +86,35 @@ export function leaderPoints(card: Rect, node: Rect): Point[] {
   if (xOverlap > 0 && yOverlap > 0) return [];
   if (xOverlap > 0) {
     const x = Math.max(card.x, node.x) + xOverlap / 2;
-    return card.y > node.y ? [{ x, y: card.y }, { x, y: ny2 }] : [{ x, y: cy2 }, { x, y: node.y }];
+    return card.y > node.y
+      ? [
+          { x, y: card.y },
+          { x, y: ny2 },
+        ]
+      : [
+          { x, y: cy2 },
+          { x, y: node.y },
+        ];
   }
   if (yOverlap > 0) {
     const y = Math.max(card.y, node.y) + yOverlap / 2;
-    return card.x > node.x ? [{ x: card.x, y }, { x: nx2, y }] : [{ x: cx2, y }, { x: node.x, y }];
+    return card.x > node.x
+      ? [
+          { x: card.x, y },
+          { x: nx2, y },
+        ]
+      : [
+          { x: cx2, y },
+          { x: node.x, y },
+        ];
   }
   const y = card.y + card.height / 2;
   const x = node.x + node.width / 2;
   const startX = card.x > node.x ? card.x : cx2;
   const endY = card.y > node.y ? ny2 : node.y;
-  return [{ x: startX, y }, { x, y }, { x, y: endY }];
+  return [
+    { x: startX, y },
+    { x, y },
+    { x, y: endY },
+  ];
 }

@@ -59,10 +59,15 @@ export class OverlayRenderer {
   }
 
   private onModel(diff: ModelDiff): void {
-    for (const id of [...diff.added.annotations, ...diff.changed.annotations, ...diff.removed.annotations]) {
+    for (const id of [
+      ...diff.added.annotations,
+      ...diff.changed.annotations,
+      ...diff.removed.annotations,
+    ]) {
       this.dirty.add(aKey(id));
     }
-    for (const id of [...diff.added.nodes, ...diff.changed.nodes, ...diff.removed.nodes]) this.markNode(id);
+    for (const id of [...diff.added.nodes, ...diff.changed.nodes, ...diff.removed.nodes])
+      this.markNode(id);
     this.schedule();
   }
 
@@ -70,7 +75,8 @@ export class OverlayRenderer {
   private markNode(id: string): void {
     this.dirty.add(nKey(id));
     for (const [key, item] of this.items) {
-      if (item.kind === 'annotation' && this.annotation(item.id)?.anchor?.node === id) this.dirty.add(key);
+      if (item.kind === 'annotation' && this.annotation(item.id)?.anchor?.node === id)
+        this.dirty.add(key);
     }
     for (const a of this.diagram.store.annotationsOf(id)) this.dirty.add(aKey(a.id));
   }
@@ -137,7 +143,11 @@ export class OverlayRenderer {
     let item = this.items.get(key);
     const wantKind = a?.kind;
     const itemIsText = item?.el instanceof this.view.root.ownerDocument.defaultView!.SVGElement;
-    if (!a || (item && (wantKind === 'text') !== itemIsText) || (a.kind === 'html' && item?.rendererName !== a.renderer)) {
+    if (
+      !a ||
+      (item && (wantKind === 'text') !== itemIsText) ||
+      (a.kind === 'html' && item?.rendererName !== a.renderer)
+    ) {
       if (item) this.remove(key);
       item = undefined;
       if (!a) return;
@@ -177,8 +187,16 @@ export class OverlayRenderer {
     this.drawLeader(item, a, anchor, box);
   }
 
-  private drawLeader(item: Item, a: AnnotationModel, anchor: NodeModel | undefined, box: Rect): void {
-    const points = a.leader && anchor ? leaderPoints(box, nodeBounds(anchor, this.diagram.symbols.get(anchor.type))) : [];
+  private drawLeader(
+    item: Item,
+    a: AnnotationModel,
+    anchor: NodeModel | undefined,
+    box: Rect,
+  ): void {
+    const points =
+      a.leader && anchor
+        ? leaderPoints(box, nodeBounds(anchor, this.diagram.symbols.get(anchor.type)))
+        : [];
     if (points.length < 2) {
       item.leader?.remove();
       item.leader = undefined;
@@ -219,7 +237,11 @@ export class OverlayRenderer {
     return item;
   }
 
-  private place(el: HTMLElement, at: Point, size: { width: number; height: number } | undefined): void {
+  private place(
+    el: HTMLElement,
+    at: Point,
+    size: { width: number; height: number } | undefined,
+  ): void {
     const t = `translate(${at.x}px,${at.y}px)`;
     if (el.style.transform !== t) el.style.transform = t;
     if (size) {
