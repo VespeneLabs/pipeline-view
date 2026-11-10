@@ -412,6 +412,11 @@ export class Diagram implements ImplementedApi {
     this.renderer?.flush();
     return this.renderer?.getLinkPath(linkId);
   }
+  /** Swallows the click that follows a gesture (an editor drag, for example) so it doesn't select or emit nodeClick. */
+  suppressNextClick(): void {
+    if (this.viewportController) this.viewportController.suppressClick = true;
+  }
+
   /** Maps a DOM element (an event target) to the diagram item it belongs to, using the data-*-id attributes. */
   hitTest(
     target: EventTarget | null,

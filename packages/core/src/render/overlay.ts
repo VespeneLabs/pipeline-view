@@ -25,6 +25,9 @@ interface Item {
   /** Inputs of the last render. A re-render happens only when one of them changed. */
   source?: unknown;
   anchorSource?: unknown;
+  /** Anchor geometry/status of the last placement. Data-only ticks leave these unchanged. */
+  anchorPos?: unknown;
+  anchorStatus?: string;
   leader?: SVGPathElement;
 }
 
@@ -38,6 +41,9 @@ export class OverlayRenderer {
   private frame = 0;
   private readonly unsubscribe: (() => void)[] = [];
   private readonly warned = new Set<string>();
+  /** node id -> ids of annotations anchored to it, so a data tick touches only its own cards. */
+  private readonly anchored = new Map<string, Set<string>>();
+  private readonly anchorOf = new Map<string, string>();
 
   constructor(
     private readonly diagram: Diagram,
@@ -74,11 +80,22 @@ export class OverlayRenderer {
   /** A node change affects its own overlay and every annotation anchored to it. */
   private markNode(id: string): void {
     this.dirty.add(nKey(id));
-    for (const [key, item] of this.items) {
-      if (item.kind === 'annotation' && this.annotation(item.id)?.anchor?.node === id)
-        this.dirty.add(key);
+    for (const a of this.anchored.get(id) ?? []) this.dirty.add(aKey(a));
+  }
+
+  private setAnchor(annotationId: string, nodeId: string | undefined): void {
+    const prev = this.anchorOf.get(annotationId);
+    if (prev === nodeId) return;
+    if (prev !== undefined) {
+      this.anchored.get(prev)?.delete(annotationId);
+      this.anchorOf.delete(annotationId);
     }
-    for (const a of this.diagram.store.annotationsOf(id)) this.dirty.add(aKey(a.id));
+    if (nodeId !== undefined) {
+      let set = this.anchored.get(nodeId);
+      if (!set) this.anchored.set(nodeId, (set = new Set()));
+      set.add(annotationId);
+      this.anchorOf.set(annotationId, nodeId);
+    }
   }
 
   private schedule(): void {
@@ -152,7 +169,26 @@ export class OverlayRenderer {
       item = undefined;
       if (!a) return;
     }
+    this.setAnchor(id, a.anchor?.node);
     const anchor = a.anchor ? this.diagram.store.nodes.get(a.anchor.node) : undefined;
+    // Data-only tick on the anchor: nothing moved, so skip placement, text and leader (getBBox / offsetWidth
+    // force layout). HTML cards still get the new data.
+    if (
+      item &&
+      item.source === a &&
+      item.anchorPos === anchor?.position &&
+      item.anchorStatus === anchor?.status
+    ) {
+      if (a.kind === 'html' && item.anchorSource !== anchor) {
+        item.anchorSource = anchor;
+        this.callRenderer(
+          item,
+          anchor ? { ...anchor.data, ...a.data } : a.data,
+          a.status ?? anchor?.status,
+        );
+      }
+      return;
+    }
     const pos: Point = {
       x: a.position.x + (anchor?.position.x ?? 0),
       y: a.position.y + (anchor?.position.y ?? 0),
@@ -167,6 +203,7 @@ export class OverlayRenderer {
       else delete t.dataset.variant;
       if (t.textContent !== a.text) t.textContent = a.text;
       setStatus(t, a.status ?? anchor?.status);
+      item.source = a;
       box = textBox(t, pos);
     } else {
       item ??= this.createHtmlItem(key, 'annotation', id, a.renderer);
@@ -184,6 +221,8 @@ export class OverlayRenderer {
         height: a.size?.height ?? el.offsetHeight ?? 0,
       };
     }
+    item.anchorPos = anchor?.position;
+    item.anchorStatus = anchor?.status;
     this.drawLeader(item, a, anchor, box);
   }
 
@@ -275,6 +314,7 @@ export class OverlayRenderer {
     const item = this.items.get(key);
     if (!item) return;
     this.items.delete(key);
+    if (item.kind === 'annotation') this.setAnchor(item.id, undefined);
     try {
       if (typeof item.cleanup === 'function') item.cleanup();
     } finally {

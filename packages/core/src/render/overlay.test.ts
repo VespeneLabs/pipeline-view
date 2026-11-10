@@ -106,6 +106,27 @@ describe('OverlayRenderer', () => {
     expect(cleanup).not.toHaveBeenCalled();
   });
 
+  it('skips placement and leader work on data-only ticks of the anchor', () => {
+    const leader = $('.pv-leader')!;
+    const setD = vi.spyOn(leader, 'setAttribute');
+    d.setNodeData('tank', { value: 3 });
+    flush();
+    expect(setD).not.toHaveBeenCalled();
+    expect($('.pv-overlay [data-annotation-id="reading"]')!.textContent).toBe('reading: 3');
+  });
+
+  it('tracks re-anchoring so data ticks reach the new anchor only', () => {
+    d.update((tx) => tx.updateAnnotation('reading', { anchor: { node: 'pump' } }));
+    flush();
+    card.mockClear();
+    d.setNodeData('tank', { value: 9 });
+    flush();
+    expect(card).not.toHaveBeenCalled();
+    d.setNodeData('pump', { value: 10 });
+    flush();
+    expect(card.mock.calls.map((c) => c[1].id).sort()).toEqual(['pump', 'reading']);
+  });
+
   it('does not re-call renderers for unrelated data ticks', () => {
     card.mockClear();
     d.setNodeData('pump', { value: 8 });
