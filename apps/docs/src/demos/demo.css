@@ -172,3 +172,14 @@
 .chip[data-mark='changed'] {
   background: var(--pv-diff-changed);
 }
+
+.demo-canvas-wide {
+  height: 520px;
+}
+
+.demo-status {
+  margin-left: auto;
+  color: var(--pv-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
