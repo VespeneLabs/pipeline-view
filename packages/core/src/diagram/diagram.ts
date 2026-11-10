@@ -424,7 +424,6 @@ export class Diagram implements DiagramApi {
     if (this.viewportController) this.viewportController.suppressClick = true;
   }
 
-  /** Maps a DOM element (an event target) to the diagram item it belongs to, using the data-*-id attributes. */
   /** Standalone SVG of the whole diagram (or the visible viewport) with styles inlined (FR-32). */
   exportSVG(opts?: { viewportOnly?: boolean; padding?: number }): string {
     if (!this.view) throw new Error('exportSVG() needs a mounted diagram');
@@ -437,6 +436,7 @@ export class Diagram implements DiagramApi {
     return exportPng(this, this.view, opts);
   }
 
+  /** Maps a DOM element (an event target) to the diagram item it belongs to, using the data-*-id attributes. */
   hitTest(
     target: EventTarget | null,
   ): ItemRef | { kind: 'port'; node: string; port: string } | null {

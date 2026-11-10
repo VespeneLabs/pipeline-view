@@ -57,7 +57,7 @@ const HTML_PROPS = [
 ] as const;
 
 /** Elements that are interaction chrome, not drawing. */
-const SKIP = '.pv-port, .pv-link-hit, .pv-focus-ring';
+const SKIP = '.pv-port, .pv-link-hit, .pv-node-hit, .pv-focus-ring, .pv-selection-box';
 const LAYERS = ['leaders', 'links', 'nodes', 'annotations'] as const;
 
 export interface ExportOptions {

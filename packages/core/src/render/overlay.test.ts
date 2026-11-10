@@ -177,6 +177,40 @@ describe('OverlayRenderer', () => {
   });
 });
 
+describe('leader routing', () => {
+  it('routes around a node that sits between the card and its anchor', () => {
+    d.update((tx) => {
+      // A blocker right between the card (above tank) and the tank.
+      tx.addNode({ id: 'blocker', type: 'test/box', position: { x: 100, y: 0 } });
+      tx.updateAnnotation('reading', { position: { x: 0, y: -160 } });
+    });
+    flush();
+    const dPath = $('.pv-leader')!.getAttribute('d')!;
+    const pts = [...dPath.matchAll(/[ML](-?[\d.]+) (-?[\d.]+)/g)].map((m) => ({
+      x: +m[1]!,
+      y: +m[2]!,
+    }));
+    expect(pts.length).toBeGreaterThan(2);
+    // No vertex lies strictly inside the blocker (100..200 x 0..50).
+    for (const p of pts) expect(p.x > 100 && p.x < 200 && p.y > 0 && p.y < 50).toBe(false);
+  });
+
+  it('follows leaderWaypoints (relative to the anchor) from card edge to node edge', () => {
+    d.update((tx) =>
+      tx.updateAnnotation('reading', {
+        position: { x: 200, y: -80 },
+        leaderWaypoints: [
+          { x: 160, y: -60 },
+          { x: 160, y: 25 },
+        ],
+      }),
+    );
+    flush();
+    // Card at (300,20) 100x40; waypoints at (260,40) and (260,125); node 100..200 x 100..150.
+    expect($('.pv-leader')!.getAttribute('d')).toBe('M300 40L260 40L260 125L200 125');
+  });
+});
+
 describe('leaderPoints', () => {
   const node = { x: 100, y: 100, width: 100, height: 50 };
   it('is straight when the boxes overlap on one axis', () => {

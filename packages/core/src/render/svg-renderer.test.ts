@@ -165,6 +165,30 @@ describe('SvgRenderer', () => {
     expect($$('.pv-selected').length).toBe(0);
   });
 
+  it('draws a selection box behind a selected node and moves it with the node', () => {
+    d.setSelection([{ kind: 'node', id: 'a' }]);
+    d.renderer!.flush();
+    const box = $('[data-node-id="a"] > .pv-selection-box')!;
+    expect(box.getAttribute('x')).toBe('-4');
+    expect(box.getAttribute('width')).toBe('48');
+    expect($('[data-node-id="a"]')!.firstElementChild).toBe(box);
+    d.update((tx) => tx.updateNode('a', { position: { x: 10, y: 0 } }));
+    d.renderer!.flush();
+    expect(box.getAttribute('x')).toBe('6');
+    d.setSelection([]);
+    d.renderer!.flush();
+    expect($('.pv-selection-box')).toBeNull();
+  });
+
+  it('gives every node a transparent hit box under the symbol, sized to the symbol', () => {
+    const body = $('[data-node-id="a"] .pv-node-body')!;
+    const hit = body.firstElementChild!;
+    expect(hit.getAttribute('class')).toBe('pv-node-hit');
+    expect(hit.getAttribute('width')).toBe('40');
+    expect(hit.getAttribute('height')).toBe('20');
+    expect(d.hitTest(hit)).toEqual({ kind: 'node', id: 'a' });
+  });
+
   it('renders unknown symbol types as a placeholder instead of failing', () => {
     d.update((tx) => tx.addNode({ id: 'x', type: 'nope/thing', position: { x: 0, y: 300 } }));
     d.renderer!.flush();

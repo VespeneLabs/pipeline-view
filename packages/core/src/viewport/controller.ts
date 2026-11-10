@@ -82,11 +82,8 @@ export class ViewportController {
     }
     if (this.pointers.size > 2 || !this.canPan(e)) return;
     this.pan = { start: p, vp: this.host.getViewport(), moved: false };
-    try {
-      this.host.root.setPointerCapture(e.pointerId);
-    } catch {
-      /* pointer may already be released */
-    }
+    // No capture yet: capturing on pointerdown retargets the following click to the root in real
+    // browsers, so a plain click on a node would never reach it. Capture once the press becomes a drag.
   };
 
   private onMove = (e: PointerEvent) => {
@@ -102,6 +99,13 @@ export class ViewportController {
     const dx = p.x - pan.start.x;
     const dy = p.y - pan.start.y;
     if (!pan.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+    if (!pan.moved) {
+      try {
+        this.host.root.setPointerCapture(e.pointerId);
+      } catch {
+        /* pointer may already be released */
+      }
+    }
     pan.moved = true;
     this.suppressClick = true;
     this.host.root.classList.add('pv-panning');
