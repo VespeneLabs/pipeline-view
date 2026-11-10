@@ -64,7 +64,10 @@ export function ProcessMonitor() {
     }
   }, [ready]);
 
-  /** 1:1 with the Figma frame when it fits, otherwise zoom to fit. */
+  /**
+   * 1:1 with the Figma frame when it fits, otherwise zoom to fit. Called on every resize, so it deliberately
+   * resets any pan or zoom: this is a fixed monitoring screen, not an explorable canvas.
+   */
   const frameView = (d: Diagram) => {
     const w = d.view?.root.clientWidth ?? FRAME.width;
     if (w >= FRAME.width) d.setViewport({ x: (w - FRAME.width) / 2, y: 0, zoom: 1 });

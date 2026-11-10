@@ -1,0 +1,130 @@
+.editor-layout {
+  display: grid;
+  grid-template-areas:
+    'toolbar toolbar'
+    'palette canvas'
+    'palette selection'
+    'json json';
+  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-rows: auto 560px auto auto;
+  gap: 12px;
+}
+
+.editor-toolbar {
+  grid-area: toolbar;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.editor-toolbar button,
+.editor-json button {
+  padding: 6px 12px;
+  border: 1px solid var(--pv-border);
+  border-radius: 6px;
+  background: var(--pv-bg);
+  color: var(--pv-ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.editor-toolbar button:disabled,
+.editor-json button:disabled {
+  color: var(--pv-muted);
+  cursor: default;
+  opacity: 0.6;
+}
+
+.editor-kinds {
+  display: flex;
+  gap: 4px;
+}
+
+.editor-kinds button[aria-checked='true'] {
+  border-color: var(--pv-selection);
+  background: var(--pv-selection-bg);
+  color: var(--pv-selection);
+}
+
+.editor-sep {
+  width: 1px;
+  height: 22px;
+  margin: 0 4px;
+  background: var(--pv-border);
+}
+
+.editor-palette {
+  grid-area: palette;
+  overflow-y: auto;
+  max-height: 640px;
+  padding: 8px;
+  border: 1px solid var(--pv-border);
+  border-radius: 10px;
+  background: var(--pv-bg);
+}
+
+.editor-canvas {
+  grid-area: canvas;
+  overflow: hidden;
+  border: 1px solid var(--pv-border);
+  border-radius: 10px;
+  background: var(--pv-bg);
+}
+
+.editor-selection {
+  grid-area: selection;
+  margin: 0;
+  color: var(--pv-muted);
+  font-size: 13px;
+}
+
+.editor-json {
+  grid-area: json;
+}
+
+.editor-json-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.editor-error {
+  color: #b62f38;
+  font-size: 13px;
+}
+
+.editor-json textarea {
+  width: 100%;
+  min-height: 220px;
+  padding: 10px 12px;
+  border: 1px solid var(--pv-border);
+  border-radius: 8px;
+  background: var(--docs-code-bg);
+  color: var(--pv-ink);
+  font:
+    12px/1.5 ui-monospace,
+    'SF Mono',
+    Menlo,
+    monospace;
+}
+
+kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--pv-border);
+  border-radius: 4px;
+  font:
+    12px ui-monospace,
+    Menlo,
+    monospace;
+}
+
+@media (max-width: 900px) {
+  .editor-layout {
+    grid-template-areas: 'toolbar' 'canvas' 'selection' 'palette' 'json';
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 420px auto 320px auto;
+  }
+}

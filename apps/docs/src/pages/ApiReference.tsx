@@ -81,7 +81,7 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
       },
       {
         sig: 'exportSVG(opts?) / exportPNG(opts?)',
-        doc: 'Whole diagram or current viewport. Coming in v1 (in review).',
+        doc: 'Whole diagram or current viewport: exportSVG returns a standalone SVG string, exportPNG a Blob.',
       },
     ],
   },
