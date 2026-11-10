@@ -12,7 +12,17 @@ import { type Graph, buildGraph, flowPathIn } from '../graph/graph';
 export type ConnectCheck =
   /** Allowed. `from` / `to` are in flow order (outlet → inlet), which may swap the arguments. */
   | { ok: true; from: LinkEnd; to: LinkEnd }
-  | { ok: false; code: RefusalCode; reason: string; detail?: Record<string, unknown> };
+  | {
+      ok: false;
+      code: RefusalCode;
+      reason: string;
+      detail?: Record<string, unknown>;
+      /** The ends in flow order (and as dragged, when different), as in RefusalContext. */
+      from?: LinkEnd;
+      to?: LinkEnd;
+      dragFrom?: LinkEnd;
+      dragTo?: LinkEnd;
+    };
 
 /** Default English messages for the built-in codes. Hosts replace them with `refusalMessages`. */
 const DEFAULT_REASONS: Record<string, (ctx: RefusalContext) => string> = {
@@ -95,6 +105,12 @@ function cycleKinds(diagram: Diagram): LinkKind[] | null {
  * direction, port full (from, then to), duplicate, links between nodes, cycle. Then the host's
  * `canConnect`. The first refusal wins.
  * Pass prebuilt `indexes` when checking many candidates during one gesture.
+ *
+ * Notes on the order: `maxLinksBetweenNodes` counts links between the two nodes in BOTH directions and
+ * runs before the cycle check, so with `maxLinksBetweenNodes: 1` a reverse link B→A next to an existing
+ * A→B reports `max-links-between-nodes`, not `cycle`. Refusal contexts (`refusalMessages`,
+ * `connectRejected`, the returned `from` / `to`) are always in flow order; `dragFrom` / `dragTo` give the
+ * drag order when it differs.
  */
 export function validateConnect(
   diagram: Diagram,
@@ -108,17 +124,17 @@ export function validateConnect(
   const b = diagram.store.nodes.get(to.node);
   const pa = a && findPort(diagram.symbols.get(a.type), a, from.port);
   const pb = b && findPort(diagram.symbols.get(b.type), b, to.port);
-  const refuse = (code: RefusalCode, detail?: Record<string, unknown>, reason?: string) =>
-    refusal(diagram, code, { from, to, kind, ...(detail ? { detail } : {}) }, reason);
-
   // Flow order (outlet → inlet): an inlet can start the drag, or the drag can end on an outlet, but the
-  // link, the checks below and the host hook all see source → target.
+  // link, the checks below, the host hook and every refusal context all see source → target.
   const swap =
     !!pa &&
     !!pb &&
     ((role(pa) === 'in' && role(pb) !== 'in') || (role(pb) === 'out' && role(pa) !== 'out'));
   const src = swap ? to : from;
   const dst = swap ? from : to;
+  const ends = { from: src, to: dst, ...(swap ? { dragFrom: from, dragTo: to } : {}) };
+  const refuse = (code: RefusalCode, detail?: Record<string, unknown>, reason?: string) =>
+    refusal(diagram, code, { ...ends, kind, ...(detail ? { detail } : {}) }, reason);
   // Read only after the missing-port check below.
   const ps = (swap ? pb : pa)!;
   const pd = (swap ? pa : pb)!;
@@ -128,7 +144,7 @@ export function validateConnect(
     const na = swap ? b : a;
     const nb = swap ? a : b;
     const r = opts.canConnect({ node: na, port: src.port }, { node: nb, port: dst.port }, kind);
-    return fromValidation(diagram, r, { from: src, to: dst, kind });
+    return fromValidation(diagram, r, { ...ends, kind });
   };
 
   if (opts.canConnectOrder === 'before-builtins') {
@@ -206,7 +222,15 @@ export function refusal(
     fallbackReason ??
     DEFAULT_REASONS[code]?.(ctx) ??
     DEFAULT_REASONS.refused!(ctx);
-  return { ok: false, code, reason, ...(ctx.detail ? { detail: ctx.detail } : {}) };
+  return {
+    ok: false,
+    code,
+    reason,
+    ...(ctx.detail ? { detail: ctx.detail } : {}),
+    from: ctx.from,
+    to: ctx.to,
+    ...(ctx.dragFrom ? { dragFrom: ctx.dragFrom, dragTo: ctx.dragTo } : {}),
+  };
 }
 
 /** Turns a host hook result into a check: `true` allows, anything else refuses with a code. */
