@@ -140,6 +140,10 @@ export interface DropSource {
   toNode: (data: DataTransfer, point: Point) => NodeModel | null;
 }
 
+/** A node renderer: an HtmlRenderer, or one with sizing (FR-45). Default sizing: 'fixed'. */
+export type NodeRendererSpec =
+  HtmlRenderer | { render: HtmlRenderer; sizing?: 'fixed' | 'content' };
+
 export interface DiagramOptions {
   mode?: DiagramMode;
   theme?: ThemeName;
@@ -147,6 +151,12 @@ export interface DiagramOptions {
   symbols?: SymbolDef[];
   /** Renderers referenced by HtmlAnnotation.renderer, or by a node's data.overlay. */
   htmlRenderers?: Record<string, HtmlRenderer>;
+  /**
+   * Renders nodes of these types as HTML inside the node's box (FR-45). The library still draws the
+   * ports and the selection. With `sizing: 'content'`, the node takes the measured size of its content
+   * (view state, not saved), and port positions scale from the symbol's declared size.
+   */
+  nodeRenderers?: Record<string, NodeRendererSpec>;
   grid?: { size: number; snap: boolean; visible: boolean };
   minZoom?: number;
   maxZoom?: number;

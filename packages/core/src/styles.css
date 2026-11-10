@@ -290,6 +290,10 @@
   stroke-width: var(--pv-line-width);
   stroke-dasharray: var(--pv-line-signal-dash);
 }
+/* HTML node renderers (FR-45): the box is the node; the library still draws ports and selection. */
+.pv-overlay-item.pv-node-html {
+  box-sizing: border-box;
+}
 .pv-overlay-item {
   color: var(--pv-ink);
   font-family: var(--pv-font);
