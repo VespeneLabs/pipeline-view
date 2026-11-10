@@ -15,6 +15,7 @@ import type {
 } from '../model/types';
 import type { SymbolDef } from '../symbols/types';
 import type { RouterOptions } from '../routing/types';
+import type { RoutingWorkerOptions } from '../routing/worker-client';
 
 export type DiagramMode = 'view' | 'edit';
 export type ThemeName = 'light' | 'dark' | 'auto';
@@ -204,7 +205,12 @@ export interface DiagramOptions {
    */
   culling?: boolean | { threshold?: number; margin?: number };
   lod?: false | { labels?: number; overlays?: number; ports?: number };
-  routingWorker?: boolean;
+  /**
+   * Route the initial full pass in a Web Worker for diagrams with at least `culling.threshold` links
+   * (FR-55). Links show as straight placeholders until the routes arrive. Pass `{ createWorker }` when
+   * your bundler needs its own worker import (or in tests). Incremental re-routes stay on the main thread.
+   */
+  routingWorker?: boolean | RoutingWorkerOptions;
   /** Accessible name for the diagram root. */
   ariaLabel?: string;
 }

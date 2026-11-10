@@ -3,7 +3,7 @@
  * - Data ticks (setNodeData) re-render only the symbol markup and data-status of the touched nodes. No routing.
  * - Structural changes reroute only the links attached to changed nodes, plus those the router reports as affected.
  */
-import type { LinkModel, NodeModel, Point } from '../model/types';
+import type { LinkModel, NodeModel, Point, Rect } from '../model/types';
 import type { Crossing, Junction, RouteRequest, Router } from '../routing/types';
 import type { SymbolDef } from '../symbols/types';
 import type { ItemRef, ModelDiff } from '../diagram/types';
@@ -12,6 +12,8 @@ import type { View } from '../viewport/view';
 import { FrameTask } from './frame';
 import { RouteAnalyzer } from '../routing/analyze';
 import { createRouter } from '../routing/router';
+import { createRoutingWorker, type RoutingWorker } from '../routing/worker-client';
+import { DEFAULT_CULL_THRESHOLD } from './culling';
 import {
   localToDiagram,
   nodeBounds,
@@ -178,8 +180,83 @@ export class SvgRenderer {
       obstacles.set(n.id, nodeBounds(n, this.def(n)));
     }
     this.router.setObstacles(obstacles);
-    this.routeLinks([...store.links.keys()]);
+    this.crossings = new Map();
+    this.pendingWorker.clear();
+    const all = [...store.links.keys()];
+    if (this.useWorker(all.length)) this.routeOffThread(obstacles, all);
+    else this.routeLinks(all);
     this.selectionDirty = true;
+  }
+
+  // ---- off-thread full routing (FR-55) -------------------------------------
+
+  private worker: RoutingWorker | undefined;
+  /** Bumped on every full rebuild: a worker result for an older document is dropped. */
+  private routeEpoch = 0;
+  /** Auto links drawn as placeholders, waiting for the worker's routes. */
+  private readonly pendingWorker = new Set<string>();
+
+  private useWorker(linkCount: number): boolean {
+    const opt = this.diagram.options.routingWorker;
+    if (!opt || !this.router.adoptRoutes) return false;
+    const injected = typeof opt === 'object' && !!opt.createWorker;
+    if (!injected && typeof Worker === 'undefined') return false;
+    const c = this.diagram.options.culling;
+    const threshold = (typeof c === 'object' ? c.threshold : undefined) ?? DEFAULT_CULL_THRESHOLD;
+    return linkCount >= threshold;
+  }
+
+  /**
+   * Draws straight port-to-port placeholders now and routes everything in the Worker. When the result
+   * comes back, links that are still placeholders adopt their routes; links re-routed on the main thread
+   * meanwhile (an edit) keep theirs. A newer load drops the result; a failure falls back to sync routing.
+   */
+  private routeOffThread(obstacles: Map<string, Rect>, ids: string[]): void {
+    const store = this.diagram.store;
+    const epoch = ++this.routeEpoch;
+    const requests: RouteRequest[] = [];
+    for (const id of ids) {
+      const l = store.links.get(id)!;
+      const from = this.endpoint(l.from);
+      const to = this.endpoint(l.to);
+      if (l.routing === 'manual') {
+        this.routes.set(id, [from.point, ...(l.waypoints ?? []), to.point]);
+      } else {
+        requests.push({ linkId: id, from, to, waypoints: l.waypoints });
+        this.routes.set(id, [from.point, to.point]);
+        this.pendingWorker.add(id);
+      }
+    }
+    for (const id of ids) this.drawLink(store.links.get(id)!);
+    this.drawJunctions([]);
+    const opt = this.diagram.options.routingWorker;
+    this.worker ??= createRoutingWorker(typeof opt === 'object' ? opt : {});
+    this.worker.routeAll([...obstacles], requests, this.diagram.options.routing).then(
+      (results) => {
+        if (epoch !== this.routeEpoch || this.destroyed) return;
+        const adopted = results.filter(
+          (r) => this.pendingWorker.has(r.linkId) && store.links.has(r.linkId),
+        );
+        const keep = new Set(adopted.map((r) => r.linkId));
+        this.router.adoptRoutes!(
+          requests.filter((q) => keep.has(q.linkId)),
+          adopted,
+        );
+        for (const r of adopted) {
+          this.routes.set(r.linkId, r.points);
+          this.pendingWorker.delete(r.linkId);
+        }
+        // Manual links were drawn already; analyze them together with the adopted routes.
+        const manual = ids.filter((id) => store.links.get(id)?.routing === 'manual');
+        this.finishRoutes([...keep, ...manual]);
+      },
+      (err: Error) => {
+        if (err.name === 'AbortError' || epoch !== this.routeEpoch || this.destroyed) return;
+        const left = [...this.pendingWorker].filter((id) => store.links.has(id));
+        this.pendingWorker.clear();
+        this.routeLinks(left);
+      },
+    );
   }
 
   private applyIncremental(): void {
@@ -445,6 +522,7 @@ export class SvgRenderer {
   /** Routes `ids`, re-analyzes them (plus the `removed` links) incrementally and redraws what changed. */
   private routeLinks(ids: string[], removed: string[] = []): void {
     const store = this.diagram.store;
+    for (const id of ids) this.pendingWorker.delete(id); // routed here: no longer waiting for the Worker
     const requests: RouteRequest[] = [];
     const manual: string[] = [];
     for (const id of ids) {
@@ -461,6 +539,12 @@ export class SvgRenderer {
     // A link that switched auto -> manual must not keep its stale auto route in the router's lanes.
     if (manual.length) this.router.removeRoutes(manual);
     for (const r of this.router.route(requests)) this.routes.set(r.linkId, r.points);
+    this.finishRoutes(ids, removed);
+  }
+
+  /** Line jumps, junction dots and redraws for links whose routes just changed. */
+  private finishRoutes(ids: string[], removed: string[] = []): void {
+    const store = this.diagram.store;
     const { crossings, junctions } = this.analyzer
       .update([
         ...removed.map((id) => [id, null] as const),
@@ -641,9 +725,13 @@ export class SvgRenderer {
     this.markFull();
   }
 
+  private destroyed = false;
+
   destroy(): void {
+    this.destroyed = true;
     for (const u of this.unsubscribe) u();
     this.frame.cancel();
+    this.worker?.terminate();
     this.junctionLayer.remove();
   }
 }
