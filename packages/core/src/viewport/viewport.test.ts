@@ -95,6 +95,29 @@ describe('mount', () => {
   });
 });
 
+describe('grid', () => {
+  it('renders a screen-space grid pattern that follows pan and zoom, and hides when too dense', () => {
+    d.destroy();
+    d = new Diagram({ symbols: [box], grid: { size: 20, snap: false, visible: true } });
+    d.mount(container);
+    const pattern = container.querySelector('pattern')!;
+    const path = container.querySelector('.pv-grid-line')!;
+    expect(pattern.id).toMatch(/^pv-grid-\d+$/);
+    expect(container.querySelector(`rect[fill="url(#${pattern.id})"]`)).not.toBeNull();
+    d.setViewport({ x: 30, y: -5, zoom: 2 });
+    expect(pattern.getAttribute('width')).toBe('40');
+    expect(pattern.getAttribute('x')).toBe('30');
+    expect(pattern.getAttribute('y')).toBe('35');
+    d.setViewport({ zoom: 0.2 });
+    expect(path.getAttribute('d')).toBe('');
+  });
+
+  it('is absent unless grid.visible is set', () => {
+    d.mount(container);
+    expect(container.querySelector('pattern')).toBeNull();
+  });
+});
+
 describe('viewport API', () => {
   beforeEach(() => d.mount(container));
 

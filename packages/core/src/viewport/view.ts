@@ -24,9 +24,19 @@ export interface View {
   layers: ViewLayers;
   /** HTML overlay with the same transform as `scene`. */
   overlay: HTMLDivElement;
+  /** Background grid, drawn in screen space (DiagramOptions.grid.visible). */
+  grid?: { pattern: SVGPatternElement; path: SVGPathElement; size: number };
 }
 
-export function createView(container: HTMLElement, ariaLabel = 'Process diagram'): View {
+let gridIds = 0;
+/** Below this on-screen spacing (px) the grid is hidden, because it would turn into noise. */
+const MIN_GRID_PX = 6;
+
+export function createView(
+  container: HTMLElement,
+  ariaLabel = 'Process diagram',
+  gridSize?: number,
+): View {
   const doc = container.ownerDocument;
   const g = (cls: string) => {
     const el = doc.createElementNS(SVG_NS, 'g');
@@ -69,7 +79,26 @@ export function createView(container: HTMLElement, ariaLabel = 'Process diagram'
 
   root.append(svg, overlay);
   container.append(root);
-  return { root, svg, scene, layers, overlay };
+  const view: View = { root, svg, scene, layers, overlay };
+  if (gridSize && gridSize > 0) {
+    // Ids must be unique per page, since several diagrams may coexist.
+    const id = `pv-grid-${++gridIds}`;
+    const defs = doc.createElementNS(SVG_NS, 'defs');
+    const pattern = doc.createElementNS(SVG_NS, 'pattern');
+    pattern.setAttribute('id', id);
+    pattern.setAttribute('patternUnits', 'userSpaceOnUse');
+    const path = doc.createElementNS(SVG_NS, 'path');
+    path.setAttribute('class', 'pv-grid-line');
+    pattern.append(path);
+    defs.append(pattern);
+    const rect = doc.createElementNS(SVG_NS, 'rect');
+    rect.setAttribute('width', '100%');
+    rect.setAttribute('height', '100%');
+    rect.setAttribute('fill', `url(#${id})`);
+    grid.append(defs, rect);
+    view.grid = { pattern, path, size: gridSize };
+  }
+  return view;
 }
 
 /** Applies the viewport transform to the scene and the overlay. Rounding avoids sub-pixel blur on idle frames. */
@@ -79,4 +108,18 @@ export function applyViewportToView(view: View, v: Viewport): void {
   view.scene.setAttribute('transform', `translate(${x},${y}) scale(${v.zoom})`);
   view.overlay.style.transform = `translate(${x}px,${y}px) scale(${v.zoom})`;
   view.root.style.setProperty('--pv-zoom', String(v.zoom));
+  if (view.grid) {
+    const step = view.grid.size * v.zoom;
+    const g = view.grid;
+    if (step < MIN_GRID_PX) {
+      g.path.setAttribute('d', '');
+      return;
+    }
+    const s = Math.round(step * 100) / 100;
+    g.pattern.setAttribute('width', String(s));
+    g.pattern.setAttribute('height', String(s));
+    g.pattern.setAttribute('x', String(((x % s) + s) % s));
+    g.pattern.setAttribute('y', String(((y % s) + s) % s));
+    g.path.setAttribute('d', `M${s} 0H0V${s}`);
+  }
 }

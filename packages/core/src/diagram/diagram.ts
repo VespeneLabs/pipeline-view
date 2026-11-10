@@ -103,7 +103,12 @@ export class Diagram implements ImplementedApi {
   mount(container: HTMLElement): void {
     this.assertAlive();
     if (this.view) throw new Error('Diagram is already mounted');
-    const view = createView(container, this.options.ariaLabel);
+    const grid = this.options.grid;
+    const view = createView(
+      container,
+      this.options.ariaLabel,
+      grid?.visible ? grid.size : undefined,
+    );
     this.view = view;
     view.root.dataset.mode = this.mode;
     this.applyTheme();
