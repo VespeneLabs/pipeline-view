@@ -42,6 +42,12 @@
   --pv-jump-radius: 8;
   --pv-leader-line: var(--pv-line-signal);
   --pv-focus-ring: #185ac7;
+  /* Comparison marks (FR-51). */
+  --pv-diff-added: #1b873f;
+  --pv-diff-removed: #c62828;
+  --pv-diff-moved: #1f6fb2;
+  --pv-diff-changed: #b26a00;
+  --pv-diff-ghost-opacity: 0.35;
   /* Problem markers (FR-48): badge colours per severity, and the icon ink on top of them. */
   --pv-issue-error: #c62828;
   --pv-issue-warning: #b26a00;
@@ -65,6 +71,10 @@
   --pv-card-bg: #152129;
   --pv-card-border: #2a3a43;
   --pv-focus-ring: #6ea8ff;
+  --pv-diff-added: #4cc274;
+  --pv-diff-removed: #ff6b6b;
+  --pv-diff-moved: #6ea8ff;
+  --pv-diff-changed: #f0a830;
   --pv-issue-error: #ff6b6b;
   --pv-issue-warning: #f0a830;
   --pv-issue-info: #6ea8ff;
@@ -87,6 +97,10 @@
     --pv-card-bg: #152129;
     --pv-card-border: #2a3a43;
     --pv-focus-ring: #6ea8ff;
+    --pv-diff-added: #4cc274;
+    --pv-diff-removed: #ff6b6b;
+    --pv-diff-moved: #6ea8ff;
+    --pv-diff-changed: #f0a830;
     --pv-issue-error: #ff6b6b;
     --pv-issue-warning: #f0a830;
     --pv-issue-info: #6ea8ff;
@@ -423,6 +437,49 @@
   fill: var(--pv-muted);
   font: 500 var(--pv-font-size-small) var(--pv-font);
   pointer-events: none;
+}
+
+/* ---- Comparison (FR-51) ---- */
+.pv-diff-outline {
+  fill: none;
+  stroke-width: 2px;
+  stroke-dasharray: 6 4;
+  vector-effect: non-scaling-stroke;
+  rx: var(--pv-selection-radius);
+}
+.pv-diff-outline[data-diff='added'] {
+  stroke: var(--pv-diff-added);
+}
+.pv-diff-outline[data-diff='moved'] {
+  stroke: var(--pv-diff-moved);
+}
+.pv-diff-outline[data-diff='changed'] {
+  stroke: var(--pv-diff-changed);
+}
+.pv-link[data-diff='added'] .pv-link-line {
+  stroke: var(--pv-diff-added);
+}
+.pv-link[data-diff='moved'] .pv-link-line {
+  stroke: var(--pv-diff-moved);
+}
+.pv-link[data-diff='changed'] .pv-link-line {
+  stroke: var(--pv-diff-changed);
+}
+.pv-diff-ghost,
+.pv-diff-ghost-link {
+  opacity: var(--pv-diff-ghost-opacity);
+}
+.pv-diff-ghost-link {
+  pointer-events: none;
+}
+.pv-diff-ghost {
+  color: var(--pv-diff-removed);
+}
+.pv-diff-ghost-link {
+  fill: none;
+  stroke: var(--pv-diff-removed);
+  stroke-width: var(--pv-line-width);
+  stroke-dasharray: 6 4;
 }
 
 /* ---- Problem markers (FR-48) ---- */

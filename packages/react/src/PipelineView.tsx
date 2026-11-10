@@ -43,6 +43,11 @@ export interface PipelineViewProps {
   mode?: DiagramMode;
   theme?: ThemeName;
   /**
+   * A base model to compare against (FR-51): added, moved and changed items get `data-diff`, and removed
+   * ones are drawn as ghosts. Applied with `showDiff` when the identity changes; omit it to clear.
+   */
+  compareWith?: DiagramModel | null;
+  /**
    * Problem markers on nodes and links (FR-48), e.g. validation results. Applied with `setIssues` whenever
    * the object's identity changes, so memoize it. Never saved with the model.
    */
@@ -149,7 +154,7 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
       };
     }, [portals]);
 
-    const { model, mode, theme, issues, symbols, fitOnLoad = true } = props;
+    const { model, mode, theme, compareWith, issues, symbols, fitOnLoad = true } = props;
 
     useEffect(() => {
       if (!diagram || !model || model === loaded.current || model === lastEmitted.current) return;
@@ -173,6 +178,10 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
     useEffect(() => {
       if (diagram && theme) diagram.setTheme(theme);
     }, [diagram, theme]);
+
+    useEffect(() => {
+      diagram?.showDiff(compareWith ?? null);
+    }, [diagram, compareWith]);
 
     useEffect(() => {
       diagram?.setIssues(issues ?? {});
