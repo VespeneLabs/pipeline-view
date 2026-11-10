@@ -285,6 +285,11 @@ describe('rendering per-node ports', () => {
     expect(portIds()).toEqual(['in-1', 'in-2', 'in-3', 'in-4', 'in-5', 'out-1']);
     // Taller node (192 instead of 128): out-1 moved down to the middle, and link 'o' was rerouted.
     expect(d.getLinkPath('o')![0]).toEqual({ x: 240, y: 96 });
+    // Export uses the same per-node geometry: the link leaves the moved out-1 port.
+    const live = container.querySelector('[data-link-id="o"] .pv-link-line')!.getAttribute('d');
+    const doc = new DOMParser().parseFromString(d.exportSVG(), 'image/svg+xml');
+    expect(doc.querySelector('[data-link-id="o"] .pv-link-line')!.getAttribute('d')).toBe(live);
+    expect(live).toMatch(/^M\s*240[ ,]96(?!\d)/);
     d.destroy();
   });
 
