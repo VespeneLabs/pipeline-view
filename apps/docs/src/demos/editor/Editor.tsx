@@ -1,18 +1,40 @@
-import { type Diagram, type DiagramModel, getEditor, validateModel } from '@pipeline-view/core';
+import {
+  type DeleteRequest,
+  type Diagram,
+  type DiagramModel,
+  type Viewport,
+  getEditor,
+  validateModel,
+} from '@pipeline-view/core';
 import {
   PipelineView,
   SymbolPalette,
+  ViewportControls,
   useDiagram,
   useDiagramEvent,
   useHistory,
   useSelection,
 } from '@pipeline-view/react';
 import { gasSymbols, processSymbols } from '@pipeline-view/symbols';
-import { useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { WhatToTry } from '../../components/WhatToTry';
+import { manifold } from './manifold';
+import {
+  ConfirmDialog,
+  HostPalette,
+  Inspector,
+  NO_RULES,
+  RefusalToasts,
+  RulesPanel,
+  Toasts,
+  type ConfirmRequest,
+  type Rules,
+} from './rules';
 import { editorStartModel } from './startModel';
+import '../demo.css';
 import './editor.css';
 
-const symbols = [...gasSymbols, ...processSymbols];
+const symbols = [...gasSymbols, ...processSymbols, manifold];
 const KINDS = ['process', 'signal', 'pneumatic', 'electrical'] as const;
 
 function Toolbar() {
@@ -122,13 +144,60 @@ function JsonPanel() {
 }
 
 export function PidEditor() {
-  const [model] = useState(editorStartModel);
+  const [rules, setRules] = useState<Rules>(NO_RULES);
+  const [diagram, setDiagram] = useState<Diagram | null>(null);
+  // Document and view to (re)create the diagram from. Taken from the live diagram when a rule change
+  // re-creates it, so the user keeps their edits and their view.
+  const [snapshot, setSnapshot] = useState<{ model: DiagramModel; viewport?: Viewport }>({
+    model: editorStartModel,
+  });
+  // Written in the change handler, read inside onBeforeDelete: "Confirm deletes" needs no re-create.
+  const confirmDeletes = useRef(false);
+  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
+
+  // Connection rules are options, read when the diagram is created: a new key re-creates it.
+  const structural = `${rules.directed}-${rules.noCycles}-${rules.noSelfLoops}`;
+  const changeRules = (next: Rules) => {
+    const nextStructural = `${next.directed}-${next.noCycles}-${next.noSelfLoops}`;
+    if (diagram && nextStructural !== structural) {
+      // A pending delete belongs to the diagram being replaced: answer it before it goes.
+      confirm?.resolve(false);
+      setSnapshot({ model: diagram.toJSON(), viewport: diagram.getViewport() });
+    }
+    confirmDeletes.current = next.confirmDeletes;
+    setRules(next);
+  };
+  const options = useMemo(
+    () => ({
+      grid: { size: 10, snap: true, visible: true },
+      ariaLabel: 'P&ID editor canvas',
+      initialViewport: snapshot.viewport,
+      directed: rules.directed ? { kinds: ['process'] } : false,
+      noCycles: rules.noCycles ? { kinds: ['process'] } : false,
+      noSelfLoops: rules.noSelfLoops,
+      // A Promise keeps the delete pending until the dialog answers.
+      onBeforeDelete: (items: DeleteRequest) =>
+        !confirmDeletes.current ||
+        new Promise<boolean>((resolve) =>
+          setConfirm({
+            items,
+            resolve: (ok) => {
+              setConfirm(null);
+              resolve(ok);
+            },
+          }),
+        ),
+    }),
+    [snapshot, rules.directed, rules.noCycles, rules.noSelfLoops],
+  );
+
   const onReady = (d: Diagram) => {
+    setDiagram(d);
     if (d.view) d.view.root.dataset.testid = 'editor-canvas';
     (window as unknown as { __diagram?: Diagram }).__diagram = d; // for e2e specs and the console
   };
   return (
-    <>
+    <Toasts>
       <h1>P&amp;ID editor</h1>
       <p className="lede">
         Drag symbols from the palette (or click one to add it at the centre), connect ports by
@@ -137,16 +206,38 @@ export function PidEditor() {
         <kbd>⌘/Ctrl</kbd>+<kbd>D</kbd> duplicate, <kbd>Enter</kbd> rename. Drag a pipe segment to
         reroute it by hand; double-click a segment to add a bend.
       </p>
+      <WhatToTry
+        steps={[
+          <>
+            Select manifold <b>M1</b> and use the <b>Inlets</b> stepper: ports appear and disappear,
+            and removing <code>in-3</code> removes P2&apos;s line too (one undo step).
+          </>,
+          <>
+            Turn on <b>Directed process lines</b>, then drag from one manifold inlet to another: the
+            port turns red while you drag, and dropping explains why it was refused.
+          </>,
+          <>
+            Try to move <b>T9 (locked)</b> or delete its line, then lower M1&apos;s <b>Outlets</b>{' '}
+            to 1: the locked line refuses.
+          </>,
+          <>
+            Turn on <b>Confirm deletes</b> and press <kbd>Del</kbd> on a selection: your own dialog
+            decides.
+          </>,
+          <>
+            Drag an item from <b>Your palette</b>, or press <b>Place…</b> and place it with the
+            arrow keys and <kbd>Enter</kbd>.
+          </>,
+        ]}
+      />
       <div className="editor-layout">
         <PipelineView
-          model={model}
+          key={structural}
+          model={snapshot.model}
           mode="edit"
           symbols={symbols}
           onReady={onReady}
-          options={{
-            grid: { size: 10, snap: true, visible: true },
-            ariaLabel: 'P&ID editor canvas',
-          }}
+          options={options}
           className="editor-canvas"
         >
           <Toolbar />
@@ -154,9 +245,17 @@ export function PidEditor() {
             <SymbolPalette />
           </div>
           <SelectionInfo />
+          <div className="editor-side">
+            <Inspector />
+            <RulesPanel rules={rules} onChange={changeRules} />
+            <HostPalette />
+          </div>
           <JsonPanel />
+          <ViewportControls lock />
+          <RefusalToasts />
         </PipelineView>
       </div>
-    </>
+      <ConfirmDialog request={confirm} />
+    </Toasts>
   );
 }
