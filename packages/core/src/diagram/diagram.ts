@@ -1,4 +1,12 @@
-import type { DataRecord, DiagramModel, ModelPatch, Point, Rect, Size } from '../model/types';
+import type {
+  DataRecord,
+  DiagramModel,
+  ModelPatch,
+  NodeModel,
+  Point,
+  Rect,
+  Size,
+} from '../model/types';
 import { ModelStore, applyPatch, clone, validateModel } from '../model/store';
 import { migrateModel } from '../model/migrate';
 import {
@@ -23,6 +31,7 @@ import {
 import { applyViewportToView, createView, type View } from '../viewport/view';
 import { Emitter } from './emitter';
 import { nodeBounds, unionRects } from './geometry';
+import { nodePorts } from '../symbols/resolve';
 import { SvgRenderer } from '../render/svg-renderer';
 import { OverlayRenderer } from '../render/overlay';
 import { attachPointerEvents } from '../render/input';
@@ -219,6 +228,11 @@ export class Diagram implements DiagramApi {
     this.transact(fn, opts, true);
   }
 
+  /**
+   * `guarded` is true for user edits: the before-hooks run (FR-43) and links on ports that disappear
+   * are pruned (FR-40). It's false for host-driven patches (applyDiff, patch(), host history), whose
+   * documents are the source of truth and already carry any link removals.
+   */
   private transact(
     fn: (tx: Transaction) => void,
     opts: { undoable?: boolean },
@@ -226,7 +240,7 @@ export class Diagram implements DiagramApi {
   ): void {
     if (this.previewOps) throw new Error('Commit or cancel the active preview before update()');
     const tracker = new ChangeTracker();
-    const ops = this.runTx(fn, tracker);
+    const ops = this.runTx(fn, tracker, guarded);
     if (ops.length === 0) return;
     const apply = (t: ChangeTracker) => {
       if (opts.undoable !== false) this.pushUndo(ops, t);
@@ -334,7 +348,7 @@ export class Diagram implements DiagramApi {
    */
   preview(fn: (tx: Transaction) => void): void {
     this.previewTracker ??= new ChangeTracker();
-    const ops = this.runTx(fn, this.previewTracker);
+    const ops = this.runTx(fn, this.previewTracker, true);
     this.previewOps ??= [];
     this.previewOps.push(...ops);
     if (ops.length) this.commit(ops, false);
@@ -383,10 +397,20 @@ export class Diagram implements DiagramApi {
     return this.previewOps !== null;
   }
 
-  private runTx(fn: (tx: Transaction) => void, tracker?: ChangeTracker): Op[] {
+  /** Resolved port ids of a node, or undefined for an unknown symbol without a ports override. */
+  private portIdsOf(node: NodeModel): ReadonlySet<string> | undefined {
+    const def = this.symbols.get(node.type);
+    return def || node.ports ? new Set(nodePorts(def, node).map((p) => p.id)) : undefined;
+  }
+
+  private runTx(fn: (tx: Transaction) => void, tracker?: ChangeTracker, prune = true): Op[] {
     this.assertAlive();
     if (this.inTransaction) throw new Error('diagram.update() cannot be nested');
-    const tx = new TransactionImpl(this.store, tracker);
+    const tx = new TransactionImpl(this.store, {
+      tracker,
+      // User edits prune links on ports that disappear (FR-40); host-driven patches don't (FR-44).
+      ...(prune ? { portIds: (node: NodeModel) => this.portIdsOf(node) } : {}),
+    });
     this.inTransaction = true;
     try {
       fn(tx);
