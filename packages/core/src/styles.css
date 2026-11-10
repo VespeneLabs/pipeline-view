@@ -251,3 +251,138 @@
   font-family: var(--pv-font);
   pointer-events: auto;
 }
+
+/* ---- editor adornments (EditorController) --------------------------------- */
+
+.pv-editor :is(.pv-rotate-handle, .pv-segment-handle, .pv-bend-handle) {
+  fill: var(--pv-bg);
+  stroke: var(--pv-selection);
+  cursor: pointer;
+}
+.pv-editor .pv-rotate-stem {
+  stroke: var(--pv-selection);
+}
+.pv-editor .pv-rotate-handle {
+  cursor: grab;
+}
+.pv-editor .pv-segment-handle.pv-h {
+  cursor: ns-resize;
+}
+.pv-editor .pv-segment-handle.pv-v {
+  cursor: ew-resize;
+}
+.pv-editor .pv-guide {
+  stroke: var(--pv-selection);
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+.pv-editor .pv-marquee {
+  fill: var(--pv-selection);
+  fill-opacity: 0.08;
+  stroke: var(--pv-selection);
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+.pv-editor .pv-port-target {
+  fill: none;
+  stroke: var(--pv-selection);
+  pointer-events: none;
+}
+.pv-editor .pv-port-target.pv-hot {
+  fill: var(--pv-selection);
+  fill-opacity: 0.25;
+}
+.pv-editor .pv-connect-preview {
+  fill: none;
+  stroke: var(--pv-selection);
+  stroke-dasharray: 6 4;
+  pointer-events: none;
+}
+.pv-label-editor {
+  font: 600 var(--pv-font-size-label) var(--pv-font);
+  color: var(--pv-ink);
+  background: var(--pv-card-bg);
+  border: 1px solid var(--pv-selection);
+  border-radius: var(--pv-radius);
+  padding: 2px 6px;
+  text-align: center;
+  min-width: 6em;
+}
+
+/* ---- palette (<SymbolPalette/>) -------------------------------------------- */
+
+.pv-palette {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: var(--pv-font);
+  color: var(--pv-ink);
+}
+.pv-palette-search {
+  font: inherit;
+  font-size: var(--pv-font-size-small);
+  color: var(--pv-ink);
+  background: var(--pv-card-bg);
+  border: 1px solid var(--pv-card-border);
+  border-radius: var(--pv-radius);
+  padding: 6px 8px;
+}
+.pv-palette-search:focus-visible {
+  outline: 2px solid var(--pv-selection);
+  outline-offset: 1px;
+}
+.pv-palette-group-title {
+  cursor: pointer;
+  font-size: var(--pv-font-size-small);
+  font-weight: 600;
+  color: var(--pv-muted);
+  padding: 2px 0;
+}
+.pv-palette-count {
+  font-weight: 400;
+}
+.pv-palette-grid {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 6px;
+}
+.pv-palette-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 4px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--pv-ink);
+  background: var(--pv-card-bg);
+  border: 1px solid var(--pv-card-border);
+  border-radius: var(--pv-radius);
+  cursor: grab;
+}
+.pv-palette-item:hover {
+  border-color: var(--pv-selection);
+}
+.pv-palette-item:focus-visible {
+  outline: 2px solid var(--pv-selection);
+  outline-offset: 1px;
+}
+.pv-palette-preview {
+  width: 44px;
+  height: 32px;
+  color: var(--pv-symbol-stroke);
+  overflow: visible;
+}
+.pv-palette-name {
+  line-height: 1.2;
+  text-align: center;
+}
+.pv-palette-empty {
+  margin: 0;
+  font-size: var(--pv-font-size-small);
+  color: var(--pv-muted);
+}
