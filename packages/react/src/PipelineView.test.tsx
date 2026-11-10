@@ -105,6 +105,16 @@ describe('<PipelineView>', () => {
     expect(root.dataset.theme).toBe('dark');
   });
 
+  it('applies compareWith with showDiff and clears it when removed', () => {
+    const ref = createRef<Diagram>();
+    const m = model();
+    const base = { ...m, nodes: [m.nodes[0]!] };
+    const { rerender } = render(<PipelineView ref={ref} model={m} compareWith={base} />);
+    expect(ref.current!.getDiffBase()).toBe(base);
+    rerender(<PipelineView ref={ref} model={m} />);
+    expect(ref.current!.getDiffBase()).toBeNull();
+  });
+
   it('applies the issues prop with setIssues and clears it when removed', () => {
     const ref = createRef<Diagram>();
     const m = model();

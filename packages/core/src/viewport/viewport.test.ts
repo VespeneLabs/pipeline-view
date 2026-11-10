@@ -61,6 +61,7 @@ describe('mount', () => {
       c.getAttribute('class'),
     );
     expect(order).toEqual([
+      'pv-layer-diff',
       'pv-layer-leaders',
       'pv-layer-links',
       'pv-junctions',

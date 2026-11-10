@@ -194,6 +194,8 @@ function exportBounds(diagram: Diagram, view: View, viewportOnly: boolean, pad: 
 function cloneSvg(live: SVGElement, win: Window): SVGElement {
   const copy = live.cloneNode(false) as SVGElement;
   copy.removeAttribute('tabindex');
+  // Comparison marks are view state, not part of the drawing.
+  copy.removeAttribute('data-diff');
   // Problem markers are view state, not part of the drawing.
   copy.removeAttribute('data-issue-severity');
   copy.removeAttribute('aria-description');
