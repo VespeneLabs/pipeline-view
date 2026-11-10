@@ -106,6 +106,32 @@ describe('validateConnect: explained refusals (FR-42)', () => {
       code: 'port-full',
       reason: 'Port in already has the maximum number of links.',
       detail: { node: 'b', port: 'in', maxLinks: 1 },
+      from: end('c', 'out'),
+      to: end('b', 'in'),
+    });
+  });
+
+  it('gives refusal contexts and results in flow order, with the drag order alongside', () => {
+    const seen: unknown[] = [];
+    const d = setup({
+      refusalMessages: (_code, ctx) => {
+        seen.push(ctx);
+        return undefined;
+      },
+    });
+    // b.in is full. Dragging from the inlet (b.in → c.out) and from the outlet (c.out → b.in) must
+    // describe the same link: from = c.out (outlet), to = b.in (inlet).
+    const fromOutlet = validateConnect(d, end('c', 'out'), end('b', 'in'), 'process');
+    const fromInlet = validateConnect(d, end('b', 'in'), end('c', 'out'), 'process');
+    expect(fromInlet).toMatchObject({ from: end('c', 'out'), to: end('b', 'in') });
+    expect(fromInlet).toMatchObject({ dragFrom: end('b', 'in'), dragTo: end('c', 'out') });
+    expect(fromOutlet).not.toHaveProperty('dragFrom');
+    expect(seen[0]).toMatchObject({ from: end('c', 'out'), to: end('b', 'in') });
+    expect(seen[1]).toMatchObject({
+      from: end('c', 'out'),
+      to: end('b', 'in'),
+      dragFrom: end('b', 'in'),
+      dragTo: end('c', 'out'),
     });
   });
 
@@ -134,6 +160,8 @@ describe('validateConnect: explained refusals (FR-42)', () => {
       code: 'limit_reached',
       reason: 'At most 1000 links.',
       detail: { max: 1000 },
+      from: end('b', 'out'),
+      to: end('c', 'in'),
     });
   });
 

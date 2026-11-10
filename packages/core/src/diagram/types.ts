@@ -69,10 +69,15 @@ export type ValidationResult =
 
 /** Context passed to `refusalMessages` for localizing a built-in refusal. */
 export interface RefusalContext {
+  /** Source end, always in flow order (outlet → inlet), however the user dragged. */
   from: LinkEnd;
+  /** Target end, always in flow order. */
   to: LinkEnd;
   kind: LinkKind;
   detail?: Record<string, unknown>;
+  /** The ends as the user dragged them, present only when that differs from flow order. */
+  dragFrom?: LinkEnd;
+  dragTo?: LinkEnd;
 }
 
 /** One step of undo history, as JSON-serializable patches (FR-44). */
@@ -243,8 +248,13 @@ export interface DiagramEvents {
   changeDropped: { reason: 'stale'; diff: ModelDiff };
   /** A connect drop on a port or node was refused (FR-42). Drops on empty canvas are cancels and don't fire. */
   connectRejected: {
+    /** Source end in flow order (outlet → inlet). */
     from: LinkEnd;
+    /** Target end in flow order. */
     to: LinkEnd;
+    /** The ends as the user dragged them, present only when that differs from flow order. */
+    dragFrom?: LinkEnd;
+    dragTo?: LinkEnd;
     kind: LinkKind;
     code: RefusalCode;
     /** Final, possibly host-localized, message. */
