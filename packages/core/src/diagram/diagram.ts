@@ -188,13 +188,67 @@ export class Diagram implements DiagramApi {
     return this.store.toJSON();
   }
 
+  /**
+   * One transaction: one render pass, one undo step, one modelChange (FR-3). `onBeforeDelete` and
+   * `beforeChange` can veto it (FR-43); when a hook returns a Promise, the change is rolled back at once
+   * and re-applied only if the Promise resolves true.
+   */
   update(fn: (tx: Transaction) => void, opts: { undoable?: boolean } = {}): void {
+    this.transact(fn, opts, true);
+  }
+
+  private transact(
+    fn: (tx: Transaction) => void,
+    opts: { undoable?: boolean },
+    guarded: boolean,
+  ): void {
     if (this.previewOps) throw new Error('Commit or cancel the active preview before update()');
     const tracker = new ChangeTracker();
     const ops = this.runTx(fn, tracker);
     if (ops.length === 0) return;
-    if (opts.undoable !== false) this.pushUndo(ops, tracker);
-    this.commit(ops, true, true, tracker);
+    const apply = (t: ChangeTracker) => {
+      if (opts.undoable !== false) this.pushUndo(ops, t);
+      this.commit(ops, true, true, t);
+    };
+    const verdict = guarded ? this.askHooks(ops, tracker) : true;
+    if (verdict === true) return apply(tracker);
+    // Vetoed (or pending): nothing was emitted yet, so a silent revert is enough.
+    this.revertSilently(ops);
+    if (verdict !== false) {
+      void verdict.then((ok) => {
+        if (ok && !this.destroyed) apply(this.applyTracked(ops));
+      });
+    }
+  }
+
+  /**
+   * Runs onBeforeDelete (when the change removes items, cascaded links included) and then beforeChange.
+   * Returns a boolean when every hook answered synchronously.
+   */
+  private askHooks(ops: Op[], tracker: ChangeTracker): boolean | Promise<boolean> {
+    const { onBeforeDelete, beforeChange } = this.options;
+    if (!onBeforeDelete && !beforeChange) return true;
+    const diff = diffOf(ops);
+    if (isEmptyDiff(diff)) return true;
+    const r = diff.removed;
+    const removes = r.nodes.length + r.links.length + r.annotations.length > 0;
+    const first = removes && onBeforeDelete ? onBeforeDelete({ ...r }) : true;
+    const second = () =>
+      beforeChange ? beforeChange(diff, tracker.patches(this.store).forward) : true;
+    const settle = (v: unknown) => v === true;
+    if (first instanceof Promise) {
+      return first.then(
+        async (ok) => settle(ok) && settle(await second()),
+        () => false,
+      );
+    }
+    if (!settle(first)) return false;
+    const v = second();
+    return v instanceof Promise ? v.then(settle, () => false) : settle(v);
+  }
+
+  private revertSilently(ops: Op[]): void {
+    for (let i = ops.length - 1; i >= 0; i--) applyOp(this.store, invertOp(ops[i]!));
   }
 
   // ---- controlled mode (FR-44) -----------------------------------------------
@@ -207,7 +261,8 @@ export class Diagram implements DiagramApi {
   applyDiff(patch: ModelPatch, opts: { undoable?: boolean } = {}): void {
     if (patch.meta !== undefined)
       this.store.meta = patch.meta === null ? undefined : clone(patch.meta);
-    this.update((tx) => applyPatchTx(tx, this.store, patch), opts);
+    // Host-driven, so the before-hooks don't run.
+    this.transact((tx) => applyPatchTx(tx, this.store, patch), opts, false);
   }
 
   /**
@@ -249,12 +304,28 @@ export class Diagram implements DiagramApi {
 
   commitPreview(): void {
     const ops = this.previewOps;
-    const tracker = this.previewTracker ?? undefined;
+    const tracker = this.previewTracker ?? new ChangeTracker();
     this.previewOps = null;
     this.previewTracker = null;
     if (!ops?.length) return;
-    this.pushUndo(ops, tracker);
-    this.commit(ops, true, false, tracker);
+    const verdict = this.askHooks(ops, tracker);
+    if (verdict === true) {
+      this.pushUndo(ops, tracker);
+      this.commit(ops, true, false, tracker);
+      return;
+    }
+    // The gesture was already rendered, so revert visibly.
+    const inverse = ops.map(invertOp).reverse();
+    for (const op of inverse) applyOp(this.store, op);
+    this.commit(inverse, false);
+    if (verdict !== false) {
+      void verdict.then((ok) => {
+        if (!ok || this.destroyed) return;
+        const t = this.applyTracked(ops);
+        this.pushUndo(ops, t);
+        this.commit(ops, true, true, t);
+      });
+    }
   }
 
   cancelPreview(): void {
@@ -359,7 +430,7 @@ export class Diagram implements DiagramApi {
   private applyHistoryPatch(patch: ModelPatch): void {
     if (patch.meta !== undefined)
       this.store.meta = patch.meta === null ? undefined : clone(patch.meta);
-    this.update((tx) => applyPatchTx(tx, this.store, patch), { undoable: false });
+    this.transact((tx) => applyPatchTx(tx, this.store, patch), { undoable: false }, false);
   }
 
   /** Emits the net diff: `internal` for layers (render / re-route), `pub` for modelChange. */
