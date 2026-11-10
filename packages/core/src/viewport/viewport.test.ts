@@ -21,6 +21,7 @@ function pointer(type: string, init: Partial<PointerEventInit> & { target?: Elem
       button: 0,
       pointerId: 1,
       pointerType: 'mouse',
+      isPrimary: (rest.pointerId ?? 1) === 1,
       ...rest,
     }),
   );
