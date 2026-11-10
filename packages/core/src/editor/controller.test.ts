@@ -296,4 +296,15 @@ describe('EditorController', () => {
     expect(d.view!.layers.interaction.querySelector('.pv-editor')).toBeNull();
     expect(other.isConnected).toBe(true);
   });
+
+  it('captures the pointer only once a press becomes a drag, so plain clicks keep their target', () => {
+    const spy = vi.spyOn(d.view!.root, 'setPointerCapture').mockImplementation(() => {});
+    const node = q('[data-node-id="b"]');
+    pointer('pointerdown', node, 210, 105);
+    pointer('pointermove', d.view!.root, 211, 106);
+    pointer('pointerup', d.view!.root, 211, 106);
+    expect(spy).not.toHaveBeenCalled();
+    drag(node, [210, 105], [260, 105]);
+    expect(spy).toHaveBeenCalledOnce();
+  });
 });
