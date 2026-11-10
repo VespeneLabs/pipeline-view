@@ -50,7 +50,7 @@ export function liftModelNotes(changelog) {
       text.push(next.trim());
       i++;
     }
-    notes.push(text.join(' '));
+    notes.push(capitalize(text.join(' ')));
   }
   if (notes.length === 0) return changelog;
 
@@ -67,6 +67,11 @@ export function liftModelNotes(changelog) {
     out = ['', '### Model', '', ...notes.map((n) => `- ${n}`), ...body];
   }
   return [...lines.slice(0, start + 1), ...tidy(out), ...lines.slice(end)].join('\n');
+}
+
+/** "the model…" → "The model…": the prefix is gone, so the note starts a sentence. Leaves `code` alone. */
+function capitalize(s) {
+  return /^[a-z]/.test(s) ? s[0].toUpperCase() + s.slice(1) : s;
 }
 
 /** Drops "### X" headings left with no entries and collapses runs of blank lines. */
