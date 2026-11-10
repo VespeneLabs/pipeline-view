@@ -13,7 +13,7 @@ if (!version) {
   process.exit(2);
 }
 const root = resolve(process.argv[3] ?? join(dirname(fileURLToPath(import.meta.url)), '..'));
-const PACKAGES = ['core', 'symbols', 'react'];
+const PACKAGES = ['pipeline-view'];
 
 /** The body of the "## <version>" section, up to the next "## " heading. */
 export function section(changelog, v) {
@@ -27,23 +27,22 @@ export function section(changelog, v) {
     .trim();
 }
 
-const parts = [
-  `Packages: ${PACKAGES.map((p) => `\`@pipeline-view/${p}@${version}\``).join(', ')}.`,
-  '',
-];
+const parts = [`Package: \`@vespenelabs/pipeline-view@${version}\` (GitHub Packages).`, ''];
 let found = 0;
 for (const p of PACKAGES) {
   const file = join(root, 'packages', p, 'CHANGELOG.md');
   const body = existsSync(file) ? section(readFileSync(file, 'utf8'), version) : null;
   if (body) found++;
-  parts.push(`## @pipeline-view/${p}`, '', body || '_No changes._', '');
+  parts.push(body || '_No changes._', '');
 }
 parts.push(
-  'Install from the attached tarballs. Always include core, because symbols and react depend on the same core version:',
+  'Install from GitHub Packages (see the README for the `.npmrc` setup):',
   '',
   '```sh',
-  `npm install ./pipeline-view-core-${version}.tgz ./pipeline-view-symbols-${version}.tgz ./pipeline-view-react-${version}.tgz`,
+  `npm install @vespenelabs/pipeline-view@${version}`,
   '```',
+  '',
+  'The tarball is attached as well, for offline installs.',
 );
 if (found === 0) {
   console.error(

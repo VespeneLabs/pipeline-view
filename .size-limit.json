@@ -17,5 +17,16 @@
     "limit": "10 kB",
     "gzip": true,
     "ignore": ["react", "react-dom", "@pipeline-view/core"]
+  },
+  {
+    "name": "@vespenelabs/pipeline-view (all subpaths)",
+    "path": [
+      "packages/pipeline-view/dist/index.js",
+      "packages/pipeline-view/dist/symbols.js",
+      "packages/pipeline-view/dist/react.js"
+    ],
+    "limit": "45 kB",
+    "gzip": true,
+    "ignore": ["react", "react-dom"]
   }
 ]

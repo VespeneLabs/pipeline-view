@@ -16,7 +16,8 @@
     "format:check": "prettier --check .",
     "size": "size-limit",
     "changeset": "changeset",
-    "check:packages": "node scripts/check-packages.mjs"
+    "check:packages": "node scripts/check-packages.mjs",
+    "smoke:consumer": "node scripts/smoke-consumer.mjs"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",

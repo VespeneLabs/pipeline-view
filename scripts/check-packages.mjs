@@ -14,10 +14,19 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+// The single published package. The @pipeline-view/* workspace packages are private and bundled into it.
 const PACKAGES = [
-  { dir: 'packages/core', extra: ['dist/styles.css'], attwExclude: ['styles.css'] },
-  { dir: 'packages/symbols', extra: [], attwExclude: [] },
-  { dir: 'packages/react', extra: [], attwExclude: [] },
+  {
+    dir: 'packages/pipeline-view',
+    extra: [
+      'dist/styles.css',
+      'dist/symbols.js',
+      'dist/symbols.d.ts',
+      'dist/react.js',
+      'dist/react.d.ts',
+    ],
+    attwExclude: ['styles.css'],
+  },
 ];
 // CHANGELOG.md appears after `changeset version` and is always packed by npm/pnpm.
 const ALLOWED = /^package\/(package\.json|README\.md|CHANGELOG\.md|LICENSE|dist\/.+)$/;
@@ -67,9 +76,19 @@ for (const pkg of PACKAGES) {
   for (const field of ['dependencies', 'peerDependencies']) {
     for (const [dep, range] of Object.entries(manifest[field] ?? {})) {
       if (String(range).startsWith('workspace:')) fail(`${field}.${dep} still "${range}"`);
+      if (dep.startsWith('@pipeline-view/'))
+        fail(`${field}.${dep}: workspace packages must be bundled, not depended on`);
     }
   }
-  for (const key of ['description', 'keywords', 'homepage', 'repository', 'license', 'exports']) {
+  for (const key of [
+    'description',
+    'keywords',
+    'homepage',
+    'repository',
+    'license',
+    'exports',
+    'publishConfig',
+  ]) {
     if (!manifest[key]) fail(`package.json is missing "${key}"`);
   }
 

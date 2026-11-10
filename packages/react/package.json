@@ -1,6 +1,7 @@
 {
   "name": "@pipeline-view/react",
   "version": "1.0.0",
+  "private": true,
   "description": "React bindings for pipeline-view",
   "license": "MIT",
   "author": "VespeneLabs",
@@ -56,8 +57,5 @@
   },
   "engines": {
     "node": ">=20"
-  },
-  "publishConfig": {
-    "access": "public"
   }
 }
