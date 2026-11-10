@@ -115,6 +115,37 @@ describe('<PipelineView>', () => {
   });
 });
 
+describe('overlay integration', () => {
+  it('mounts a React card for an anchored HTML annotation and updates it with live data', () => {
+    const ref = createRef<Diagram>();
+    const m: DiagramModel = {
+      ...model(),
+      annotations: [
+        {
+          id: 'r',
+          kind: 'html',
+          renderer: 'card',
+          position: { x: 0, y: -40 },
+          anchor: { node: 'a' },
+        },
+      ],
+    };
+    const { container } = render(
+      <PipelineView
+        ref={ref}
+        model={m}
+        renderers={{ card: (item) => <span className="card">{String(item.data?.value)}</span> }}
+      />,
+    );
+    act(() => {
+      ref.current!.setNodeData('a', { value: 42 });
+      ref.current!.overlay!.flush();
+    });
+    const card = container.querySelector('.pv-overlay [data-annotation-id="r"] .card');
+    expect(card!.textContent).toBe('42');
+  });
+});
+
 describe('hooks', () => {
   it('useDiagram, useSelection and useHistory follow the diagram', () => {
     const seen: { sel: number; undo: boolean; ready: boolean }[] = [];
