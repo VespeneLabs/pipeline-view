@@ -62,6 +62,8 @@ export class EditorController {
   private gesture: Gesture | null = null;
   private clipboard: Clipboard | null = null;
   private labelInput: HTMLInputElement | null = null;
+  /** Pointer to capture once the press turns into a drag (screen point of the press). */
+  private pending: { pointerId: number; at: Point } | null = null;
   /** Editor adornments, kept apart from other content of the interaction layer. */
   private readonly layer: SVGGElement;
   private linkKind: string;
@@ -223,7 +225,7 @@ export class EditorController {
             started: false,
           };
       }
-      this.capture(e);
+      this.prepare(e);
       return;
     }
 
@@ -257,13 +259,27 @@ export class EditorController {
       }
     } else if (shift) this.toggle(hit);
     else this.diagram.setSelection([hit]);
-    this.capture(e);
+    this.prepare(e);
     this.redraw();
   };
 
-  private capture(e: PointerEvent): void {
+  /**
+   * Pointer capture is taken lazily, once the press moves past the drag threshold. Capturing on
+   * pointerdown would retarget the following click to the root, and plain clicks must still reach
+   * the item (nodeClick, linkClick).
+   */
+  private prepare(e: PointerEvent): void {
     e.preventDefault();
     this.root.focus({ preventScroll: true });
+    this.pending = { pointerId: e.pointerId, at: this.local(e) };
+  }
+
+  private captureIfDragging(e: PointerEvent): void {
+    const pending = this.pending;
+    if (!pending || pending.pointerId !== e.pointerId) return;
+    const at = this.local(e);
+    if (Math.hypot(at.x - pending.at.x, at.y - pending.at.y) < DRAG_THRESHOLD) return;
+    this.pending = null;
     try {
       this.root.setPointerCapture(e.pointerId);
     } catch {
@@ -274,6 +290,7 @@ export class EditorController {
   private onMove = (e: PointerEvent): void => {
     const g = this.gesture;
     if (!g) return;
+    this.captureIfDragging(e);
     const p = this.toDiagram(e);
     const far = (start: Point) =>
       Math.hypot(p.x - start.x, p.y - start.y) * this.zoom >= DRAG_THRESHOLD;
@@ -310,6 +327,7 @@ export class EditorController {
 
   private onUp = (e: PointerEvent): void => {
     const g = this.gesture;
+    this.pending = null;
     if (!g) return;
     this.gesture = null;
     const p = this.toDiagram(e);
