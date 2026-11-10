@@ -66,6 +66,32 @@ describe('<PipelineView>', () => {
     expect(ref.current!.getSelection()).toEqual([{ kind: 'node', id: 'b' }]);
   });
 
+  it('documentKey: a new key loads (fresh selection, baseline), the same key patches', () => {
+    const ref = createRef<Diagram>();
+    const docA = model();
+    const { rerender } = render(<PipelineView ref={ref} model={docA} documentKey="A" />);
+    act(() => ref.current!.setSelection([{ kind: 'node', id: 'a' }]));
+    act(() => ref.current!.update((tx) => tx.updateNode('a', { label: 'edited' })));
+    expect(ref.current!.isDirty()).toBe(true);
+    const load = vi.spyOn(ref.current!, 'load');
+    const patch = vi.spyOn(ref.current!, 'patch');
+
+    // Same key, new version: patched, selection kept.
+    const docA2 = { ...model(), nodes: model().nodes.map((n) => ({ ...n, label: 'v2' })) };
+    rerender(<PipelineView ref={ref} model={docA2} documentKey="A" />);
+    expect(patch).toHaveBeenCalledTimes(1);
+    expect(load).not.toHaveBeenCalled();
+    expect(ref.current!.getSelection()).toEqual([{ kind: 'node', id: 'a' }]);
+
+    // Another document that reuses the same ids: loaded, not patched.
+    const docB = model();
+    rerender(<PipelineView ref={ref} model={docB} documentKey="B" />);
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(ref.current!.getSelection()).toEqual([]);
+    expect(ref.current!.isDirty()).toBe(false);
+    expect(ref.current!.canUndo()).toBe(false);
+  });
+
   it('reloads when the host passes a new model', () => {
     const ref = createRef<Diagram>();
     const { rerender } = render(<PipelineView ref={ref} model={model()} />);
