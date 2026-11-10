@@ -65,6 +65,8 @@ export class SvgRenderer {
   private readonly router: Router;
 
   private readonly dirtyNodes = new Set<string>();
+  /** Nodes whose size changed outside the model (measured HTML nodes). */
+  private readonly forceGeometry = new Set<string>();
   private readonly dataNodes = new Set<string>();
   private readonly reroute = new Set<string>();
   private readonly removedNodes = new Set<string>();
@@ -91,6 +93,13 @@ export class SvgRenderer {
     this.unsubscribe.push(
       i.on('load', () => this.markFull()),
       i.on('model', ({ diff }) => this.onModel(diff)),
+      i.on('geometry', ({ ids }) => {
+        for (const id of ids) {
+          this.dirtyNodes.add(id);
+          this.forceGeometry.add(id);
+        }
+        this.schedule();
+      }),
       i.on('data', ({ ids }) => {
         for (const id of ids) this.dataNodes.add(id);
         this.schedule();
@@ -186,6 +195,7 @@ export class SvgRenderer {
       this.upsertNode(n);
       const geometryChanged =
         !prev ||
+        this.forceGeometry.has(id) ||
         prev.position !== n.position ||
         prev.rotation !== n.rotation ||
         prev.flipX !== n.flipX ||
@@ -201,6 +211,7 @@ export class SvgRenderer {
     this.removedLinks.clear();
     this.removedNodes.clear();
     this.dirtyNodes.clear();
+    this.forceGeometry.clear();
     this.reroute.clear();
     // Removing links alone must still refresh jumps and junction dots.
     if (ids.length || removed.length) this.routeLinks(ids, removed);
