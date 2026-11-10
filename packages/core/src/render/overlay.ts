@@ -33,6 +33,10 @@ interface Item {
   anchorPos?: unknown;
   anchorStatus?: string;
   leader?: SVGPathElement;
+  /** Node renderer (FR-45); otherwise the item renders through htmlRenderers[rendererName]. */
+  render?: HtmlRenderer;
+  /** Measures content-sized node renderers. */
+  resize?: ResizeObserver;
 }
 
 const aKey = (id: string) => `a\u0000${id}`;
@@ -70,6 +74,10 @@ export class OverlayRenderer {
       i.on('model', ({ diff }) => this.onModel(diff)),
       i.on('data', ({ ids }) => {
         for (const id of ids) this.markNode(id, true);
+        this.schedule();
+      }),
+      i.on('geometry', ({ ids }) => {
+        for (const id of ids) this.markNode(id, false);
         this.schedule();
       }),
     );
@@ -144,20 +152,53 @@ export class OverlayRenderer {
   private upsertNode(id: string): void {
     const key = nKey(id);
     const n = this.diagram.store.nodes.get(id);
-    const name = typeof n?.data?.overlay === 'string' ? n.data.overlay : undefined;
+    // A node renderer for the type (FR-45) wins over a data.overlay renderer.
+    const spec = n ? this.diagram.options.nodeRenderers?.[n.type] : undefined;
+    const name = spec
+      ? `node:${n!.type}`
+      : typeof n?.data?.overlay === 'string'
+        ? n.data.overlay
+        : undefined;
     const existing = this.items.get(key);
     if (!n || !name) {
       if (existing) this.remove(key);
       return;
     }
     if (existing && existing.rendererName !== name) this.remove(key);
-    const item = this.items.get(key) ?? this.createHtmlItem(key, 'node', id, name);
+    let item = this.items.get(key);
+    const contentSized = !!spec && typeof spec !== 'function' && spec.sizing === 'content';
+    if (!item) {
+      item = this.createHtmlItem(key, 'node', id, name);
+      if (spec) {
+        item.render = typeof spec === 'function' ? spec : spec.render;
+        item.el.classList.add('pv-node-html');
+        if (contentSized) this.observeSize(item);
+      }
+    }
+    const el = item.el as HTMLElement;
     const b = nodeBounds(n, this.diagram.symbols.get(n.type));
-    this.place(item.el as HTMLElement, b, { width: b.width, height: b.height });
+    // Content-sized nodes keep their natural size; the measured size drives bounds and ports.
+    this.place(el, b, contentSized ? undefined : { width: b.width, height: b.height });
     if (item.source !== n) {
       item.source = n;
       this.callRenderer(item, n.data, n.status);
+      if (contentSized) this.measure(item);
     }
+  }
+
+  private observeSize(item: Item): void {
+    const RO = this.view.root.ownerDocument.defaultView?.ResizeObserver;
+    if (!RO) return;
+    item.resize = new RO(() => this.measure(item));
+    item.resize.observe(item.el as HTMLElement);
+  }
+
+  /** Reports the content's layout size (diagram units: the overlay's scale isn't in offsetWidth). */
+  private measure(item: Item): void {
+    const el = item.el as HTMLElement;
+    const width = el.offsetWidth;
+    const height = el.offsetHeight;
+    if (width > 0 && height > 0) this.diagram.setMeasuredSize(item.id, { width, height });
   }
 
   // ---- annotations ---------------------------------------------------------
@@ -352,7 +393,7 @@ export class OverlayRenderer {
    */
   private callRenderer(item: Item, data: DataRecord | undefined, status: string | undefined): void {
     const name = item.rendererName!;
-    const fn: HtmlRenderer | undefined = this.diagram.options.htmlRenderers?.[name];
+    const fn: HtmlRenderer | undefined = item.render ?? this.diagram.options.htmlRenderers?.[name];
     const el = item.el as HTMLElement;
     setStatus(el, status);
     if (!fn) {
@@ -374,6 +415,11 @@ export class OverlayRenderer {
     if (item.kind === 'annotation') {
       this.setAnchor(item.id, undefined);
       if (item.leader) this.leaderRouter?.removeRoutes([`leader:${item.id}`]);
+    }
+    if (item.resize) {
+      item.resize.disconnect();
+      // Drop the measurement unless the node is merely re-mounting under another renderer.
+      if (!this.diagram.store.nodes.has(item.id)) this.diagram.setMeasuredSize(item.id, null);
     }
     try {
       if (typeof item.cleanup === 'function') item.cleanup();

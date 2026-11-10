@@ -8,6 +8,10 @@ export interface ViewportHost {
   getViewport(): Viewport;
   /** Applies a new viewport immediately (no animation). */
   applyViewport(v: Viewport): void;
+  /** Ends a gesture: emits `viewportChange` with `final: true` (FR-47). */
+  settle(): void;
+  /** While locked, user pan and zoom are ignored (FR-47). */
+  isLocked(): boolean;
   getMode(): DiagramMode;
   minZoom: number;
   maxZoom: number;
@@ -55,7 +59,10 @@ export class ViewportController {
     return { x, y };
   }
 
+  private wheelTimer: ReturnType<typeof setTimeout> | undefined;
+
   private canPan(e: PointerEvent): boolean {
+    if (this.host.isLocked()) return false;
     if (e.button === 1) return true;
     if (e.button !== 0) return false;
     if (this.spaceDown || this.host.getMode() === 'view') return true;
@@ -75,7 +82,7 @@ export class ViewportController {
       this.suppressClick = false;
     }
     this.pointers.set(e.pointerId, p);
-    if (this.pointers.size === 2) {
+    if (this.pointers.size === 2 && !this.host.isLocked()) {
       this.pan = null;
       this.startPinch();
       return;
@@ -116,14 +123,17 @@ export class ViewportController {
     this.pointers.delete(e.pointerId);
     if (this.pinch && this.pointers.size < 2) {
       this.pinch = null;
+      if (this.pointers.size === 0) this.host.settle();
       // Continue as a one-finger pan from the remaining pointer.
       const [rest] = this.pointers.values();
       this.pan = rest ? { start: rest, vp: this.host.getViewport(), moved: true } : null;
       return;
     }
     if (this.pointers.size === 0) {
+      const moved = this.pan?.moved;
       this.pan = null;
       this.host.root.classList.remove('pv-panning');
+      if (moved) this.host.settle();
     }
   };
 
@@ -151,7 +161,14 @@ export class ViewportController {
   }
 
   private onWheel = (e: WheelEvent) => {
+    if (this.host.isLocked()) return; // let the page scroll
     e.preventDefault();
+    // A wheel "gesture" ends when the wheel has been quiet for a moment.
+    if (this.wheelTimer !== undefined) clearTimeout(this.wheelTimer);
+    this.wheelTimer = setTimeout(() => {
+      this.wheelTimer = undefined;
+      this.host.settle();
+    }, 150);
     const vp = this.host.getViewport();
     // Trackpad pinch arrives as ctrl+wheel with small deltas, so it gets a stronger factor.
     const k = e.ctrlKey ? 0.01 : 0.0015;
@@ -172,6 +189,7 @@ export class ViewportController {
   };
 
   destroy(): void {
+    if (this.wheelTimer !== undefined) clearTimeout(this.wheelTimer);
     for (const c of this.cleanup) c();
     this.cleanup.length = 0;
   }

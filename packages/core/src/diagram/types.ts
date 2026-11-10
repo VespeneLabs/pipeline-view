@@ -140,6 +140,10 @@ export interface DropSource {
   toNode: (data: DataTransfer, point: Point) => NodeModel | null;
 }
 
+/** A node renderer: an HtmlRenderer, or one with sizing (FR-45). Default sizing: 'fixed'. */
+export type NodeRendererSpec =
+  HtmlRenderer | { render: HtmlRenderer; sizing?: 'fixed' | 'content' };
+
 export interface DiagramOptions {
   mode?: DiagramMode;
   theme?: ThemeName;
@@ -147,6 +151,12 @@ export interface DiagramOptions {
   symbols?: SymbolDef[];
   /** Renderers referenced by HtmlAnnotation.renderer, or by a node's data.overlay. */
   htmlRenderers?: Record<string, HtmlRenderer>;
+  /**
+   * Renders nodes of these types as HTML inside the node's box (FR-45). The library still draws the
+   * ports and the selection. With `sizing: 'content'`, the node takes the measured size of its content
+   * (view state, not saved), and port positions scale from the symbol's declared size.
+   */
+  nodeRenderers?: Record<string, NodeRendererSpec>;
   grid?: { size: number; snap: boolean; visible: boolean };
   minZoom?: number;
   maxZoom?: number;
@@ -176,9 +186,13 @@ export interface DiagramOptions {
    * undo). An adapter: the host stores the entries.
    */
   history?: false | HistoryAdapter;
-  /** Asked before items are deleted in edit mode; resolve false to cancel (FR-43). */
+  /**
+   * Asked before items are deleted; resolve false to cancel (FR-43). While a returned Promise is pending,
+   * the change is rolled back. It's re-applied when the Promise resolves true, unless the model changed in
+   * the meantime: then the approved change is dropped rather than replayed over newer edits.
+   */
   onBeforeDelete?: (items: DeleteRequest) => boolean | Promise<boolean>;
-  /** Veto for any transaction, before it's committed (FR-43). */
+  /** Veto for any transaction, before it's committed (FR-43). Promises behave as for onBeforeDelete. */
   beforeChange?: (diff: ModelDiff, patch: ModelPatch) => boolean | Promise<boolean>;
   /** Viewport to start with (FR-47), for example one the host saved from `viewportChange` with `final`. */
   initialViewport?: Viewport;
@@ -222,6 +236,11 @@ export interface DiagramEvents {
   modelChange: { diff: ModelDiff; model: DiagramModel; patch?: ModelPatch };
   /** `final` is true once a pan, zoom or animation has settled, so hosts can save once (FR-47). */
   viewportChange: { viewport: Viewport; final?: boolean };
+  /**
+   * A change approved by an async `onBeforeDelete` / `beforeChange` wasn't applied, because the model
+   * changed while the Promise was pending (FR-43). `diff` is the change that was dropped.
+   */
+  changeDropped: { reason: 'stale'; diff: ModelDiff };
   /** A connect drop on a port or node was refused (FR-42). Drops on empty canvas are cancels and don't fire. */
   connectRejected: {
     from: LinkEnd;

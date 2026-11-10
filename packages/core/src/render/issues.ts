@@ -6,7 +6,8 @@
  * - a badge is drawn in its own layer above the nodes: at a node's top-right corner, or at the middle
  *   of a link's route. The badge shows an icon for the worst severity, and its SVG <title> is the tooltip;
  * - `data-issue-severity` on the item's element carries the worst severity, for styling;
- * - `aria-description` lists the messages, so screen readers read them after the item's label.
+ * - `aria-description` and an SVG `<desc>` list the messages, so screen readers read them after the
+ *   item's label.
  *
  * Badges follow moves and re-routes. They're left out of exportSVG(), like other interaction chrome.
  */
@@ -91,6 +92,8 @@ export class IssueLayer {
     this.cleanup.push(
       i.on('load', () => this.schedule()),
       i.on('model', () => this.schedule()),
+      // Measured HTML node sizes (FR-45) move node bounds without a model change.
+      i.on('geometry', () => this.schedule()),
     );
   }
 
@@ -153,6 +156,7 @@ export class IssueLayer {
       this.marked.set(k, el);
       setAttr(el, 'data-issue-severity', severity);
       setAttr(el, 'aria-description', description);
+      setDesc(el, description);
       this.badge(k, item, severity, description, at);
     }
     for (const [k, el] of this.marked) {
@@ -227,4 +231,19 @@ function setAttr(el: Element, name: string, value: string): void {
 function clearAttrs(el: Element): void {
   el.removeAttribute('data-issue-severity');
   el.removeAttribute('aria-description');
+  el.querySelector(':scope > desc.pv-issue-desc')?.remove();
+}
+
+/**
+ * aria-description isn't read by every screen reader yet (VoiceOver support is patchy), so the messages
+ * also go into an SVG <desc> child, which browsers expose as the element's accessible description.
+ */
+function setDesc(el: Element, text: string): void {
+  let desc = el.querySelector(':scope > desc.pv-issue-desc');
+  if (!desc) {
+    desc = el.ownerDocument.createElementNS(SVG_NS, 'desc');
+    desc.setAttribute('class', 'pv-issue-desc');
+    el.prepend(desc);
+  }
+  if (desc.textContent !== text) desc.textContent = text;
 }

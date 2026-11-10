@@ -29,6 +29,18 @@ diagram.zoomToFit();
 diagram.setNodeData('T1', { level: 0.62 }, 'normal'); // live values: no undo, no re-routing
 ```
 
+## React inside nodes
+
+```tsx
+const Card = ({ node, data, status, selected, ports }: NodeRendererProps) => (
+  <div className={selected ? 'card selected' : 'card'}>{node.label}: {String(data?.value)}</div>
+);
+
+<PipelineView model={model} nodeRenderers={{ 'app/card': { component: Card, sizing: 'content' } }} />
+```
+
+The library draws the ports (from the symbol registered for `app/card`, or none), the selection box and the routes. With `sizing: 'content'` the node takes its content's size, and ports keep their relative position on the box.
+
 ## Controlled mode (your own store)
 
 When your app keeps the document in its own store (Zustand, Redux, …), let the store own the truth and the history, and let the diagram apply differences:

@@ -15,7 +15,8 @@
     "@pipeline-view/react": "workspace:*",
     "@pipeline-view/symbols": "workspace:*",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "zustand": "^5.1.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.0",

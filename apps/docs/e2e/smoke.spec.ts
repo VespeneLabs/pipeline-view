@@ -10,6 +10,7 @@ const ROUTES = [
   'custom-symbols',
   'monitor',
   'editor',
+  'controlled',
   'review',
   'stress',
   'api',
