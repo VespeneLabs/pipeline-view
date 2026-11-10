@@ -41,8 +41,9 @@ Each GitHub Release also attaches the package tarball, for offline installs.
 
 ### Releasing
 
-1. Add changesets as you go (`pnpm changeset`). To release, run `pnpm changeset version` and merge the result to `main`. That bumps `packages/pipeline-view/package.json` and writes its `CHANGELOG.md`.
-2. Tag the release commit and push the tag: `git tag v1.2.0 && git push origin v1.2.0`.
+1. Every user-facing change needs a changeset (`pnpm changeset`) that **names `@vespenelabs/pipeline-view`**, the only published package. The `@pipeline-view/core|symbols|react` workspace packages are private and bundled into it, so a changeset that names only them does **not** bump the published package.
+2. To release, run `pnpm changeset version` in a version PR and merge it to `main`. That bumps `packages/pipeline-view/package.json` and writes its `CHANGELOG.md`.
+3. Tag the merged version commit and push the tag: `git tag v1.2.0 && git push origin v1.2.0`. The tag triggers `publish.yml` (GitHub Packages) and `release.yml` (GitHub Release).
 
 The `Publish package` workflow (`.github/workflows/publish.yml`) checks that the tag matches the package version. It then builds, runs the tests, checks the packed tarball (`pnpm check:packages`), installs it into a fresh consumer project (`pnpm smoke:consumer`), and runs `pnpm publish` to GitHub Packages. To retry a failed publish without re-tagging, run the workflow manually (**Actions → Publish package → Run workflow**) and pick the version tag under *Use workflow from*. A run started from a branch stops at the version check. The `Release` workflow (same tag) creates the GitHub Release with the changelog and the tarball.
 
