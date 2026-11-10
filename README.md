@@ -41,8 +41,10 @@ Each GitHub Release also attaches the package tarball, for offline installs.
 
 ### Releasing
 
-1. Every user-facing change needs a changeset (`pnpm changeset`) that **names `@vespenelabs/pipeline-view`**, the only published package. The `@pipeline-view/core|symbols|react` workspace packages are private and bundled into it, so a changeset that names only them does **not** bump the published package.
-2. To release, run `pnpm changeset version` in a version PR and merge it to `main`. That bumps `packages/pipeline-view/package.json` and writes its `CHANGELOG.md`.
+Releases follow semver. [VERSIONING.md](./VERSIONING.md) spells out what counts as public API, what goes in a major, minor or patch release, how deprecations work, and the compatibility rules for saved diagrams.
+
+1. Every user-facing change needs a changeset (`pnpm changeset`) that **names `@vespenelabs/pipeline-view`**, the only published package. The `@pipeline-view/core|symbols|react` workspace packages are private and bundled into it, so a changeset that names only them does **not** bump the published package. Start a paragraph with `Model:` when the change affects the saved JSON.
+2. To release, run `pnpm version-packages` in a version PR and merge it to `main`. That runs `changeset version`, which bumps `packages/pipeline-view/package.json` and writes its `CHANGELOG.md`, and then gathers the `Model:` notes into the entry's "Model" section.
 3. Tag the merged version commit and push the tag: `git tag v1.2.0 && git push origin v1.2.0`. The tag triggers `publish.yml` (GitHub Packages) and `release.yml` (GitHub Release).
 
 The `Publish package` workflow (`.github/workflows/publish.yml`) checks that the tag matches the package version. It then builds, runs the tests, checks the packed tarball (`pnpm check:packages`), installs it into a fresh consumer project (`pnpm smoke:consumer`), and runs `pnpm publish` to GitHub Packages. To retry a failed publish without re-tagging, run the workflow manually (**Actions → Publish package → Run workflow**) and pick the version tag under *Use workflow from*. A run started from a branch stops at the version check. The `Release` workflow (same tag) creates the GitHub Release with the changelog and the tarball.

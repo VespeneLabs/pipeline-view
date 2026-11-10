@@ -20,7 +20,7 @@ export default tseslint.config(
     rules: reactHooks.configs.recommended.rules,
   },
   {
-    files: ['packages/core/src/**/*.ts'],
+    files: ['packages/core/src/**/*.ts', 'packages/testing/src/**/*.ts'],
     rules: {
       'no-restricted-imports': [
         'error',

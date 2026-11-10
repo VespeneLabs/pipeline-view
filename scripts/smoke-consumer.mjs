@@ -2,7 +2,7 @@
 /**
  * Consumer smoke test for @vespenelabs/pipeline-view (run after `pnpm build`):
  *  1. `pnpm pack` the package and install the tarball into a fresh temp project (npm, like a consumer would),
- *  2. typecheck imports of '.', './symbols', './react' and './styles.css' (TypeScript, NodeNext resolution),
+ *  2. typecheck imports of '.', './symbols', './react', './testing' and './styles.css' (TypeScript, NodeNext resolution),
  *     including that a Diagram from './react' is the same type as one from '.',
  *  3. at runtime in Node: symbols registered through './symbols' are visible to a Diagram from '.'
  *     (one shared core instance), and every subpath resolves.
@@ -46,6 +46,7 @@ writeFileSync(
   `import { Diagram, type DiagramModel, type SymbolDef } from '@vespenelabs/pipeline-view';
 import { gasSymbols, registerGasSymbols, gateValve } from '@vespenelabs/pipeline-view/symbols';
 import { PipelineView, useSelection, type PipelineViewProps } from '@vespenelabs/pipeline-view/react';
+import { createTestDiagram, expectLink, type DiagramLike } from '@vespenelabs/pipeline-view/testing';
 import '@vespenelabs/pipeline-view/styles.css';
 
 const model: DiagramModel = { version: 1, nodes: [], links: [] };
@@ -58,7 +59,11 @@ d.load(model);
 type ReadyArg = Parameters<NonNullable<PipelineViewProps['onReady']>>[0];
 const fromReact: ReadyArg = d;
 const back: Diagram = fromReact;
-export { PipelineView, useSelection, back };
+// ./testing takes the same Diagram type too.
+const forTests: DiagramLike = d;
+void createTestDiagram;
+void expectLink;
+export { PipelineView, useSelection, back, forTests };
 `,
 );
 writeFileSync(join(work, 'css.d.ts'), "declare module '*.css';\n");
@@ -83,7 +88,9 @@ writeFileSync(
   ),
 );
 run('npx', ['tsc', '-p', '.'], work);
-console.log('✔ types: ., ./symbols, ./react, ./styles.css (NodeNext), shared Diagram type');
+console.log(
+  '✔ types: ., ./symbols, ./react, ./testing, ./styles.css (NodeNext), shared Diagram type',
+);
 
 writeFileSync(
   join(work, 'run.mjs'),
@@ -92,6 +99,8 @@ import { fileURLToPath } from 'node:url';
 const core = await import('@vespenelabs/pipeline-view');
 const symbols = await import('@vespenelabs/pipeline-view/symbols');
 const react = await import('@vespenelabs/pipeline-view/react');
+const testing = await import('@vespenelabs/pipeline-view/testing');
+if (typeof testing.createTestDiagram !== 'function') throw new Error('createTestDiagram missing');
 symbols.registerGasSymbols();
 const d = new core.Diagram();
 if (!d.symbols.get('gas/gate-valve')) throw new Error('symbols registered via ./symbols are not visible from "." (two core instances?)');

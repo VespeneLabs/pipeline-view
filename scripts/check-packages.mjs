@@ -24,6 +24,8 @@ const PACKAGES = [
       'dist/symbols.d.ts',
       'dist/react.js',
       'dist/react.d.ts',
+      'dist/testing.js',
+      'dist/testing.d.ts',
     ],
     attwExclude: ['styles.css'],
   },

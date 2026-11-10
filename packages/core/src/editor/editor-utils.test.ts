@@ -168,11 +168,11 @@ describe('isEditableTarget', () => {
     const input = document.createElement('input');
     const div = document.createElement('div');
     const editable = document.createElement('div');
-    editable.contentEditable = 'true';
+    editable.setAttribute('contenteditable', 'true');
     expect(isEditableTarget(input)).toBe(true);
     expect(isEditableTarget(document.createElement('textarea'))).toBe(true);
     expect(isEditableTarget(div)).toBe(false);
     expect(isEditableTarget(null)).toBe(false);
-    expect(isEditableTarget(editable)).toBe(editable.isContentEditable);
+    expect(isEditableTarget(editable)).toBe(true);
   });
 });
