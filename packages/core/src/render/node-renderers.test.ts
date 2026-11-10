@@ -136,6 +136,24 @@ describe('live resizes and routing (FR-4 / FR-45)', () => {
       .map((q) => q.linkId);
     expect(routed).not.toContain('l');
 
+    // A width-only resize still re-routes an own link whose inner segments now come within the
+    // router's clearance (12) of the node. Here the route runs 5 px above the box and 5 px left of it.
+    const routes = (d.renderer as unknown as { routes: Map<string, unknown> }).routes;
+    routes.set('l', [
+      { x: 40, y: 20 },
+      { x: 150, y: 20 },
+      { x: 150, y: -5 },
+      { x: 295, y: -5 },
+      { x: 295, y: 20 },
+      { x: 300, y: 20 },
+    ]);
+    route.mockClear();
+    d.setMeasuredSize('r', { width: 160, height: 40 });
+    d.renderer!.flush();
+    expect(
+      route.mock.calls.flatMap((c) => c[0] as { linkId: string }[]).map((q) => q.linkId),
+    ).toContain('l');
+
     d.setMeasuredSize('r', { width: 140, height: 60 }); // taller: the port moves to y = 30
     d.renderer!.flush();
     expect(d.getLinkPath('l')!.at(-1)).toEqual({ x: 300, y: 30 });

@@ -62,6 +62,8 @@ export class SvgRenderer {
   private readonly nodes = new Map<string, NodeEl>();
   private readonly links = new Map<string, LinkEl>();
   private readonly routes = new Map<string, Point[]>();
+  /** The router's node clearance, for deciding whether a resize reaches a route. */
+  private readonly clearance: number;
   /** Incremental line-jump / junction analysis: drag frames only re-check the links they reroute. */
   private analyzer = new RouteAnalyzer();
   private crossings = new Map<string, Point[]>();
@@ -93,6 +95,7 @@ export class SvgRenderer {
     router?: Router,
   ) {
     this.router = router ?? createRouter(diagram.options.routing);
+    this.clearance = diagram.options.routing?.clearance ?? 12;
     this.junctionLayer = this.svg('g', { class: 'pv-junctions' }) as SVGGElement;
     view.layers.links.after(this.junctionLayer);
     const i = diagram.internal;
@@ -230,8 +233,12 @@ export class SvgRenderer {
           const own = new Set(store.linksOf(id).map((l) => l.id));
           for (const l of this.router.updateObstacle(id, rect)) {
             // The router always reports the node's own links. With the ports in place, they only need a
-            // new route when the resized node now covers their current path.
-            if (portsMoved || !own.has(l) || crossesInterior(this.routes.get(l), rect)) {
+            // new route when the resized node (plus the router's clearance) now reaches their path.
+            if (
+              portsMoved ||
+              !own.has(l) ||
+              crossesInterior(this.routes.get(l), rect, this.clearance)
+            ) {
               this.reroute.add(l);
             }
           }
@@ -703,21 +710,27 @@ const sameSize = (a: { width: number; height: number }, b: { width: number; heig
   a.width === b.width && a.height === b.height;
 const PORT_LABEL_INSET = 8;
 
-/** True when a polyline passes through the open interior of `r` (running along an edge doesn't count). */
-function crossesInterior(pts: Point[] | undefined, r: Rect): boolean {
+/**
+ * True when a route's inner segments come closer than `clearance` to `r`, which the router never
+ * produces. The first and last segments are port stubs, which may sit inside their own node's clearance.
+ */
+function crossesInterior(pts: Point[] | undefined, r: Rect, clearance: number): boolean {
   if (!pts) return true;
-  const l = r.x,
-    t = r.y,
-    rt = r.x + r.width,
-    b = r.y + r.height;
-  for (let k = 0; k + 1 < pts.length; k++) {
-    const p = pts[k]!,
-      q = pts[k + 1]!;
-    const x0 = Math.min(p.x, q.x),
-      x1 = Math.max(p.x, q.x);
-    const y0 = Math.min(p.y, q.y),
-      y1 = Math.max(p.y, q.y);
-    if (x1 > l && x0 < rt && y1 > t && y0 < b) return true;
+  const l = r.x - clearance;
+  const t = r.y - clearance;
+  const rt = r.x + r.width + clearance;
+  const b = r.y + r.height + clearance;
+  for (let k = 1; k + 2 < pts.length; k++) {
+    const p = pts[k]!;
+    const q = pts[k + 1]!;
+    if (
+      Math.max(p.x, q.x) > l &&
+      Math.min(p.x, q.x) < rt &&
+      Math.max(p.y, q.y) > t &&
+      Math.min(p.y, q.y) < b
+    ) {
+      return true;
+    }
   }
   return false;
 }
