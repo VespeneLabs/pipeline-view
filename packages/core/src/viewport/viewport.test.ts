@@ -57,7 +57,9 @@ describe('mount', () => {
     d.mount(container);
     const root = container.querySelector('.pv-root')!;
     expect(root.getAttribute('role')).toBe('application');
-    const order = [...root.querySelector('.pv-scene')!.children].map((c) => c.getAttribute('class'));
+    const order = [...root.querySelector('.pv-scene')!.children].map((c) =>
+      c.getAttribute('class'),
+    );
     expect(order).toEqual([
       'pv-layer-links',
       'pv-junctions',
