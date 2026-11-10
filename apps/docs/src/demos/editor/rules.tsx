@@ -144,6 +144,7 @@ export function Inspector() {
   const [, bump] = useState(0);
   useDiagramEvent('modelChange', () => bump((n) => n + 1));
   const ref = selection.length === 1 ? selection[0]! : null;
+  // Public API only (the store is internal); a toJSON() per render is cheap at this size.
   const doc = d?.toJSON();
   const node = ref?.kind === 'node' ? doc?.nodes.find((n) => n.id === ref.id) : undefined;
   const link = ref?.kind === 'link' ? doc?.links.find((l) => l.id === ref.id) : undefined;

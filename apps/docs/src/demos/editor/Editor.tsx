@@ -160,6 +160,8 @@ export function PidEditor() {
   const changeRules = (next: Rules) => {
     const nextStructural = `${next.directed}-${next.noCycles}-${next.noSelfLoops}`;
     if (diagram && nextStructural !== structural) {
+      // A pending delete belongs to the diagram being replaced: answer it before it goes.
+      confirm?.resolve(false);
       setSnapshot({ model: diagram.toJSON(), viewport: diagram.getViewport() });
     }
     confirmDeletes.current = next.confirmDeletes;
