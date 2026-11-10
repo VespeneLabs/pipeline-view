@@ -61,9 +61,11 @@ describe('mount', () => {
       c.getAttribute('class'),
     );
     expect(order).toEqual([
+      'pv-layer-leaders',
       'pv-layer-links',
       'pv-junctions',
       'pv-layer-nodes',
+      'pv-layer-annotations',
       'pv-layer-interaction',
     ]);
     expect(root.querySelector('.pv-overlay')).not.toBeNull();

@@ -22,3 +22,9 @@ export {
 export { alignmentSnap, snapPoint, snapValue, type Guide } from './editor/guides';
 export { actionForKey, isEditableTarget, type EditorAction, type KeyLike } from './editor/keymap';
 export * from './editor/waypoints';
+export {
+  EditorController,
+  SYMBOL_MIME,
+  attachEditor,
+  type EditorControllerOptions,
+} from './editor/controller';
