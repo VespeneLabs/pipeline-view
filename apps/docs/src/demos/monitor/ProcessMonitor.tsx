@@ -1,38 +1,16 @@
-import {
-  Diagram,
-  type DataRecord,
-  type DiagramModel,
-  type HtmlRenderer,
-  type ItemRef,
-} from '@pipeline-view/core';
+import type { Diagram, DiagramModel } from '@pipeline-view/core';
+import { PipelineView, type ReactRenderer } from '@pipeline-view/react';
 import { processSymbols } from '@pipeline-view/symbols';
 import { useEffect, useRef, useState } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
 import { FRAME, monitorModel, terminal, type CardData, type Reading } from './model';
 import { PumpState, ReadingCard } from './ReadingCard';
 import { createSimulator } from './simulator';
 import './monitor.css';
 
-/** Mounts a React tree into an overlay slot. The overlay re-calls renderers on every data tick with the same element. */
-function reactRenderer(render: (data: DataRecord) => React.ReactNode): HtmlRenderer {
-  const roots = new WeakMap<HTMLElement, Root>();
-  return (el, item) => {
-    let root = roots.get(el);
-    const first = !root;
-    if (!root) roots.set(el, (root = createRoot(el)));
-    root.render(render(item.data ?? {}));
-    if (!first) return;
-    return () => {
-      roots.delete(el);
-      const r = root;
-      queueMicrotask(() => r.unmount());
-    };
-  };
-}
-
-const renderers: Record<string, HtmlRenderer> = {
-  readingCard: reactRenderer((data) => {
-    const d = data as CardData & Record<string, Reading | undefined>;
+/** React overlay renderers. The overlay re-renders them on every data tick with the merged node data. */
+const renderers: Record<string, ReactRenderer> = {
+  readingCard: ({ data }) => {
+    const d = (data ?? {}) as CardData & Record<string, Reading | undefined>;
     const r = d[d.reading] ?? { value: Number.NaN, status: 'stale' as const };
     return (
       <ReadingCard
@@ -43,9 +21,11 @@ const renderers: Record<string, HtmlRenderer> = {
         status={r.status}
       />
     );
-  }),
-  pumpState: reactRenderer((data) => <PumpState running={data.running === true} />),
+  },
+  pumpState: ({ data }) => <PumpState running={data?.running === true} />,
 };
+
+const symbols = [...processSymbols, terminal];
 
 /**
  * `?static` shows the Figma reference state: simulator paused on the design's values, no flow animation and
@@ -69,40 +49,32 @@ function initialModel(): DiagramModel {
 }
 
 export function ProcessMonitor() {
-  const host = useRef<HTMLDivElement>(null);
   const diagramRef = useRef<Diagram | null>(null);
+  const [model] = useState(initialModel);
   const [running, setRunning] = useState(!STATIC);
   const [flow, setFlow] = useState(!STATIC);
-  const [selected, setSelected] = useState<ItemRef | null>({ kind: 'node', id: 'FCV101' });
+  const [selected, setSelected] = useState<string | null>('FCV101');
   const [tick, setTick] = useState(0);
 
-  useEffect(() => {
-    const d = new Diagram({
-      symbols: [...processSymbols, terminal],
-      htmlRenderers: renderers,
-      mode: 'view',
-      ariaLabel: 'Mix and transfer process monitor',
-    });
-    d.mount(host.current!);
-    d.load(initialModel());
-    d.setSelection([{ kind: 'node', id: 'FCV101' }]);
-    const fit = () => {
-      const w = host.current?.clientWidth ?? FRAME.width;
-      if (w >= FRAME.width) d.setViewport({ x: (w - FRAME.width) / 2, y: 0, zoom: 1 });
-      else d.zoomToFit({ padding: 8 });
-    };
-    fit();
-    const ro = new ResizeObserver(fit);
-    ro.observe(host.current!);
-    const off = d.on('selectionChange', ({ selection }) => setSelected(selection[0] ?? null));
+  /** 1:1 with the Figma frame when it fits, otherwise zoom to fit. */
+  const frameView = (d: Diagram) => {
+    const w = d.view?.root.clientWidth ?? FRAME.width;
+    if (w >= FRAME.width) d.setViewport({ x: (w - FRAME.width) / 2, y: 0, zoom: 1 });
+    else d.zoomToFit({ padding: 8 });
+  };
+
+  const resize = useRef<ResizeObserver | null>(null);
+  const onReady = (d: Diagram) => {
     diagramRef.current = d;
-    return () => {
-      ro.disconnect();
-      off();
-      d.destroy();
-      diagramRef.current = null;
-    };
-  }, []);
+    (window as unknown as { __diagram?: Diagram }).__diagram = d; // for tests and the console
+    frameView(d);
+    // PipelineView loads the model right after onReady, which clears the selection.
+    requestAnimationFrame(() => d.setSelection([{ kind: 'node', id: 'FCV101' }]));
+    resize.current?.disconnect();
+    resize.current = new ResizeObserver(() => frameView(d));
+    if (d.view) resize.current.observe(d.view.root);
+  };
+  useEffect(() => () => resize.current?.disconnect(), []);
 
   // Simulated plant data at 1 Hz through the live-data path (no undo, no re-routing).
   useEffect(() => {
@@ -143,8 +115,7 @@ export function ProcessMonitor() {
     );
   }, [flow]);
 
-  const node =
-    selected?.kind === 'node' ? monitorModel.nodes.find((n) => n.id === selected.id) : undefined;
+  const node = selected ? monitorModel.nodes.find((n) => n.id === selected) : undefined;
 
   return (
     <>
@@ -172,7 +143,21 @@ export function ProcessMonitor() {
           {running ? `Tick ${tick}` : 'Paused'}
         </span>
       </div>
-      <div className="monitor-frame" ref={host} data-testid="monitor-canvas" />
+      <div className="monitor-frame" data-testid="monitor-canvas">
+        <PipelineView
+          model={model}
+          mode="view"
+          symbols={symbols}
+          renderers={renderers}
+          fitOnLoad={false}
+          options={{ ariaLabel: 'Mix and transfer process monitor' }}
+          onReady={onReady}
+          onSelectionChange={({ selection }) =>
+            setSelected(selection[0]?.kind === 'node' ? selection[0].id : null)
+          }
+          style={{ width: '100%', height: '100%' }}
+        />
+      </div>
       <div className="monitor-details" aria-live="polite">
         {node ? (
           <>
