@@ -39,7 +39,6 @@ async function drag(page: Page, from: { x: number; y: number }, to: { x: number;
   await page.mouse.up();
 }
 
-
 let errors: string[] = [];
 
 test.beforeEach(async ({ page }) => {
