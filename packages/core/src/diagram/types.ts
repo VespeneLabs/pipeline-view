@@ -69,16 +69,23 @@ export type ValidationResult =
     };
 
 /** Context passed to `refusalMessages` for localizing a built-in refusal. */
-export interface RefusalContext {
+/**
+ * The ends of a refused connection, shared by `RefusalContext`, the `connectRejected` event and
+ * `ConnectResult`, so they always agree.
+ */
+export interface RefusalEnds {
   /** Source end, always in flow order (outlet → inlet), however the user dragged. */
   from: LinkEnd;
   /** Target end, always in flow order. */
   to: LinkEnd;
-  kind: LinkKind;
-  detail?: Record<string, unknown>;
-  /** The ends as the user dragged them, present only when that differs from flow order. */
+  /** The ends as the user dragged them (or as passed), present only when that differs from flow order. */
   dragFrom?: LinkEnd;
   dragTo?: LinkEnd;
+}
+
+export interface RefusalContext extends RefusalEnds {
+  kind: LinkKind;
+  detail?: Record<string, unknown>;
 }
 
 /** One step of undo history, as JSON-serializable patches (FR-44). */
@@ -137,7 +144,12 @@ export interface ModelComparison {
 /** Result of a programmatic connect (FR-54). */
 export type ConnectResult =
   | { ok: true; id: string }
-  | { ok: false; code: RefusalCode; reason: string; detail?: Record<string, unknown> };
+  | ({
+      ok: false;
+      code: RefusalCode;
+      reason: string;
+      detail?: Record<string, unknown>;
+    } & Partial<RefusalEnds>);
 
 /** A drag-and-drop source from any element (FR-50). */
 export interface DropSource {
@@ -259,14 +271,7 @@ export interface DiagramEvents {
    */
   changeDropped: { reason: 'stale'; diff: ModelDiff };
   /** A connect drop on a port or node was refused (FR-42). Drops on empty canvas are cancels and don't fire. */
-  connectRejected: {
-    /** Source end in flow order (outlet → inlet). */
-    from: LinkEnd;
-    /** Target end in flow order. */
-    to: LinkEnd;
-    /** The ends as the user dragged them, present only when that differs from flow order. */
-    dragFrom?: LinkEnd;
-    dragTo?: LinkEnd;
+  connectRejected: RefusalEnds & {
     kind: LinkKind;
     code: RefusalCode;
     /** Final, possibly host-localized, message. */

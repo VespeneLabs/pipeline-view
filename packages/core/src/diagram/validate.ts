@@ -6,23 +6,24 @@ import type { LinkEnd, LinkKind, NodeModel } from '../model/types';
 import type { PortDef } from '../symbols/types';
 import { findPort } from '../symbols/resolve';
 import type { Diagram } from './diagram';
-import type { ConnectResult, RefusalCode, RefusalContext, ValidationResult } from './types';
+import type {
+  ConnectResult,
+  RefusalCode,
+  RefusalContext,
+  RefusalEnds,
+  ValidationResult,
+} from './types';
 import { type Graph, buildGraph, flowPathIn } from '../graph/graph';
 
 export type ConnectCheck =
   /** Allowed. `from` / `to` are in flow order (outlet → inlet), which may swap the arguments. */
   | { ok: true; from: LinkEnd; to: LinkEnd }
-  | {
+  | ({
       ok: false;
       code: RefusalCode;
       reason: string;
       detail?: Record<string, unknown>;
-      /** The ends in flow order (and as dragged, when different), as in RefusalContext. */
-      from?: LinkEnd;
-      to?: LinkEnd;
-      dragFrom?: LinkEnd;
-      dragTo?: LinkEnd;
-    };
+    } & Partial<RefusalEnds>); // the ends in flow order (and as dragged, when different)
 
 /** Default English messages for the built-in codes. Hosts replace them with `refusalMessages`. */
 const DEFAULT_REASONS: Record<string, (ctx: RefusalContext) => string> = {
