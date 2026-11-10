@@ -120,7 +120,7 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
       { sig: 'routing: { clearance?, spacing?, bendPenalty? }', doc: 'Orthogonal router tuning.' },
       {
         sig: 'canConnect(from, to, kind) / canDrop(type, position)',
-        doc: 'Editor validation hooks.',
+        doc: 'Editor validation hooks. Return true, false, or { ok: false, reason, code?, detail? } to explain a refusal. canConnect gets the ends in flow order (outlet → inlet). See Ports and connection rules.',
       },
     ],
   },
@@ -224,6 +224,108 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
       {
         sig: 'data-pv-node-id / data-pv-port-id / data-pv-link-id',
         doc: 'Stable attributes on rendered items, for any test runner.',
+      },
+    ],
+  },
+  {
+    title: 'Ports and connection rules',
+    entries: [
+      {
+        sig: 'SymbolDef.ports / size: value or (node) => value; NodeModel.ports',
+        doc: 'Per-node ports, e.g. a manifold whose inlet count comes from node.data. NodeModel.ports overrides the symbol. Always read them through nodePorts(def, node) / nodeSize(def, node) / findPort(). Change port-driving data with update(): the live path redraws ports but never edits the model, so links on a vanished port stay.',
+      },
+      {
+        sig: 'sidePorts(size, side, count, { idPrefix?, start?, labels?, spacing?, role?, maxLinks?, accepts? })',
+        doc: 'Evenly spaced ports along one side, with optional index labels.',
+      },
+      {
+        sig: 'PortDef.role: "in" | "out" | "both" · maxLinks · label · accepts',
+        doc: 'An inlet can start a drag, but the link is always stored outlet → inlet. maxLinks limits links per port (connected ports get data-occupied). label is drawn unrotated next to the port.',
+      },
+      {
+        sig: 'DiagramOptions.directed: boolean | { kinds }',
+        doc: 'Links of these kinds must run from an out port to an in port; arrows follow.',
+      },
+      {
+        sig: 'refusalMessages(code, ctx) / canConnectOrder: "after-builtins" | "before-builtins"',
+        doc: 'Localize built-in refusals (missing-port, same-port, self-loop, kind-not-accepted, direction, port-full, duplicate, max-links-between-nodes, cycle) and your own codes; choose whether your canConnect runs before or after them.',
+      },
+      {
+        sig: 'connectRejected: { from, to, kind, code, reason, detail?, point }',
+        doc: 'A connect drop on a port or node was refused. A drop on empty canvas is a cancel and does not fire. While dragging, refusing ports get data-refused with the reason as a tooltip.',
+      },
+      {
+        sig: 'validateConnect(diagram, from, to, kind) / isDirected(diagram, kind)',
+        doc: 'The same rule set outside the editor, e.g. for your own forms. Returns { ok: true, from, to } in flow order, or the refusal.',
+      },
+    ],
+  },
+  {
+    title: 'Graph rules and helpers',
+    entries: [
+      {
+        sig: 'noCycles: boolean | { kinds } · noSelfLoops · maxLinksBetweenNodes',
+        doc: 'Whole-graph connection rules (refusal codes cycle, self-loop, max-links-between-nodes; a cycle refusal carries detail.cycleNodes). Cycles follow link direction, so noCycles is most meaningful together with directed.',
+      },
+      {
+        sig: 'upstreamOf / downstreamOf(source, nodeId, { kinds?, through? })',
+        doc: 'Nodes reachable against / along the flow. through(node) returning false stops the walk at that node (e.g. a closed valve).',
+      },
+      {
+        sig: 'topologicalOrder / findCycles / connectedComponents / flowPath',
+        doc: 'Pure helpers over a DiagramModel or a live Diagram; safe on the server.',
+      },
+    ],
+  },
+  {
+    title: 'React node renderers',
+    intro: 'From @vespenelabs/pipeline-view/react.',
+    entries: [
+      {
+        sig: "<PipelineView nodeRenderers={{ 'app/card': Card }}>",
+        doc: 'Renders nodes of a type with your component, inside the node box. Declare the type as a SymbolDef (size and ports, no SVG): the library still draws the ports, routes to them and handles selection. Each node re-renders only when its own data, status or selection changes.',
+      },
+      {
+        sig: 'NodeRendererProps: { node, data, status, selected, ports }',
+        doc: 'Props of a node component.',
+      },
+      {
+        sig: "{ component, sizing: 'fixed' | 'content' }",
+        doc: "'fixed' (default) fills the declared size. 'content' sizes the node from its rendered content and scales the ports to match (view state, never saved). For cards showing live numbers, give the value a fixed-width slot (tabular-nums, min-width) or use 'fixed', so ticks don't resize the node (a resize that moves a port also re-routes that port's links).",
+      },
+    ],
+  },
+  {
+    title: 'Viewport',
+    entries: [
+      {
+        sig: "initialViewport · fitOnLoad: 'always' | 'if-no-viewport' | 'never'",
+        doc: 'Restore a saved view; by default the diagram fits only when no viewport is given, after HTML/React content has been measured.',
+      },
+      {
+        sig: 'viewportChange: { viewport, final? }',
+        doc: 'final is true once a pan, zoom or animation has settled: save the view then, not on every frame.',
+      },
+      {
+        sig: 'lockViewport(locked) / isViewportLocked()',
+        doc: 'Stops user pan and zoom (also keyboard zoom); programmatic setViewport still applies. The root gets data-viewport-locked.',
+      },
+      {
+        sig: '<ViewportControls step? reset? lock? labels? inDiagram? />',
+        doc: 'Accessible zoom in / out, fit, reset and optional lock buttons, styled by .pv-viewport-controls.',
+      },
+    ],
+  },
+  {
+    title: 'Large diagrams',
+    entries: [
+      {
+        sig: 'culling: boolean | { threshold?: 300, margin?: 200 }',
+        doc: 'At or above the node count, items outside the visible area (plus a screen-pixel margin) are not rendered, and their data ticks wait until they are visible. On by default.',
+      },
+      {
+        sig: 'lod: false | { labels?: 0.4, overlays?: 0.35, ports?: 0.5 }',
+        doc: 'Below these zoom levels, labels, overlay cards and port dots are hidden (root classes pv-lod-labels / -overlays / -ports). On by default only while culling is active; passing an lod object turns it on regardless. View-only: the model and exports are unaffected.',
       },
     ],
   },

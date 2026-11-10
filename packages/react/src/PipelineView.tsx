@@ -87,7 +87,13 @@ export interface PipelineViewProps {
   onContextMenu?: Handler<'contextMenu'>;
   onHover?: Handler<'hover'>;
   onSelectionChange?: Handler<'selectionChange'>;
+  /**
+   * User edits and undo/redo (`origin: 'user' | 'history'`). Changes the host made itself, through a new
+   * `model` prop (`origin: 'host'`), aren't reported unless `emitHostChanges` is set.
+   */
   onModelChange?: Handler<'modelChange'>;
+  /** Also report the host's own changes (`origin: 'host'`) through onModelChange. Default false. */
+  emitHostChanges?: boolean;
   onViewportChange?: Handler<'viewportChange'>;
   onConnectRejected?: Handler<'connectRejected'>;
   onChangeDropped?: Handler<'changeDropped'>;
@@ -166,8 +172,12 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
       });
       const offs = (Object.keys(EVENT_PROPS) as (keyof DiagramEvents)[]).map((event) =>
         d.on(event, (payload) => {
-          if (event === 'modelChange')
-            lastEmitted.current = (payload as DiagramEvents['modelChange']).model;
+          if (event === 'modelChange') {
+            const change = payload as DiagramEvents['modelChange'];
+            // The host's own document (model prop → patch()) isn't echoed back by default (FR-44).
+            if (change.origin === 'host' && !propsRef.current.emitHostChanges) return;
+            lastEmitted.current = change.model;
+          }
           const fn = propsRef.current[EVENT_PROPS[event]] as ((x: unknown) => void) | undefined;
           fn?.(payload);
         }),

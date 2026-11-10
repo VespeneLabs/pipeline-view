@@ -54,6 +54,7 @@ import type {
   ThemeName,
   Transaction,
   Viewport,
+  ChangeOrigin,
 } from './types';
 
 /** Events the renderer and other internal layers listen to. Not part of the public API. */
@@ -292,6 +293,7 @@ export class Diagram implements DiagramApi {
     fn: (tx: Transaction) => void,
     opts: { undoable?: boolean },
     guarded: boolean,
+    origin: ChangeOrigin = guarded ? 'user' : 'host',
   ): void {
     if (this.previewOps) throw new Error('Commit or cancel the active preview before update()');
     const tracker = new ChangeTracker();
@@ -299,7 +301,7 @@ export class Diagram implements DiagramApi {
     if (ops.length === 0) return;
     const apply = (t: ChangeTracker) => {
       if (opts.undoable !== false) this.pushUndo(ops, t);
-      this.commit(ops, true, true, t);
+      this.commit(ops, true, true, t, origin);
     };
     const verdict = guarded ? this.askHooks(ops, tracker) : true;
     if (verdict === true) return apply(tracker);
@@ -504,7 +506,7 @@ export class Diagram implements DiagramApi {
     const inverse = ops.map(invertOp).reverse();
     const tracker = this.applyTracked(inverse);
     this.redoStack.push(ops);
-    this.commit(inverse, true, true, tracker);
+    this.commit(inverse, true, true, tracker, 'history');
   }
 
   redo(): void {
@@ -520,7 +522,7 @@ export class Diagram implements DiagramApi {
     if (!ops) return;
     const tracker = this.applyTracked(ops);
     this.undoStack.push(ops);
-    this.commit(ops, true, true, tracker);
+    this.commit(ops, true, true, tracker, 'history');
   }
 
   canUndo(): boolean {
@@ -550,11 +552,22 @@ export class Diagram implements DiagramApi {
   private applyHistoryPatch(patch: ModelPatch): void {
     if (patch.meta !== undefined)
       this.store.meta = patch.meta === null ? undefined : clone(patch.meta);
-    this.transact((tx) => applyPatchTx(tx, this.store, patch), { undoable: false }, false);
+    this.transact(
+      (tx) => applyPatchTx(tx, this.store, patch),
+      { undoable: false },
+      false,
+      'history',
+    );
   }
 
   /** Emits the net diff: `internal` for layers (render / re-route), `pub` for modelChange. */
-  private commit(ops: Op[], pub = true, internal = true, tracker?: ChangeTracker): void {
+  private commit(
+    ops: Op[],
+    pub = true,
+    internal = true,
+    tracker?: ChangeTracker,
+    origin: ChangeOrigin = 'user',
+  ): void {
     const diff = diffOf(ops);
     if (isEmptyDiff(diff)) return;
     this.epoch++;
@@ -563,7 +576,7 @@ export class Diagram implements DiagramApi {
     if (internal) this.internal.emit('model', { diff });
     if (pub && this.events.has('modelChange')) {
       // Snapshot eagerly, and only when someone listens, so async readers see the state at commit time.
-      const payload: DiagramEvents['modelChange'] = { diff, model: this.store.toJSON() };
+      const payload: DiagramEvents['modelChange'] = { diff, model: this.store.toJSON(), origin };
       if (tracker) payload.patch = tracker.patches(this.store).forward;
       this.events.emit('modelChange', payload);
     }

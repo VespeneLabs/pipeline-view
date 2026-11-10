@@ -236,6 +236,12 @@ export interface PointerEventPayload {
   originalEvent: PointerEvent | MouseEvent;
 }
 
+/**
+ * Where a model change came from: `'user'` for update() and editor gestures, `'host'` for
+ * patch()/applyDiff() (the host's own document), `'history'` for undo/redo (built-in or a HistoryAdapter).
+ */
+export type ChangeOrigin = 'user' | 'host' | 'history';
+
 export interface DiagramEvents {
   nodeClick: PointerEventPayload;
   nodeDoubleClick: PointerEventPayload;
@@ -244,7 +250,7 @@ export interface DiagramEvents {
   hover: { item: ItemRef | null; point: Point };
   selectionChange: { selection: ItemRef[] };
   /** Emitted for transactional changes only. Never emitted for setNodeData. */
-  modelChange: { diff: ModelDiff; model: DiagramModel; patch?: ModelPatch };
+  modelChange: { diff: ModelDiff; model: DiagramModel; patch?: ModelPatch; origin: ChangeOrigin };
   /** `final` is true once a pan, zoom or animation has settled, so hosts can save once (FR-47). */
   viewportChange: { viewport: Viewport; final?: boolean };
   /**

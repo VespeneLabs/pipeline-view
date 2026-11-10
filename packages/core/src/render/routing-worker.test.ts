@@ -144,6 +144,33 @@ describe('routing in a Web Worker (FR-55)', () => {
     d.destroy();
   });
 
+  it('ignores a reply that arrives after a newer load was routed on the main thread', async () => {
+    let release!: () => void;
+    const { w } = fakeWorker((job) => {
+      release = () => w.onmessage?.({ data: runRoutingJob(job) } as MessageEvent<RoutingReply>);
+      return null;
+    });
+    const d = mount({ routingWorker: { createWorker: () => w } });
+    const small = scene();
+    small.links = small.links.slice(0, 50); // below the threshold: routed synchronously
+    d.load(small);
+    d.renderer!.flush();
+    const r = d.renderer as unknown as {
+      finishRoutes(ids: string[]): void;
+      router: { adoptRoutes(...a: unknown[]): void };
+    };
+    const finish = vi.spyOn(r, 'finishRoutes');
+    const adopt = vi.spyOn(r.router, 'adoptRoutes');
+    await settle(); // the fake worker has taken the job and holds its reply
+    const before = d.getLinkPath('l0-1');
+    release(); // the first document's reply arrives late
+    await settle();
+    expect(adopt).not.toHaveBeenCalled();
+    expect(finish).not.toHaveBeenCalled();
+    expect(d.getLinkPath('l0-1')).toEqual(before);
+    d.destroy();
+  });
+
   it('falls back to main-thread routing when the worker fails', async () => {
     const { w } = fakeWorker((job) => ({ id: job.id, ok: false, error: 'boom' }));
     const d = mount({ routingWorker: { createWorker: () => w } });
