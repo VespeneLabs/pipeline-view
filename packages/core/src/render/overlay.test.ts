@@ -34,7 +34,7 @@ beforeEach(() => {
   });
   d = new Diagram({ symbols: [box], htmlRenderers: { card } });
   d.load({
-    version: 1,
+    version: 2,
     nodes: [
       { id: 'tank', type: 'test/box', position: { x: 100, y: 100 }, data: { value: 1 } },
       {

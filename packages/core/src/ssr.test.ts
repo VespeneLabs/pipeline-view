@@ -15,7 +15,7 @@ describe('core in a DOM-less environment', () => {
     const core = await import('./index');
     const d = new core.Diagram({ grid: { size: 10, snap: true, visible: true } });
     d.load({
-      version: 1,
+      version: 2,
       nodes: [
         { id: 'a', type: 'x/y', position: { x: 0, y: 0 } },
         { id: 'b', type: 'x/y', position: { x: 100, y: 0 } },

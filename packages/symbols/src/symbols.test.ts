@@ -1,4 +1,4 @@
-import { SymbolRegistry, type SymbolDef } from '@pipeline-view/core';
+import { SymbolRegistry, nodePorts, nodeSize, type SymbolDef } from '@pipeline-view/core';
 import { describe, expect, it } from 'vitest';
 import {
   ACTUATION,
@@ -80,13 +80,15 @@ describe('symbol definitions', () => {
 
   describe.each(all.map((d) => [d.type, d] as const))('%s', (_type, def) => {
     it('has at least one port, unique port ids, and every port inside its bounds', () => {
-      expect(def.ports.length).toBeGreaterThan(0);
-      expect(new Set(def.ports.map((p) => p.id)).size).toBe(def.ports.length);
-      for (const p of def.ports) {
+      const ports = nodePorts(def);
+      const size = nodeSize(def);
+      expect(ports.length).toBeGreaterThan(0);
+      expect(new Set(ports.map((p) => p.id)).size).toBe(ports.length);
+      for (const p of ports) {
         expect(p.position.x).toBeGreaterThanOrEqual(0);
         expect(p.position.y).toBeGreaterThanOrEqual(0);
-        expect(p.position.x).toBeLessThanOrEqual(def.size.width);
-        expect(p.position.y).toBeLessThanOrEqual(def.size.height);
+        expect(p.position.x).toBeLessThanOrEqual(size.width);
+        expect(p.position.y).toBeLessThanOrEqual(size.height);
       }
     });
 
@@ -104,7 +106,7 @@ describe('symbol definitions', () => {
         const pts = d!.match(/-?\d*\.?\d+/g)!.map(Number);
         for (const n of pts) {
           expect(n).toBeGreaterThanOrEqual(0);
-          expect(n).toBeLessThanOrEqual(Math.max(def.size.width, def.size.height));
+          expect(n).toBeLessThanOrEqual(Math.max(nodeSize(def).width, nodeSize(def).height));
         }
       }
     });

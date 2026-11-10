@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Diagram } from '../diagram/diagram';
-import type { SymbolDef } from '../symbols/types';
+import type { PortDef, SymbolDef } from '../symbols/types';
 import { attachEditor, getEditor } from './controller';
 
 const valve: SymbolDef = {
@@ -27,7 +27,7 @@ function renderStub() {
   for (const n of d.store.nodes.values()) {
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     g.setAttribute('data-node-id', n.id);
-    for (const p of valve.ports) {
+    for (const p of valve.ports as PortDef[]) {
       const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
       c.setAttribute('data-port-id', p.id);
       g.append(c);
@@ -77,7 +77,7 @@ beforeEach(() => {
   document.body.append(container);
   d = new Diagram({ symbols: [valve], mode: 'edit' });
   d.load({
-    version: 1,
+    version: 2,
     nodes: [
       { id: 'a', type: 'test/valve', position: { x: 0, y: 0 } },
       { id: 'b', type: 'test/valve', position: { x: 200, y: 100 } },

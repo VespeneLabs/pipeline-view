@@ -77,7 +77,7 @@ Most process-diagram tooling is either a commercial general-purpose diagram engi
 ## 4. Functional requirements
 
 ### 4.1 Diagram model
-- **FR-1** A serializable JSON model: `{ version, nodes[], links[], annotations[], meta }`.
+- **FR-1** A serializable JSON model: `{ version, nodes[], links[], annotations[], meta }`. Since v1.2 the model is **version 2**. It adds the optional `NodeModel.ports`, `NodeModel.locked` and `LinkModel.locked`; v1 documents still load and are migrated on load (`migrateModel`).
   - Node: `{ id, type, position {x,y}, rotation (0/90/180/270), flip?, label?, data?: Record<string, unknown>, status?: string, ports? }`
   - Link: `{ id, from {node, port}, to {node, port}, kind: 'process' | 'signal' | 'pneumatic' | 'electrical' | string, waypoints?, routing?: 'auto' | 'manual', data? }`
   - Annotation: free text, legend, group/area label (for example "02 / MIX & TRANSFER"), and HTML cards anchored to a node or to a position.
@@ -208,3 +208,33 @@ apps/docs                docs site + live demos + symbol gallery (Storybook or s
 - **Package name / npm scope:** is `@pipeline-view` available?
 - **Industry packs:** which non-gas pack comes second after v1 (water/wastewater or general chemical process)? Should packs use a naming convention like `@pipeline-view/symbols-gas` and `@pipeline-view/symbols-water`?
 - **Figma tokens:** the file has no Figma variables defined, so tokens will be extracted manually from the styles. Ideally designers would publish them as Figma variables.
+
+## 11. v1.2 scope
+
+Requested by a host application (a gas editor and monitor built on the library) and approved by the user on 2026-11-10. The library stays generic: domain rules live in host apps and plug in through hooks. Distribution stays private on GitHub Packages as `@vespenelabs/pipeline-view`. Order: P1 (FR-40..45), then FR-47, FR-52, FR-53, then the rest. The shared types for all of these are defined up front in `core/src/{model,symbols,diagram}/types.ts`.
+
+### P1: what a real editor needs
+
+- **FR-40 Ports per node instance.** `SymbolDef.ports` and `size` may be functions of the node (computed from `node.data`), and `NodeModel.ports` overrides both. When a node's ports change, links on removed ports are removed in the same transaction (one undo step) and reported in the modelChange diff. Routing, hit testing, compatible-port highlighting, accessibility and export all use the per-node ports. Readers use `nodePorts()` / `nodeSize()`.
+- **FR-41 Port roles and connection limits.** `PortDef.role: 'in' | 'out' | 'both'`: out→in is allowed, and a drag that starts at an inlet still produces from/to in flow order. `PortDef.maxLinks`. A diagram option `directed`, so links always run outlet→inlet and arrows follow. Connected ports get `data-occupied`.
+- **FR-42 Explained refusals.** `canConnect` / `canDrop` return `ValidationResult = true | false | { ok: false; reason; code? }`. Built-in checks report the codes `kind-not-accepted`, `duplicate`, `port-full`, `same-port`, `direction` and `cycle`. The `connectRejected { from, to, kind, code, reason, point }` event fires only for drops on a port or node; a drop on empty canvas is a cancel. During a drag, incompatible ports get `data-refused`, with the reason available for a tooltip.
+- **FR-43 Hooks before delete and change; locking.** `onBeforeDelete(items) → boolean | Promise<boolean>`, where `items` includes links removed along with nodes, so a host can show its own confirmation. `beforeChange(diff, patch)` vetoes any transaction. `node.locked` / `link.locked` items can't be moved, deleted or reconnected in edit mode, and get `data-locked`.
+- **FR-44 Controlled mode.** For hosts that keep the document in their own store: `history: false` or a host `HistoryAdapter { push, undo, redo }` with JSON `HistoryEntry { forward, inverse }` patches. `applyDiff(patch)` and `patch(model)` apply only the difference, with no full reload, no re-route of untouched links and no viewport reset; selection and live data survive. `isDirty()` is measured against `markSaved()`. `modelChange` carries the `patch`. The Zustand pattern is documented.
+- **FR-45 React node renderers.** `<PipelineView nodeRenderers={{ type: Component }}>` renders React inside the node's box. The component receives `{ node, data, status, selected, ports }` and can size itself from its content (ResizeObserver). The library still owns and draws the ports. There's a memo boundary per node, so setNodeData re-renders only that node, and SVG and React nodes can be mixed.
+
+### P2: viewer and editor features most apps need
+
+- **FR-46 Minimap.** `<Minimap/>` plus a core MinimapRenderer: node boxes (optionally coloured by status), links as lines, and the visible area as a rectangle. Drag the rectangle to pan; scroll to zoom. Themed with `--pv-minimap-*`. Updates are throttled to stay within NFR-1.
+- **FR-47 Viewport controls and saving the view.** An accessible `<ViewportControls/>` (zoom in/out, fit, reset, optional lock). `initialViewport` and `fitOnLoad: 'always' | 'if-no-viewport' | 'never'`. `viewportChange.final` is true at the end of a pan, zoom or animation, so hosts save once. Fit runs only after HTML/React content has been measured.
+- **FR-48 Problem markers.** `Issue { severity, message, code? }` on nodes and links, kept outside the saved model and set with `setIssues(map)`, which replaces all of them. Each marked item gets a badge with an icon and tooltip, `data-issue-severity`, and the messages in its ARIA description. zoomToItem and keyboard navigation can step through items with issues.
+- **FR-49 Whole-graph rules.** `noCycles: boolean | { kinds }` (refusal code `cycle`), `noSelfLoops` and `maxLinksBetweenNodes`. Graph helpers are exported from core: `topologicalOrder`, `upstreamOf` / `downstreamOf` (filterable by kind), `findCycles` and `connectedComponents`.
+- **FR-50 Drag from your own palette.** `acceptDrop({ mimeType, toNode })` handles HTML5 drag and drop from any element. A placement mode, `startPlacement(type, init)`, shows a preview that follows the pointer: a click places it, Esc cancels, and it works on touch. `canDrop` runs on the preview, which gets `data-refused`.
+- **FR-51 Comparing two versions.** `compareWith={base}` / `showDiff(base)` marks nodes and links with `data-diff`: added, removed, moved or changed. Removed items are drawn as faded ghosts. A `getDiff(base, current)` helper returns a `ModelComparison` summary.
+
+### P3: quality, accessibility and adoption
+
+- **FR-52 Release policy.** A written semver and deprecation policy. The CHANGELOG gets a separate "Model:" section for changes to the saved model. There's no public npm package.
+- **FR-53 Testing support.** Core runs under jsdom as well as happy-dom: no layout APIs at import time, and getBBox and getComputedTextLength are guarded. jsdom is added to CI. The `@vespenelabs/pipeline-view/testing` subpath provides `createTestDiagram`, simulated actions (connect, drag, drop, pressKey), queries (getNodeByLabel, getPort) and `expectLink`. Stable `data-pv-node-id` / `data-pv-port-id` / `data-pv-link-id` attributes.
+- **FR-54 Connecting from the keyboard and by command.** Focus a port and press Enter to start, use the arrow keys or Tab to move between compatible ports, Enter to connect, Esc to cancel. A live region announces the result, including the FR-42 reason. A public `connect(from, to, kind)` returns `ConnectResult = { ok: true; id } | { ok: false; code; reason }`.
+- **FR-55 Large diagrams.** Render only what's visible (culling of nodes, overlays and React renderers), turned on automatically above a threshold (`culling`). Level of detail by zoom, hiding labels, cards and port dots per layer (`lod`). Optional routing in a Web Worker (`routingWorker`). All of it stays within NFR-1.
+

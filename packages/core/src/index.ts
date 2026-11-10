@@ -29,3 +29,5 @@ export {
   getEditor,
   type EditorControllerOptions,
 } from './editor/controller';
+export { nodePorts, nodeSize, findPort, previewNode } from './symbols/resolve';
+export { migrateModel } from './model/migrate';

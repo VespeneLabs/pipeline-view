@@ -1,4 +1,5 @@
 import {
+  nodeSize,
   type Diagram,
   type SymbolDef,
   SYMBOL_MIME,
@@ -159,7 +160,7 @@ export function SymbolPalette(props: SymbolPaletteProps) {
                 >
                   <svg
                     className="pv-palette-preview"
-                    viewBox={`-2 -2 ${def.size.width + 4} ${def.size.height + 4}`}
+                    viewBox={`-2 -2 ${nodeSize(def).width + 4} ${nodeSize(def).height + 4}`}
                     aria-hidden="true"
                     focusable="false"
                   >

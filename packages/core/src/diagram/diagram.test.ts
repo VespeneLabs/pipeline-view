@@ -3,7 +3,7 @@ import type { DiagramModel } from '../model/types';
 import { Diagram } from './diagram';
 
 const model = (): DiagramModel => ({
-  version: 1,
+  version: 2,
   nodes: [
     { id: 'a', type: 'process/tank', position: { x: 0, y: 0 }, data: { level: 0.5 } },
     { id: 'b', type: 'process/pump', position: { x: 200, y: 0 }, label: 'P-1' },
@@ -49,15 +49,15 @@ describe('load / toJSON', () => {
 
   it('omits optional keys that were absent', () => {
     const d = new Diagram();
-    d.load({ version: 1, nodes: [], links: [] });
-    expect(d.toJSON()).toEqual({ version: 1, nodes: [], links: [] });
+    d.load({ version: 2, nodes: [], links: [] });
+    expect(d.toJSON()).toEqual({ version: 2, nodes: [], links: [] });
   });
 
   it.each([
-    [{ version: 2, nodes: [], links: [] }, /version/],
-    [{ version: 1, nodes: [{ id: 'a' }, { id: 'a' }], links: [] }, /Duplicate node id "a"/],
+    [{ version: 3, nodes: [], links: [] }, /version/],
+    [{ version: 2, nodes: [{ id: 'a' }, { id: 'a' }], links: [] }, /Duplicate node id "a"/],
     [
-      { version: 1, nodes: [], links: [{ id: 'l', from: { node: 'x' }, to: { node: 'y' } }] },
+      { version: 2, nodes: [], links: [{ id: 'l', from: { node: 'x' }, to: { node: 'y' } }] },
       /unknown node "x"/,
     ],
   ])('rejects invalid models', (m, msg) => {

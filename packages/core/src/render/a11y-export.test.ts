@@ -32,7 +32,7 @@ beforeEach(() => {
   // Grid:  a  b
   //        c
   d.load({
-    version: 1,
+    version: 2,
     nodes: [
       { id: 'a', type: 'test/box', position: { x: 0, y: 0 }, label: 'Tank A' },
       { id: 'b', type: 'test/box', position: { x: 200, y: 0 }, status: 'alarm' },

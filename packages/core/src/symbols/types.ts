@@ -1,7 +1,7 @@
 /**
  * Symbol definition contract (PRD FR-6/7). Implemented by @pipeline-view/symbols and by custom symbols that users register.
  */
-import type { DataRecord, LinkKind, Point, Size } from '../model/types';
+import type { DataRecord, LinkKind, NodeModel, Point, Size } from '../model/types';
 
 export type PortDirection = 'left' | 'right' | 'top' | 'bottom';
 
@@ -13,6 +13,13 @@ export interface PortDef {
   direction: PortDirection;
   /** Link kinds this port accepts. Omitted means every kind is accepted. */
   accepts?: LinkKind[];
+  /**
+   * Flow role (FR-41). Links run from an 'out' port to an 'in' port; dragging from an inlet still
+   * produces from/to in flow order. Default 'both'.
+   */
+  role?: 'in' | 'out' | 'both';
+  /** Maximum number of links on this port (FR-41). Omitted means unlimited. */
+  maxLinks?: number;
 }
 
 export interface SymbolRenderContext<D extends DataRecord = DataRecord> {
@@ -29,8 +36,13 @@ export interface SymbolDef<D extends DataRecord = DataRecord> {
   category: string;
   /** Reference number from the Figma sheet (1-50) where it applies. */
   ref?: number;
-  size: Size;
-  ports: PortDef[];
+  /** Unrotated size. A function computes it per node instance, for example from `node.data` (FR-40). */
+  size: Size | ((node: NodeModel) => Size);
+  /**
+   * Ports, or a function computing them per node instance (FR-40). `node.ports` overrides both.
+   * Read them through `nodePorts(def, node)`, never directly.
+   */
+  ports: PortDef[] | ((node: NodeModel) => PortDef[]);
   /**
    * Static SVG markup (inner content, no <svg> wrapper), drawn in local coordinates 0..size.
    * Strokes must use currentColor or var(--pv-*) so that theming works (FR-35).

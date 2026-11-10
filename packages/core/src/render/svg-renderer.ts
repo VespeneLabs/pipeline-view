@@ -19,6 +19,8 @@ import {
   portPoint,
   symbolSize,
 } from '../diagram/geometry';
+import { nodePorts } from '../symbols/resolve';
+import type { PortDef } from '../symbols/types';
 import { arrowsPath, linkPath, ticksPath } from './paths';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -32,6 +34,8 @@ interface NodeEl {
   label: SVGTextElement | null;
   markup: string;
   node: NodeModel;
+  /** Ports last rendered, to detect per-node port changes. */
+  portSig?: string;
 }
 
 interface LinkEl {
@@ -226,7 +230,8 @@ export class SvgRenderer {
       el = { g, body, symbol, label: null, markup: '', node: n };
       this.nodes.set(n.id, el);
       this.renderPorts(el, n);
-    } else if (el.node.type !== n.type) {
+    } else if (portSignature(nodePorts(this.def(n), n)) !== el.portSig) {
+      // Type changed, or per-node ports changed (FR-40).
       for (const p of el.body.querySelectorAll('.pv-port')) p.remove();
       this.renderPorts(el, n);
     }
@@ -234,7 +239,7 @@ export class SvgRenderer {
     const def = this.def(n);
     el.g.dataset.type = n.type;
     el.body.setAttribute('transform', nodeTransform(n, def));
-    const size = symbolSize(def);
+    const size = symbolSize(def, n);
     const hit = el.body.firstElementChild!;
     hit.setAttribute('width', String(size.width));
     hit.setAttribute('height', String(size.height));
@@ -267,7 +272,7 @@ export class SvgRenderer {
   private renderSymbol(el: NodeEl, n: NodeModel, def: SymbolDef | undefined): void {
     let markup: string;
     if (!def) {
-      const { width: w, height: h } = symbolSize(def);
+      const { width: w, height: h } = symbolSize(def, n);
       markup = `<rect class="pv-missing" width="${w}" height="${h}" fill="none" stroke="currentColor" stroke-dasharray="4 4"/>`;
     } else if (def.render) {
       markup = def.render({ data: n.data ?? {}, label: n.label, status: n.status });
@@ -280,7 +285,9 @@ export class SvgRenderer {
   }
 
   private renderPorts(el: NodeEl, n: NodeModel): void {
-    for (const p of this.def(n)?.ports ?? []) {
+    const ports = nodePorts(this.def(n), n);
+    el.portSig = portSignature(ports);
+    for (const p of ports) {
       const c = this.svg('circle', { class: 'pv-port', cx: p.position.x, cy: p.position.y, r: 4 });
       c.dataset.portId = p.id;
       el.body.append(c);
@@ -520,3 +527,6 @@ function groupCrossings(crossings: Crossing[]): Map<string, Point[]> {
   }
   return m;
 }
+
+const portSignature = (ports: PortDef[]) =>
+  ports.map((p) => `${p.id}@${p.position.x},${p.position.y}`).join('|');
