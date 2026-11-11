@@ -130,6 +130,20 @@ export class TransactionImpl implements Transaction {
     this.run({ type: 'remove', c, item, index: this.store.indexOf(c, id) });
   }
 
+  /**
+   * Removes a link. Link ends attached to it lose the attachment in the same transaction: those links
+   * stay and are drawn from their ports again.
+   */
+  private dropLink(id: string): void {
+    this.remove('links', id);
+    for (const l of [...this.store.links.values()]) {
+      const patch: Partial<LinkModel> = {};
+      if (l.fromAttach?.link === id) patch.fromAttach = undefined;
+      if (l.toAttach?.link === id) patch.toAttach = undefined;
+      if ('fromAttach' in patch || 'toAttach' in patch) this.patch('links', l.id, patch);
+    }
+  }
+
   private hasNode = (id: string) => this.store.nodes.has(id);
 
   addNode(node: NodeModel): void {
@@ -177,13 +191,13 @@ export class TransactionImpl implements Transaction {
           `Cannot remove port "${end.port}" of node "${id}": link "${l.id}" is locked`,
         );
       }
-      this.remove('links', l.id);
+      this.dropLink(l.id);
     }
   }
   /** Also removes the node's links and the annotations anchored to it. */
   removeNode(id: string): void {
     if (!this.store.nodes.has(id)) throw new Error(`Cannot remove unknown nodes id "${id}"`);
-    for (const l of this.store.linksOf(id)) this.remove('links', l.id);
+    for (const l of this.store.linksOf(id)) this.dropLink(l.id);
     for (const a of this.store.annotationsOf(id)) this.remove('annotations', a.id);
     this.remove('nodes', id);
   }
@@ -197,8 +211,9 @@ export class TransactionImpl implements Transaction {
     if (cur) checkLinkEnds({ ...cur, ...patch } as LinkModel, this.hasNode);
     this.patch('links', id, patch);
   }
+  /** Link ends attached to the removed link lose the attachment; those links stay. */
   removeLink(id: string): void {
-    this.remove('links', id);
+    this.dropLink(id);
   }
 
   addAnnotation(a: AnnotationModel): void {

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { pointAlong } from '../diagram/attach';
 import { Diagram } from '../diagram/diagram';
 import type { DiagramOptions } from '../diagram/types';
 import type { DiagramModel, LinkModel, NodeModel } from '../model/types';
@@ -87,6 +88,32 @@ describe('routing in a Web Worker (FR-55)', () => {
     d.update((tx) => tx.updateNode('n5-5', { position: { x: 450, y: 380 } }));
     sync.update((tx) => tx.updateNode('n5-5', { position: { x: 450, y: 380 } }));
     expect(d.getLinkPath('l5-5')).toEqual(sync.getLinkPath('l5-5'));
+    d.destroy();
+    sync.destroy();
+  });
+
+  it('routes ends attached to another link on the main thread, once the Worker has routed their hosts', async () => {
+    const withSide = () => {
+      const m = scene();
+      m.links.push({
+        id: 'side',
+        from: { node: 'n2-3', port: 'out' },
+        to: { node: 'n0-6', port: 'in' },
+        kind: 'process',
+        toAttach: { link: 'l0-6', at: 0.5 },
+      });
+      return m;
+    };
+    const { w, jobs } = fakeWorker();
+    const d = mount({ routingWorker: { createWorker: () => w } }, withSide());
+    // The attached link isn't sent to the Worker: its end depends on a route that doesn't exist yet.
+    expect(jobs[0]!.requests.some((q) => q.linkId === 'side')).toBe(false);
+    expect(d.getLinkPath('side')).toHaveLength(2);
+    await settle();
+    const sync = mount({}, withSide());
+    const end = d.getLinkPath('side')!.at(-1)!;
+    expect(end).toEqual(pointAlong(d.getLinkPath('l0-6')!, 0.5)!.point);
+    expect(d.getLinkPath('side')).toEqual(sync.getLinkPath('side'));
     d.destroy();
     sync.destroy();
   });

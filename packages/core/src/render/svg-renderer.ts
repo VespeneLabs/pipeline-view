@@ -3,8 +3,8 @@
  * - Data ticks (setNodeData) re-render only the symbol markup and data-status of the touched nodes. No routing.
  * - Structural changes reroute only the links attached to changed nodes, plus those the router reports as affected.
  */
-import type { LinkModel, NodeModel, Point, Rect } from '../model/types';
-import type { Crossing, Junction, RouteRequest, Router } from '../routing/types';
+import type { LinkAttach, LinkModel, NodeModel, Point, Rect } from '../model/types';
+import type { Crossing, Junction, RouteEndpoint, RouteRequest, Router } from '../routing/types';
 import type { SymbolDef } from '../symbols/types';
 import type { ItemRef, ModelDiff } from '../diagram/types';
 import type { Diagram } from '../diagram/diagram';
@@ -27,6 +27,7 @@ import { nodePorts, nodeSize } from '../symbols/resolve';
 import type { PortDef } from '../symbols/types';
 import { arrowsPath, linkPath, ticksPath } from './paths';
 import { LinkLabelLayout } from './link-labels';
+import { attachCycle, attachHosts, pointAlong } from '../diagram/attach';
 import { orientationKey, uprightTexts } from './upright';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -155,6 +156,8 @@ export class SvgRenderer {
   }
 
   private onModel(diff: ModelDiff): void {
+    if (diff.added.links.length + diff.changed.links.length + diff.removed.links.length)
+      this.attachIndex = null;
     for (const id of diff.removed.nodes) this.removedNodes.add(id);
     for (const id of diff.removed.links) this.removedLinks.add(id);
     for (const id of [...diff.added.nodes, ...diff.changed.nodes]) this.dirtyNodes.add(id);
@@ -191,6 +194,7 @@ export class SvgRenderer {
     this.nodes.clear();
     this.links.clear();
     this.routes.clear();
+    this.attachIndex = null;
     this.analyzer = new RouteAnalyzer();
     this.linkLabels = new LinkLabelLayout();
     this.nodeRects.clear();
@@ -250,11 +254,18 @@ export class SvgRenderer {
     const store = this.diagram.store;
     const epoch = this.routeEpoch;
     const requests: RouteRequest[] = [];
+    // Links with an end on another link need that link's route first: they wait as placeholders and
+    // are routed here once the Worker's routes are in.
+    const { depth } = this.attachments();
+    const attached = ids.filter((id) => depth.get(id));
     for (const id of ids) {
       const l = store.links.get(id)!;
       const from = this.endpoint(l.from);
       const to = this.endpoint(l.to);
-      if (l.routing === 'manual') {
+      if (depth.get(id)) {
+        this.routes.set(id, [from.point, to.point]);
+        this.pendingWorker.add(id);
+      } else if (l.routing === 'manual') {
         this.routes.set(id, [from.point, ...(l.waypoints ?? []), to.point]);
       } else {
         requests.push({ linkId: id, from, to, waypoints: l.waypoints });
@@ -294,9 +305,13 @@ export class SvgRenderer {
             if (store.links.has(l)) reroute.add(l);
         }
         this.movedDuringFlight.clear();
+        for (const id of attached)
+          if (this.pendingWorker.has(id) && store.links.has(id)) reroute.add(id);
         if (reroute.size) this.routeLinks([...reroute]);
         // Manual links were drawn already; analyze them together with the adopted routes.
-        const manual = ids.filter((id) => store.links.get(id)?.routing === 'manual');
+        const manual = ids.filter(
+          (id) => store.links.get(id)?.routing === 'manual' && !depth.get(id),
+        );
         this.finishRoutes([...keep, ...manual].filter((id) => !reroute.has(id)));
       },
       (err: Error) => {
@@ -317,7 +332,13 @@ export class SvgRenderer {
       this.routes.delete(id);
       this.linkLabels.set(id, null);
     }
-    if (this.removedLinks.size) this.router.removeRoutes([...this.removedLinks]);
+    if (this.removedLinks.size) {
+      this.router.removeRoutes([...this.removedLinks]);
+      // Ends that were attached to a removed link go back to their ports.
+      const { dependents } = this.attachments();
+      for (const id of this.removedLinks)
+        for (const d of dependents.get(id) ?? []) this.reroute.add(d);
+    }
     for (const id of this.removedNodes) {
       this.nodes.get(id)?.g.remove();
       this.nodes.delete(id);
@@ -649,27 +670,142 @@ export class SvgRenderer {
     };
   }
 
-  /** Routes `ids`, re-analyzes them (plus the `removed` links) incrementally and redraws what changed. */
-  private routeLinks(ids: string[], removed: string[] = []): void {
-    const store = this.diagram.store;
-    for (const id of ids) this.pendingWorker.delete(id); // routed here: no longer waiting for the Worker
-    const requests: RouteRequest[] = [];
-    const manual: string[] = [];
-    for (const id of ids) {
-      const l = store.links.get(id)!;
-      const from = this.endpoint(l.from);
-      const to = this.endpoint(l.to);
-      if (l.routing === 'manual') {
-        manual.push(id);
-        this.routes.set(id, [from.point, ...(l.waypoints ?? []), to.point]);
-      } else {
-        requests.push({ linkId: id, from, to, waypoints: l.waypoints });
+  /**
+   * Attachments of link ends to other links, as currently in the model: which links hang on each host
+   * link, and how many hosts deep each attached link is (hosts are routed first). An attachment to a
+   * missing link, to the link itself or one that closes a loop is left out, and that end is drawn on
+   * its port. Rebuilt lazily after link changes; empty maps when nothing is attached.
+   */
+  private attachIndex: { dependents: Map<string, string[]>; depth: Map<string, number> } | null =
+    null;
+
+  private attachments(): { dependents: Map<string, string[]>; depth: Map<string, number> } {
+    if (this.attachIndex) return this.attachIndex;
+    const links = this.diagram.store.links;
+    const dependents = new Map<string, string[]>();
+    const depth = new Map<string, number>();
+    // Hosts that exist and don't lead back to the link itself, so what is left has no loops.
+    const hostsOf = (l: LinkModel) =>
+      attachHosts(l).filter((h) => links.has(h) && !attachCycle(links, l.id, h));
+    const depthOf = (id: string): number => {
+      const known = depth.get(id);
+      if (known !== undefined) return known;
+      let d = 0;
+      for (const h of hostsOf(links.get(id)!)) d = Math.max(d, depthOf(h) + 1);
+      if (d) depth.set(id, d);
+      return d;
+    };
+    for (const l of links.values()) {
+      if (!l.fromAttach && !l.toAttach) continue;
+      depthOf(l.id);
+      for (const h of hostsOf(l)) {
+        const list = dependents.get(h);
+        if (list) list.push(l.id);
+        else dependents.set(h, [l.id]);
+      }
+      // A removed host is still looked up once, to send its dependents back to their ports.
+      for (const h of attachHosts(l)) {
+        if (!links.has(h)) dependents.set(h, [...(dependents.get(h) ?? []), l.id]);
       }
     }
-    // A link that switched auto -> manual must not keep its stale auto route in the router's lanes.
-    if (manual.length) this.router.removeRoutes(manual);
-    for (const r of this.router.route(requests)) this.routes.set(r.linkId, r.points);
-    this.finishRoutes(ids, removed);
+    return (this.attachIndex = { dependents, depth });
+  }
+
+  /** The attachment of one end, when it is in effect (see `attachments`). */
+  private attachOf(l: LinkModel, end: 'from' | 'to'): LinkAttach | undefined {
+    const attach = end === 'from' ? l.fromAttach : l.toAttach;
+    if (!attach || !this.attachments().depth.get(l.id)) return undefined;
+    const links = this.diagram.store.links;
+    return links.has(attach.link) && !attachCycle(links, l.id, attach.link) ? attach : undefined;
+  }
+
+  /** Where an attached end is drawn: the point on the host link's route, or null when it isn't attached. */
+  private attachPoint(l: LinkModel, end: 'from' | 'to') {
+    const attach = this.attachOf(l, end);
+    const route = attach && this.routes.get(attach.link);
+    return (route && pointAlong(route, attach.at)) || null;
+  }
+
+  /**
+   * Both route endpoints of a link. An end attached to another link starts on that link's route and
+   * leaves it at a right angle, towards the link's other end.
+   */
+  private ends(l: LinkModel): { from: RouteEndpoint; to: RouteEndpoint } {
+    const a = this.attachPoint(l, 'from');
+    const b = this.attachPoint(l, 'to');
+    const from: RouteEndpoint | null = a ? null : this.endpoint(l.from);
+    const to: RouteEndpoint | null = b ? null : this.endpoint(l.to);
+    const leave = (
+      own: NonNullable<typeof a>,
+      other: Point,
+      end: 'from' | 'to',
+    ): RouteEndpoint => ({
+      point: own.point,
+      direction: own.horizontal
+        ? other.y < own.point.y
+          ? 'top'
+          : 'bottom'
+        : other.x < own.point.x
+          ? 'left'
+          : 'right',
+      // No node of its own: the id only groups this end's bookkeeping in the router.
+      nodeId: `${l.id}\u0000${end}`,
+    });
+    return {
+      from: from ?? leave(a!, (to ?? b!).point, 'from'),
+      to: to ?? leave(b!, (from ?? a!).point, 'to'),
+    };
+  }
+
+  /**
+   * `ids` plus every link attached to one of them (directly or through other links), in rounds: a
+   * link comes after the links its ends sit on, so their new routes are known when it is routed.
+   */
+  private routeRounds(ids: string[]): string[][] {
+    const { dependents, depth } = this.attachments();
+    if (!dependents.size) return [ids];
+    const store = this.diagram.store;
+    const all = new Set(ids);
+    const queue = [...ids];
+    for (const id of queue) {
+      for (const d of dependents.get(id) ?? []) {
+        if (all.has(d) || !store.links.has(d)) continue;
+        all.add(d);
+        queue.push(d);
+      }
+    }
+    const rounds: string[][] = [];
+    for (const id of queue) (rounds[depth.get(id) ?? 0] ??= []).push(id);
+    return rounds.filter(Boolean);
+  }
+
+  /**
+   * Routes `ids` and the links attached to them, re-analyzes them (plus the `removed` links)
+   * incrementally and redraws what changed.
+   */
+  private routeLinks(ids: string[], removed: string[] = []): void {
+    const store = this.diagram.store;
+    const routed: string[] = [];
+    for (const round of this.routeRounds(ids)) {
+      const requests: RouteRequest[] = [];
+      const manual: string[] = [];
+      for (const id of round) {
+        this.pendingWorker.delete(id); // routed here: no longer waiting for the Worker
+        routed.push(id);
+        const l = store.links.get(id)!;
+        const { from, to } = this.ends(l);
+        if (l.routing === 'manual') {
+          manual.push(id);
+          this.routes.set(id, [from.point, ...(l.waypoints ?? []), to.point]);
+        } else {
+          requests.push({ linkId: id, from, to, waypoints: l.waypoints });
+        }
+      }
+      // A link that switched auto -> manual must not keep its stale auto route in the router's lanes.
+      if (manual.length) this.router.removeRoutes(manual);
+      for (const r of this.router.route(requests)) this.routes.set(r.linkId, r.points);
+    }
+    this.finishRoutes(routed, removed);
   }
 
   /** Line jumps, junction dots and redraws for links whose routes just changed. */
@@ -712,6 +848,7 @@ export class SvgRenderer {
     }
     el.g.dataset.kind = l.kind;
     el.g.toggleAttribute('data-locked', !!l.locked);
+    el.g.toggleAttribute('data-attached', !!this.attachments().depth.get(l.id));
     this.setStatus(el.g, l.status);
     const points = this.routes.get(l.id) ?? [];
     const d = linkPath(points, this.crossings.get(l.id), this.jumpRadius());
@@ -830,11 +967,14 @@ export class SvgRenderer {
   /** Whether every link at the junction ends on one port, or every one starts from one port. */
   private isMerge(j: Junction): boolean {
     const links = this.diagram.store.links;
+    const { depth } = this.attachments();
     let to: string | null | undefined;
     let from: string | null | undefined;
     for (const id of j.linkIds) {
       const l = links.get(id);
       if (!l) return false;
+      // An end drawn on another link is a real branch, whatever ports the links share.
+      if (depth.get(id) && attachHosts(l).some((h) => j.linkIds.includes(h))) return false;
       const t = `${l.to.node}\u0000${l.to.port}`;
       const f = `${l.from.node}\u0000${l.from.port}`;
       to = to === undefined || to === t ? t : null;
@@ -847,9 +987,12 @@ export class SvgRenderer {
   /** Sets data-occupied on ports that have links, touching only the ports whose state changed. */
   private updateOccupied(): void {
     const next = new Set<string>();
+    const { depth } = this.attachments();
     for (const l of this.diagram.store.links.values()) {
-      next.add(`${l.from.node}\u0000${l.from.port}`);
-      next.add(`${l.to.node}\u0000${l.to.port}`);
+      // An end drawn on another link doesn't land on its port.
+      const attached = depth.get(l.id);
+      if (!attached || !this.attachOf(l, 'from')) next.add(`${l.from.node}\u0000${l.from.port}`);
+      if (!attached || !this.attachOf(l, 'to')) next.add(`${l.to.node}\u0000${l.to.port}`);
     }
     const set = (key: string, on: boolean) => {
       const [node, port] = key.split('\u0000') as [string, string];

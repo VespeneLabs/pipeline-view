@@ -56,6 +56,18 @@ export interface LinkEnd {
   port: string;
 }
 
+/**
+ * Draws a link end on another link instead of on its port. It only changes the drawing: `from` / `to`
+ * still name the node and port the link logically runs to, so graph helpers and connection rules are
+ * unaffected.
+ */
+export interface LinkAttach {
+  /** Id of the link the end sits on (the host link). */
+  link: string;
+  /** Where on the host link's route, as a fraction of its length (0 = its start, 1 = its end). */
+  at: number;
+}
+
 /** Built-in kinds are 'process', 'signal', 'pneumatic' and 'electrical'. Any other string is allowed and styled through CSS. */
 export type LinkKind = 'process' | 'signal' | 'pneumatic' | 'electrical' | (string & {});
 
@@ -64,6 +76,14 @@ export interface LinkModel<D extends DataRecord = DataRecord> {
   from: LinkEnd;
   to: LinkEnd;
   kind: LinkKind;
+  /**
+   * Draw the `from` end on another link, at a point along its route, instead of on the `from` port.
+   * The end follows the host link when it re-routes and gets a junction dot. Ignored (the end is drawn
+   * on its port) while the host link doesn't exist or the attachments form a loop.
+   */
+  fromAttach?: LinkAttach;
+  /** Like `fromAttach`, for the `to` end. */
+  toAttach?: LinkAttach;
   /** 'auto' (the default) routes orthogonally around nodes. 'manual' keeps the given waypoints. */
   routing?: 'auto' | 'manual';
   /** Interior bend points in diagram coordinates. Port points are not included. */

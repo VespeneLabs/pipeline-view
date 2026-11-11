@@ -14,13 +14,14 @@ export interface GetDiffOptions {
 
 /** Fields whose change counts as "moved" rather than "changed". */
 const NODE_GEOMETRY = new Set(['position', 'rotation', 'flipX', 'flipY']);
-const LINK_GEOMETRY = new Set(['waypoints', 'routing']);
+const LINK_GEOMETRY = new Set(['waypoints', 'routing', 'fromAttach', 'toAttach']);
 
 /**
  * Lists how `current` differs from `base`, item by item:
  * - `added`: only in current;
  * - `removed`: only in base;
- * - `moved`: only geometry changed (nodes: position, rotation, flips; links: waypoints, routing);
+ * - `moved`: only geometry changed (nodes: position, rotation, flips; links: waypoints, routing, and
+ *   the ends attached to another link);
  * - `changed`: anything else changed (type, label, ports, data, kind, ends, …), with or without a move.
  *
  * Unchanged items are left out. Items are listed in current's order, then removed items in base's order.
