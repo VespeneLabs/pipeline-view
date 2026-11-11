@@ -28,6 +28,10 @@ import type {
 const CELL = 256;
 /** Lanes tried on each side of a shared corridor before giving up on spreading a segment. */
 const MAX_LANES = 4;
+/** Parallel segments further apart than this are never bundled for reordering. */
+const MAX_BUNDLE_GAP = 400;
+/** Bundles larger than this are left as spread (reordering cost grows quadratically). */
+const MAX_BUNDLE = 24;
 /** Grid-point cap for the whole-diagram search attempt (about 6 MB of search state). */
 const MAX_WORLD_CELLS = 150_000;
 
@@ -306,26 +310,17 @@ export class OrthogonalRouter implements Router {
 
   /**
    * Greedy spreading assigns lanes in request order, so parallel links can end up in the reverse of
-   * their nesting order and cross each other (a stack of manifold outputs turning the same way).
-   * For each bundle of segments spread from one corridor, swap lanes between members while that
-   * lowers the number of crossings among the bundle. Swaps keep every obstacle and lane rule.
+   * their nesting order and cross each other (a stack of manifold outputs fanning out both ways).
+   * Segments of different links that run side by side, with spans overlapping and no node between
+   * them, form a bundle. Each bundle is reordered so that members cross as little as possible:
+   * first a pairwise "which side crosses less" sort assigns the bundle's lanes, then lane swaps
+   * refine it. A change is kept only if it lowers crossings (with other links nearby too) and every
+   * moved segment keeps the obstacle and lane rules.
    */
   private untangle(batch: Map<string, BatchRoute>, segs: SpreadSeg[]): void {
-    const groups = new Map<string, SpreadSeg[]>();
-    for (const s of segs) {
-      const key = `${s.horizontal ? 'h' : 'v'}${laneKey(s.base)}`;
-      let list = groups.get(key);
-      if (!list) groups.set(key, (list = []));
-      list.push(s);
-    }
     const dirty = new Set<string>();
-    for (const list of groups.values()) {
-      if (list.length < 2) continue;
-      for (const bundle of overlapComponents(list)) {
-        if (bundle.length < 2 || new Set(bundle.map((s) => s.link)).size !== bundle.length)
-          continue;
-        if (this.untangleBundle(batch, bundle)) for (const s of bundle) dirty.add(s.link);
-      }
+    for (const bundle of this.bundles(segs)) {
+      if (this.untangleBundle(batch, bundle)) for (const s of bundle) dirty.add(s.link);
     }
     for (const id of dirty) {
       const { req, pts } = batch.get(id)!;
@@ -334,51 +329,213 @@ export class OrthogonalRouter implements Router {
     }
   }
 
+  /** Groups parallel segments of different links whose spans overlap with free space between them. */
+  private bundles(segs: SpreadSeg[]): SpreadSeg[][] {
+    const parent = segs.map((_, i) => i);
+    const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i]!)));
+    const coordOf = (s: SpreadSeg) => s.base;
+    const order = segs.map((_, i) => i).sort((a, b) => coordOf(segs[a]!) - coordOf(segs[b]!));
+    for (let x = 0; x < order.length; x++) {
+      const a = segs[order[x]!]!;
+      for (let y = x + 1; y < order.length; y++) {
+        const b = segs[order[y]!]!;
+        if (coordOf(b) - coordOf(a) > MAX_BUNDLE_GAP) break;
+        if (a.horizontal !== b.horizontal || a.link === b.link) continue;
+        const lo = Math.max(a.lo, b.lo);
+        const hi = Math.min(a.hi, b.hi);
+        if (hi - lo < EPS) continue;
+        const c0 = coordOf(a);
+        const c1 = coordOf(b);
+        const between: Box = a.horizontal
+          ? { l: lo, t: c0, r: hi, b: c1 }
+          : { l: c0, t: lo, r: c1, b: hi };
+        if (this.queryBoxes(between).some((box) => boxesOverlap(box, shrink(between)))) continue;
+        parent[find(order[x]!)] = find(order[y]!);
+      }
+    }
+    const groups = new Map<number, SpreadSeg[]>();
+    segs.forEach((s, i) => {
+      const r = find(i);
+      let g = groups.get(r);
+      if (!g) groups.set(r, (g = []));
+      g.push(s);
+    });
+    return [...groups.values()].filter(
+      (g) =>
+        g.length > 1 && g.length <= MAX_BUNDLE && new Set(g.map((s) => s.link)).size === g.length,
+    );
+  }
+
   private untangleBundle(batch: Map<string, BatchRoute>, bundle: SpreadSeg[]): boolean {
+    const n = bundle.length;
+    const horizontal = bundle[0]!.horizontal;
     const paths = bundle.map((s) => batch.get(s.link)!);
     const local = () => bundle.map((s, i) => paths[i]!.pts.slice(s.k - 1, s.k + 3));
     const coord = (i: number) => {
       const p = paths[i]!.pts[bundle[i]!.k]!;
-      return bundle[i]!.horizontal ? p.y : p.x;
+      return horizontal ? p.y : p.x;
     };
-    let best = countCrossings(local());
-    if (best === 0) return false;
+    // Other links nearby: a reorder must not trade bundle crossings for crossings with them.
     const members = new Set(bundle.map((s) => s.link));
-    const lanes = bundle[0]!.horizontal ? this.hLanes : this.vLanes;
-    let changed = false;
-    let improved = true;
-    for (let pass = 0; improved && pass < bundle.length * bundle.length; pass++) {
-      improved = false;
-      for (let i = 0; i < bundle.length && best > 0; i++) {
-        for (let j = i + 1; j < bundle.length && best > 0; j++) {
+    const area = { l: Infinity, t: Infinity, r: -Infinity, b: -Infinity };
+    for (const pts of local()) for (const p of pts) extend(area, p);
+    const context: Point[][] = [];
+    for (const [id, r] of batch) {
+      if (members.has(id)) continue;
+      const box = { l: Infinity, t: Infinity, r: -Infinity, b: -Infinity };
+      for (const p of r.pts) extend(box, p);
+      if (boxesOverlap(box, area)) context.push(r.pts);
+    }
+    const count = () => {
+      const mine = local();
+      let c = countCrossings(mine);
+      for (const m of mine) for (const o of context) c += countCrossings([m, o]);
+      return c;
+    };
+    const best = count();
+    if (best === 0) return false;
+    const lanes = horizontal ? this.hLanes : this.vLanes;
+
+    /** Moves members to `target` coordinates, or returns false (and changes nothing) if not allowed. */
+    const place = (target: number[]): boolean => {
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
           const a = bundle[i]!;
           const b = bundle[j]!;
-          const ca = coord(i);
-          const cb = coord(j);
-          if (Math.abs(ca - cb) < EPS) continue;
-          if (occupiedExcept(lanes, cb, a.lo, a.hi, members)) continue;
-          if (occupiedExcept(lanes, ca, b.lo, b.hi, members)) continue;
-          const pa = paths[i]!;
-          const pb = paths[j]!;
-          const ma = this.shifted(pa.req, pa.pts, a.k, a.horizontal, cb - ca);
-          const mb = ma && this.shifted(pb.req, pb.pts, b.k, b.horizontal, ca - cb);
-          if (!ma || !mb) continue;
-          const saved = [pa.pts[a.k]!, pa.pts[a.k + 1]!, pb.pts[b.k]!, pb.pts[b.k + 1]!] as const;
-          pa.pts[a.k] = ma[a.k]!;
-          pa.pts[a.k + 1] = ma[a.k + 1]!;
-          pb.pts[b.k] = mb[b.k]!;
-          pb.pts[b.k + 1] = mb[b.k + 1]!;
-          const count = countCrossings(local());
-          if (count < best) {
-            best = count;
-            improved = changed = true;
-          } else {
-            [pa.pts[a.k], pa.pts[a.k + 1], pb.pts[b.k], pb.pts[b.k + 1]] = saved;
-          }
+          if (Math.abs(target[i]! - target[j]!) < EPS && a.lo < b.hi - EPS && b.lo < a.hi - EPS)
+            return false;
         }
       }
+      const moved: (Point[] | null)[] = [];
+      for (let i = 0; i < n; i++) {
+        const s = bundle[i]!;
+        const off = target[i]! - coord(i);
+        if (Math.abs(off) < EPS) {
+          moved.push(null);
+          continue;
+        }
+        if (occupiedExcept(lanes, target[i]!, s.lo, s.hi, members)) return false;
+        const m = this.shifted(paths[i]!.req, paths[i]!.pts, s.k, horizontal, off);
+        if (!m) return false;
+        moved.push(m);
+      }
+      moved.forEach((m, i) => {
+        if (!m) return;
+        const k = bundle[i]!.k;
+        paths[i]!.pts[k] = m[k]!;
+        paths[i]!.pts[k + 1] = m[k + 1]!;
+      });
+      return true;
+    };
+    /** Crossings with members at `target`, or null if not allowed. Leaves the paths unchanged. */
+    const cost = (target: number[]): number | null => {
+      const saved = bundle.map((s, i) => [paths[i]!.pts[s.k]!, paths[i]!.pts[s.k + 1]!] as const);
+      if (!place(target)) return null;
+      const c = count();
+      bundle.forEach((s, i) => {
+        [paths[i]!.pts[s.k], paths[i]!.pts[s.k + 1]] = saved[i]!;
+      });
+      return c;
+    };
+
+    // 1. Pairwise order: put i before j when that crosses less (ties keep the current order).
+    const current = bundle.map((_, i) => coord(i));
+    const slots = [...current].sort((a, b) => a - b);
+    const pairCost = (i: number, ci: number, j: number, cj: number) => {
+      const at = (idx: number, c: number) => {
+        const s = bundle[idx]!;
+        const pts = paths[idx]!.pts.slice(s.k - 1, s.k + 3).map((p) => ({ ...p }));
+        if (horizontal) pts[1]!.y = pts[2]!.y = c;
+        else pts[1]!.x = pts[2]!.x = c;
+        return pts;
+      };
+      return countCrossings([at(i, ci), at(j, cj)]);
+    };
+    const lowC = slots[0]!;
+    const highC = slots[n - 1]!;
+    // Strict preferences only (pairs that cross less one way round), then a topological order that
+    // breaks ties by the current position, so members that don't interact keep their places.
+    const after: number[][] = bundle.map(() => []);
+    const indegree = new Array<number>(n).fill(0);
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const ij = pairCost(i, lowC, j, highC);
+        const ji = pairCost(j, lowC, i, highC);
+        if (ij === ji) continue;
+        const [first, second] = ij < ji ? [i, j] : [j, i];
+        after[first]!.push(second);
+        indegree[second]!++;
+      }
     }
-    return changed;
+    const order: number[] = [];
+    const placed = new Set<number>();
+    while (order.length < n) {
+      let next = -1;
+      for (let i = 0; i < n; i++) {
+        if (placed.has(i) || indegree[i]! > 0) continue;
+        if (next < 0 || current[i]! < current[next]!) next = i;
+      }
+      // A preference cycle: take the leftmost remaining member as is.
+      if (next < 0) {
+        for (let i = 0; i < n; i++) {
+          if (!placed.has(i) && (next < 0 || current[i]! < current[next]!)) next = i;
+        }
+      }
+      placed.add(next);
+      order.push(next);
+      for (const j of after[next]!) indegree[j]!--;
+    }
+    // Lanes for that order: the bundle's own lanes, or packed against either side within how far each
+    // member can actually move (members that shared a lane on separate spans may now need one each).
+    const step = this.spacing;
+    const layouts: number[][] = [];
+    const byRank = (lanesFor: number[]) => {
+      const t: number[] = new Array<number>(n);
+      order.forEach((idx, rank) => (t[idx] = lanesFor[rank]!));
+      return t;
+    };
+    layouts.push(byRank(slots));
+    const reach = (i: number, dir: 1 | -1) => {
+      const s = bundle[i]!;
+      let c = current[i]!;
+      for (let k = 1; k * step <= MAX_BUNDLE_GAP; k++) {
+        const next = current[i]! + dir * k * step;
+        if (occupiedExcept(lanes, next, s.lo, s.hi, members)) break;
+        if (!this.shifted(paths[i]!.req, paths[i]!.pts, s.k, horizontal, next - current[i]!)) break;
+        c = next;
+      }
+      return c;
+    };
+    const hiReach = bundle.map((_, i) => reach(i, 1));
+    const loReach = bundle.map((_, i) => reach(i, -1));
+    const packHigh: number[] = new Array<number>(n);
+    let ok = true;
+    for (let r = n - 1, next = Infinity; r >= 0; r--) {
+      const idx = order[r]!;
+      next = Math.min(hiReach[idx]!, next - step);
+      if (next < loReach[idx]! - EPS) ok = false;
+      packHigh[idx] = next;
+    }
+    if (ok) layouts.push(packHigh);
+    const packLow: number[] = new Array<number>(n);
+    ok = true;
+    for (let r = 0, next = -Infinity; r < n; r++) {
+      const idx = order[r]!;
+      next = Math.max(loReach[idx]!, next + step);
+      if (next > hiReach[idx]! + EPS) ok = false;
+      packLow[idx] = next;
+    }
+    if (ok) layouts.push(packLow);
+    let pick: number[] | null = null;
+    let pickCost = best;
+    for (const t of layouts) {
+      const c = cost(t);
+      if (c !== null && c < pickCost) {
+        pick = t;
+        pickCost = c;
+      }
+    }
+    return !!pick && place(pick);
   }
 
   /** The path with segment k moved by `off`, or null when that breaks a neighbour or hits a node. */
@@ -518,23 +675,17 @@ function occupiedExcept(
   return false;
 }
 
-/** Splits segments on one corridor into groups whose spans overlap (transitively). */
-function overlapComponents(list: SpreadSeg[]): SpreadSeg[][] {
-  const sorted = [...list].sort((a, b) => a.lo - b.lo);
-  const out: SpreadSeg[][] = [];
-  let cur: SpreadSeg[] = [];
-  let end = -Infinity;
-  for (const s of sorted) {
-    if (cur.length && s.lo >= end - EPS) {
-      out.push(cur);
-      cur = [];
-      end = -Infinity;
-    }
-    cur.push(s);
-    end = Math.max(end, s.hi);
-  }
-  if (cur.length) out.push(cur);
-  return out;
+/** Grows a box to include a point. */
+function extend(box: Box, p: Point): void {
+  box.l = Math.min(box.l, p.x);
+  box.t = Math.min(box.t, p.y);
+  box.r = Math.max(box.r, p.x);
+  box.b = Math.max(box.b, p.y);
+}
+
+/** The box minus a hair on every side, so boxes that only touch its edge don't count. */
+function shrink(b: Box): Box {
+  return { l: b.l + 0.5, t: b.t + 0.5, r: b.r - 0.5, b: b.b - 0.5 };
 }
 
 /** Proper crossings between the polylines of different paths (shared endpoints don't count). */
