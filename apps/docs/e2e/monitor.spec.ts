@@ -39,3 +39,51 @@ test('clicking equipment selects it', async ({ page }) => {
   await page.locator('[data-node-id="P03"]').click();
   await expect(page.getByText('selected. A host app')).toContainText('P03');
 });
+
+test('reading cards can be dragged in view mode as display state', async ({ page }) => {
+  await page.goto('./?static#/monitor');
+  // Runs in the page: reads the demo's diagram (window.__diagram).
+  const read = <T>(expr: string) =>
+    page.evaluate<T>(`(() => { const d = window.__diagram; return ${expr}; })()`);
+  const position = (id: string) =>
+    read<{ x: number; y: number }>(`d.getAnnotationPosition(${JSON.stringify(id)})`);
+  const card = page.locator('.reading-card[aria-label="TI-101 · MHWT"]');
+  const slot = page.locator('.pv-overlay [data-draggable]').filter({ has: card });
+  await expect(slot).toHaveCount(1);
+  const id = (await slot.getAttribute('data-annotation-id'))!;
+  const before = await read<string>('JSON.stringify(d.toJSON())');
+  const viewport = await read<{ zoom: number }>('d.getViewport()');
+  const start = await position(id);
+  const zoom = viewport.zoom;
+
+  const box = (await slot.boundingBox())!;
+  const from = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x + 30, from.y + 10, { steps: 4 });
+  await page.mouse.move(from.x + 60, from.y + 20, { steps: 4 });
+  await page.mouse.up();
+
+  const moved = await position(id);
+  expect(moved.x).toBeCloseTo(start.x + 60 / zoom, 0);
+  expect(moved.y).toBeCloseTo(start.y + 20 / zoom, 0);
+  const after = (await slot.boundingBox())!;
+  expect(after.x).toBeCloseTo(box.x + 60, 0);
+  // Display state: the document, history, dirty flag, viewport and selection are untouched.
+  expect(await read('JSON.stringify(d.toJSON())')).toBe(before);
+  expect(await read('[d.canUndo(), d.isDirty()]')).toEqual([false, false]);
+  expect(await read('d.getViewport()')).toEqual(viewport);
+  await expect(page.getByText('selected. A host app')).toContainText('FCV101');
+  await expect(card).toBeVisible(); // the React card is still mounted in the same slot
+
+  // Keyboard: focus the card, move it, commit.
+  await slot.focus();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.pv-live')).toContainText('Moved');
+  expect((await position(id)).x).toBeCloseTo(moved.x + 1, 5);
+
+  await page.getByRole('button', { name: 'Reset cards' }).click();
+  expect(await position(id)).toEqual(start);
+  await expect.poll(async () => (await slot.boundingBox())!.x).toBeCloseTo(box.x, 0);
+});

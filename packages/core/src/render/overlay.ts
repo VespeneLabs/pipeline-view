@@ -37,6 +37,8 @@ interface Item {
   render?: HtmlRenderer;
   /** Measures content-sized node renderers and HTML annotations. */
   resize?: ResizeObserver;
+  /** The slot carries the draggable attributes (focusable, named). */
+  draggable?: boolean;
 }
 
 const aKey = (id: string) => `a\u0000${id}`;
@@ -301,9 +303,11 @@ export class OverlayRenderer {
       }
       return;
     }
+    // The display position (a drag in progress, or host display state) wins over the model's.
+    const rel = this.diagram.getAnnotationPosition(id) ?? a.position;
     const pos: Point = {
-      x: a.position.x + (anchor?.position.x ?? 0),
-      y: a.position.y + (anchor?.position.y ?? 0),
+      x: rel.x + (anchor?.position.x ?? 0),
+      y: rel.y + (anchor?.position.y ?? 0),
     };
     let box: Rect;
     if (a.kind === 'text') {
@@ -349,6 +353,12 @@ export class OverlayRenderer {
     }
     item.anchorPos = anchor?.position;
     item.anchorStatus = anchor?.status;
+    const draggable = this.diagram.isAnnotationDraggable(id);
+    if (draggable || item.draggable) {
+      item.draggable = draggable;
+      const name = a.kind === 'text' ? a.text : (anchor?.label ?? anchor?.id ?? id);
+      setDraggable(item.el, draggable, name);
+    }
     // Hidden by the host (display state): keep the element and its renderer, show nothing.
     const hidden = this.diagram.isAnnotationHidden(id);
     const style = (item.el as HTMLElement | SVGElement).style;
@@ -516,6 +526,21 @@ export class OverlayRenderer {
     for (const u of this.unsubscribe) u();
     this.frame.cancel();
     for (const key of [...this.items.keys()]) this.remove(key);
+  }
+}
+
+/** Draggable annotations are focusable (arrow keys move them) and named for screen readers. */
+function setDraggable(el: Element, on: boolean, name: string): void {
+  const attrs: [string, string][] = [
+    ['data-draggable', ''],
+    ['tabindex', '0'],
+    ['role', 'group'],
+    ['aria-roledescription', 'movable annotation'],
+    ['aria-label', name],
+  ];
+  for (const [k, v] of attrs) {
+    if (!on) el.removeAttribute(k);
+    else if (el.getAttribute(k) !== v) el.setAttribute(k, v);
   }
 }
 

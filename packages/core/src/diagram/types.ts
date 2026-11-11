@@ -246,6 +246,19 @@ export interface DiagramOptions {
    * your bundler needs its own worker import (or in tests). Incremental re-routes stay on the main thread.
    */
   routingWorker?: boolean | RoutingWorkerOptions;
+  /**
+   * Lets users drag annotations (reading cards, text) with the pointer or the arrow keys. `'edit'`: in
+   * edit mode only; `'always'`: in view mode too. Default false. `AnnotationModel.draggable` overrides it
+   * per annotation. Anchored annotations stay anchored, and their leaders follow.
+   */
+  annotationDrag?: false | 'edit' | 'always';
+  /**
+   * Where a finished drag goes. `'model'` (the default) commits the position as one undoable `update()`.
+   * `'display'` keeps it as display state, like hidden annotations: no model change, undo step or dirty
+   * flag, and it isn't in `toJSON()`. The host saves it from `annotationMove` and restores it with
+   * `setAnnotationPositions()`.
+   */
+  annotationMoves?: 'model' | 'display';
   /** Accessible name for the diagram root. */
   ariaLabel?: string;
 }
@@ -297,6 +310,13 @@ export interface DiagramEvents {
     detail?: Record<string, unknown>;
     point: Point;
   };
+  /**
+   * The user is moving an annotation (`DiagramOptions.annotationDrag`). `position` is in the space of
+   * `AnnotationModel.position`: relative to the anchor node when anchored. `final` is true once, when
+   * the pointer is released or a keyboard move is committed (or cancelled, with the position it went
+   * back to).
+   */
+  annotationMove: { id: string; position: Point; final: boolean };
 }
 
 export interface Transaction {
@@ -336,6 +356,10 @@ export interface DiagramApi {
   zoomToItem(item: ItemRef, opts?: { animate?: boolean }): void;
   setHiddenAnnotations(hidden: Iterable<string> | ((a: AnnotationModel) => boolean) | null): void;
   isAnnotationHidden(id: string): boolean;
+  /** Display positions that override `AnnotationModel.position`, by annotation id. null clears them all. */
+  setAnnotationPositions(positions: Record<string, Point> | null): void;
+  /** Where an annotation is shown: its display position if it has one, else its model position. */
+  getAnnotationPosition(id: string): Point | undefined;
   screenToDiagram(p: Point): Point;
   diagramToScreen(p: Point): Point;
   getBounds(): Rect;

@@ -1,6 +1,6 @@
 import type { Diagram, DiagramModel } from '@pipeline-view/core';
 import { act, cleanup, render } from '@testing-library/react';
-import { StrictMode, createRef, useState } from 'react';
+import { StrictMode, createRef, useEffect, useState } from 'react';
 import { renderToString } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PipelineView, useDiagram } from './PipelineView';
@@ -42,6 +42,103 @@ describe('<PipelineView>', () => {
     expect(ref.current!.isAnnotationHidden('note')).toBe(true);
     rerender(<PipelineView ref={ref} model={m} hiddenAnnotations={null} />);
     expect(ref.current!.isAnnotationHidden('note')).toBe(false);
+  });
+
+  it('wires annotationDrag, annotationMoves and onAnnotationMove, keeping React cards mounted', async () => {
+    const ref = createRef<Diagram>();
+    const onAnnotationMove = vi.fn();
+    const onModelChange = vi.fn();
+    let mounts = 0;
+    const Card = () => {
+      const [n, setN] = useState(0);
+      useEffect(() => {
+        mounts++;
+      }, []);
+      return (
+        <b className="card" onClick={() => setN(n + 1)}>
+          {n}
+        </b>
+      );
+    };
+    const m: DiagramModel = {
+      ...model(),
+      annotations: [
+        {
+          id: 'r',
+          kind: 'html',
+          renderer: 'card',
+          position: { x: 0, y: -60 },
+          size: { width: 80, height: 30 },
+          anchor: { node: 'a' },
+        },
+      ],
+    };
+    const renderers = { card: () => <Card /> };
+    const view = (drag: 'always' | false, moves: 'model' | 'display') => (
+      <PipelineView
+        ref={ref}
+        model={m}
+        fitOnLoad={false}
+        renderers={renderers}
+        annotationDrag={drag}
+        annotationMoves={moves}
+        onAnnotationMove={onAnnotationMove}
+        onModelChange={onModelChange}
+      />
+    );
+    const { container, rerender } = render(view('always', 'display'));
+    const d = ref.current!;
+    await act(async () => d.overlay!.flush());
+    const slot = () => container.querySelector<HTMLElement>('[data-annotation-id="r"]')!;
+    const el = slot();
+    expect(el.hasAttribute('data-draggable')).toBe(true);
+    // React state inside the card, to prove it survives the moves.
+    await act(async () => el.querySelector<HTMLElement>('.card')!.click());
+    expect(el.querySelector('.card')!.textContent).toBe('1');
+
+    const drag = async (dx: number) => {
+      const fire = (type: string, x: number) =>
+        el.dispatchEvent(
+          new PointerEvent(type, {
+            bubbles: true,
+            clientX: x,
+            clientY: 10,
+            button: 0,
+            pointerId: 1,
+            isPrimary: true,
+          }),
+        );
+      await act(async () => {
+        fire('pointerdown', 10);
+        fire('pointermove', 10 + dx);
+        fire('pointerup', 10 + dx);
+        d.overlay!.flush();
+      });
+    };
+
+    await drag(25);
+    expect(onAnnotationMove).toHaveBeenLastCalledWith({
+      id: 'r',
+      position: { x: 25, y: -60 },
+      final: true,
+    });
+    expect(onModelChange).not.toHaveBeenCalled(); // display state only
+    expect(d.isDirty()).toBe(false);
+    expect(d.getAnnotationPosition('r')).toEqual({ x: 25, y: -60 });
+
+    // The props can change at any time: 'model' commits through onModelChange.
+    rerender(view('always', 'model'));
+    await drag(10);
+    expect(onModelChange).toHaveBeenCalledTimes(1);
+    expect(d.toJSON().annotations![0]!.position).toEqual({ x: 35, y: -60 });
+
+    expect(slot()).toBe(el);
+    expect(el.querySelector('.card')!.textContent).toBe('1'); // state kept
+    expect(mounts).toBe(1); // never remounted
+
+    rerender(view(false, 'model'));
+    await act(async () => d.overlay!.flush());
+    expect(el.hasAttribute('data-draggable')).toBe(false);
   });
 
   it('applies ariaLabel at creation and when it changes', () => {

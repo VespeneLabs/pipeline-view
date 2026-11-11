@@ -321,6 +321,37 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
     ],
   },
   {
+    title: 'Annotations: hiding and dragging',
+    intro:
+      'Display state for annotations (reading cards, text): it lives in the diagram, not in the model, so it never touches undo, isDirty() or toJSON().',
+    entries: [
+      {
+        sig: 'setHiddenAnnotations(ids | predicate | null) / isAnnotationHidden(id)',
+        doc: 'Hides annotations and their leaders. Renderers stay mounted, and hidden annotations are left out of fitting. Also as hiddenAnnotations on <PipelineView>.',
+      },
+      {
+        sig: "annotationDrag: false | 'edit' | 'always'",
+        doc: "Lets users drag annotations with the pointer (mouse, pen, touch) or, with one focused, the arrow keys (Shift for a bigger step, grid steps when grid.snap is on; Enter commits, Esc reverts). 'edit' allows it in edit mode only, 'always' in view mode too. Anchored annotations stay anchored and their leaders follow. A drag never pans, selects or emits clicks. Inputs inside a card, and anything under [data-pv-no-drag], keep their own gestures. Change it later with setAnnotationDrag(drag, moves?) or the <PipelineView> prop.",
+      },
+      {
+        sig: 'AnnotationModel.draggable?: boolean',
+        doc: 'Per-annotation override: true makes it draggable in every mode, false never.',
+      },
+      {
+        sig: "annotationMoves: 'model' | 'display'",
+        doc: "'model' (default) commits a finished move as one undoable update(), reported by modelChange with origin 'user'. 'display' keeps it as display state: the host saves it from annotationMove and restores it with setAnnotationPositions().",
+      },
+      {
+        sig: 'annotationMove: { id, position, final }',
+        doc: 'Emitted while the user moves an annotation. position is in the space of AnnotationModel.position (relative to the anchor node when anchored). final is true once, when the move ends: save then. Also as onAnnotationMove on <PipelineView>.',
+      },
+      {
+        sig: 'setAnnotationPositions(Record<id, Point> | null) / getAnnotationPosition(id)',
+        doc: 'Display positions that override the model position. Passing a new record replaces the previous one, so leaving an id out (or passing null) puts annotations back on their model position. getAnnotationPosition returns the effective position; placement, leaders, itemBounds() and getBounds() all use it.',
+      },
+    ],
+  },
+  {
     title: 'Placing, dropping and connecting',
     entries: [
       {

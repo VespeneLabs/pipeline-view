@@ -56,6 +56,7 @@ export function ProcessMonitor() {
   const [selected, setSelected] = useState<string | null>('FCV101');
   const [tick, setTick] = useState(0);
   const [ready, setReady] = useState<Diagram | null>(null);
+  const [cardsMoved, setCardsMoved] = useState(false);
   // Runs after PipelineView's own effects of the same commit, so after it has loaded the model (a load
   // clears the selection). The Figma frame shows FCV101 selected.
   useEffect(() => {
@@ -147,6 +148,17 @@ export function ProcessMonitor() {
         >
           Fit
         </button>
+        <button
+          type="button"
+          disabled={!cardsMoved}
+          onClick={() => {
+            // Display state only: clearing the overrides puts every card back on its model position.
+            diagramRef.current?.setAnnotationPositions(null);
+            setCardsMoved(false);
+          }}
+        >
+          Reset cards
+        </button>
         <span className="monitor-tick" aria-live="off">
           {running ? `Tick ${tick}` : 'Paused'}
         </span>
@@ -158,6 +170,11 @@ export function ProcessMonitor() {
           symbols={symbols}
           renderers={renderers}
           fitOnLoad={false}
+          // Operators can move reading cards. The positions are display state: a host keeps them outside
+          // the document (per user, say), so a move isn't a model change, an undo step or a dirty flag.
+          annotationDrag="always"
+          annotationMoves="display"
+          onAnnotationMove={({ final }) => final && setCardsMoved(true)}
           options={{ ariaLabel: 'Mix and transfer process monitor' }}
           onReady={onReady}
           onSelectionChange={({ selection }) =>
@@ -176,6 +193,12 @@ export function ProcessMonitor() {
           'Click a piece of equipment to select it.'
         )}
       </div>
+      <p className="monitor-details">
+        Drag a reading card, or focus one and use the arrow keys, to move it. The positions are
+        display state (<code>annotationMoves=&quot;display&quot;</code>): they stay out of the
+        document, undo history and dirty flag, and a host saves them from{' '}
+        <code>onAnnotationMove</code>.
+      </p>
     </>
   );
 }

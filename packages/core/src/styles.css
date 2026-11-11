@@ -631,3 +631,24 @@
 .pv-editor .pv-placement[data-refused] .pv-placement-box {
   stroke: var(--pv-muted);
 }
+
+/* ---- draggable annotations ------------------------------------------------ */
+
+.pv-root [data-draggable] {
+  cursor: grab;
+  touch-action: none;
+}
+
+.pv-root.pv-annotation-dragging,
+.pv-root.pv-annotation-dragging [data-draggable] {
+  cursor: grabbing;
+}
+
+.pv-root [data-draggable]:focus {
+  outline: none;
+}
+
+.pv-root [data-draggable]:focus-visible {
+  outline: 2px solid var(--pv-focus-ring, var(--pv-selection, currentColor));
+  outline-offset: 2px;
+}
