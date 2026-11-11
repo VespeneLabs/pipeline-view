@@ -339,3 +339,35 @@ describe("HTML annotations with sizing: 'content'", () => {
     }
   });
 });
+
+describe('hidden annotations (display state)', () => {
+  it('hides cards, text and leaders without touching model, history or renderer state', () => {
+    const el = () => $('.pv-overlay [data-annotation-id="reading"]') as HTMLElement;
+    const before = el();
+    expect($('.pv-leader')).not.toBeNull();
+    cleanup.mockClear();
+    d.setHiddenAnnotations(['reading', 'title']);
+    flush();
+    expect(el()).toBe(before); // still mounted: React state survives
+    expect(el().style.display).toBe('none');
+    expect(el().hasAttribute('data-hidden')).toBe(true);
+    expect(($('[data-annotation-id="title"]') as SVGElement).style.display).toBe('none');
+    expect($('.pv-leader')).toBeNull();
+    expect(cleanup).not.toHaveBeenCalled();
+    expect(d.isAnnotationHidden('reading')).toBe(true);
+    expect(d.canUndo()).toBe(false);
+    expect(d.isDirty()).toBe(false);
+    // Hidden annotations are left out of fitting.
+    const withHidden = d.getBounds();
+    d.setHiddenAnnotations(null);
+    flush();
+    expect(el().style.display).toBe('');
+    expect($('.pv-leader')).not.toBeNull();
+    expect(d.getBounds().y).toBeLessThan(withHidden.y);
+    // A predicate works too.
+    d.setHiddenAnnotations((a) => a.kind === 'html');
+    flush();
+    expect(el().style.display).toBe('none');
+    expect(($('[data-annotation-id="title"]') as SVGElement).style.display).toBe('');
+  });
+});
