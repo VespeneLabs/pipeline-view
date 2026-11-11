@@ -99,6 +99,7 @@ type Gesture =
       start: Point;
       started: boolean;
     }
+  | { type: 'branch'; node: string; port: string; start: Point; started: boolean }
   | {
       /** Dragging an attached end along its host link. */
       type: 'attach';
@@ -320,6 +321,14 @@ export class EditorController {
             start: p,
             started: false,
           };
+      } else if (kind === 'branch') {
+        this.gesture = {
+          type: 'branch',
+          node: handle.dataset.node!,
+          port: handle.dataset.port!,
+          start: p,
+          started: false,
+        };
       } else if (kind === 'attach') {
         const linkId = handle.dataset.link!;
         const end = handle.dataset.end as 'from' | 'to';
@@ -450,6 +459,11 @@ export class EditorController {
         g.started = true;
         this.commands.previewAttach(g.linkId, g.end, fractionAlong(g.host, p));
         break;
+      case 'branch':
+        if (!g.started && !far(g.start)) return;
+        g.started = true;
+        this.commands.previewBranchPoint(g.node, g.port, p);
+        break;
     }
     this.redraw();
   };
@@ -522,6 +536,13 @@ export class EditorController {
           this.announceAttach(g.linkId, g.end);
         }
         break;
+      case 'branch':
+        if (g.started) {
+          this.commands.commitLinkPath();
+          this.suppressClick();
+          this.reportBranchPoint(g.node, g.port);
+        }
+        break;
     }
     this.redraw();
   };
@@ -540,7 +561,7 @@ export class EditorController {
     const g = this.gesture;
     this.gesture = null;
     if (g?.type === 'move' && g.started) this.commands.cancelMove();
-    if ((g?.type === 'segment' || g?.type === 'attach') && g.started)
+    if ((g?.type === 'segment' || g?.type === 'attach' || g?.type === 'branch') && g.started)
       this.commands.cancelLinkPath();
     if (g?.type === 'connect') this.unmarkRefused(g.marked);
   }
@@ -711,6 +732,85 @@ export class EditorController {
     return false;
   }
 
+  /** Where the links on a port part, from the renderer (see `Diagram.getBranchPoint`). */
+  private branchPoint(node: string, port: string): { point: Point; fixed: boolean } | undefined {
+    return (
+      this.diagram as {
+        getBranchPoint?: (n: string, p: string) => { point: Point; fixed: boolean } | undefined;
+      }
+    ).getBranchPoint?.(node, port);
+  }
+
+  /**
+   * The ports whose branch point gets a handle: every port of the selected nodes, and both end ports
+   * of the selected links. Only ports where two or more links part end up with one.
+   */
+  private branchPorts(): LinkEnd[] {
+    const out = new Map<string, LinkEnd>();
+    const add = (e: LinkEnd) => out.set(`${e.node}\u0000${e.port}`, e);
+    for (const ref of this.diagram.getSelection()) {
+      if (ref.kind === 'node') {
+        const n = this.diagram.store.nodes.get(ref.id);
+        if (!n || n.locked) continue;
+        for (const p of nodePorts(this.diagram.symbols.get(n.type), n))
+          add({ node: n.id, port: p.id });
+      } else if (ref.kind === 'link') {
+        const l = this.diagram.store.links.get(ref.id);
+        if (!l) continue;
+        for (const e of [l.from, l.to]) if (!this.diagram.store.nodes.get(e.node)?.locked) add(e);
+      }
+    }
+    return [...out.values()];
+  }
+
+  /** Emits `branchPointMove` for the port's current entry and says where the point is now. */
+  private reportBranchPoint(node: string, port: string): void {
+    const n = this.diagram.store.nodes.get(node);
+    if (!n) return;
+    const point = n.branchPoints?.[port] ?? null;
+    const at = point ? { x: n.position.x + point.x, y: n.position.y + point.y } : null;
+    this.diagram.emit('branchPointMove', { node, port, point: point && { ...point }, at });
+    const m = this.diagram.options.branchPointMessages;
+    this.announce(
+      at
+        ? (m?.moved?.({ node: n, port, at }) ?? `Branch point at ${at.x}, ${at.y}.`)
+        : (m?.cleared?.({ node: n, port }) ?? 'Branch point cleared. The router decides.'),
+    );
+  }
+
+  /** Keys on a focused branch point handle: arrows move it, Delete hands it back to the router. */
+  private onBranchKey(e: KeyboardEvent, handle: SVGElement): boolean {
+    const node = handle.dataset.node!;
+    const port = handle.dataset.port!;
+    const step = e.shiftKey ? (this.diagram.options.grid?.size ?? 10) : 1;
+    const delta: Record<string, Point> = {
+      ArrowLeft: { x: -step, y: 0 },
+      ArrowRight: { x: step, y: 0 },
+      ArrowUp: { x: 0, y: -step },
+      ArrowDown: { x: 0, y: step },
+    };
+    const d = delta[e.key];
+    if (d) {
+      const cur = this.branchPoint(node, port)?.point;
+      // Keyboard steps are exact: grid snapping would swallow a one-unit step.
+      if (
+        cur &&
+        this.commands.setBranchPoint(node, port, { x: cur.x + d.x, y: cur.y + d.y }, false)
+      )
+        this.reportBranchPoint(node, port);
+      return true;
+    }
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      if (this.commands.setBranchPoint(node, port, null)) this.reportBranchPoint(node, port);
+      return true;
+    }
+    if (e.key === 'Escape') {
+      this.root.focus({ preventScroll: true });
+      return true;
+    }
+    return false;
+  }
+
   private onDoubleClick = (e: MouseEvent): void => {
     if (this.diagram.getMode() !== 'edit') return;
     const target = e.target as Element | null;
@@ -749,6 +849,17 @@ export class EditorController {
       e.preventDefault();
       this.redraw();
       return;
+    }
+    const branch = (e.target as Element | null)?.closest?.<SVGElement>('[data-pv-handle="branch"]');
+    if (branch) {
+      if (this.onBranchKey(e, branch)) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.redraw();
+        return;
+      }
+      // Undo and redo keep working; node shortcuts don't apply while a handle has focus.
+      if (!(e.ctrlKey || e.metaKey)) return;
     }
     const action = actionForKey(e);
     if (!action) return;
@@ -1276,6 +1387,33 @@ export class EditorController {
       }
     }
 
+    // Where the links of a port part: drag it, or focus it and use the arrow keys.
+    if (g?.type !== 'move' && g?.type !== 'connect') {
+      for (const { node, port } of this.branchPorts()) {
+        const b = this.branchPoint(node, port);
+        if (!b) continue;
+        out.push(
+          el('rect', {
+            class: `pv-branch-handle${b.fixed ? ' pv-fixed' : ''}`,
+            'data-pv-handle': 'branch',
+            'data-node': node,
+            'data-port': port,
+            x: b.point.x - 5 * s,
+            y: b.point.y - 5 * s,
+            width: 10 * s,
+            height: 10 * s,
+            transform: `rotate(45 ${b.point.x} ${b.point.y})`,
+            'stroke-width': 1.5 * s,
+            tabindex: 0,
+            role: 'button',
+            'aria-label': `Branch point of ${this.describePort({ node, port })}${
+              b.fixed ? '' : ', placed by the router'
+            }. Arrow keys move it, Delete hands it back to the router.`,
+          }),
+        );
+      }
+    }
+
     if (g?.type === 'move') {
       for (const gd of g.guides) {
         out.push(
@@ -1451,7 +1589,17 @@ export class EditorController {
         out.push(tip);
       }
     }
+    // Rebuilding the layer drops focus: a branch point handle that had it gets it back.
+    const focused = doc.activeElement?.closest?.<SVGElement>('[data-pv-handle="branch"]');
+    const key = focused && `${focused.dataset.node}\u0000${focused.dataset.port}`;
     layer.replaceChildren(...out);
+    if (key) {
+      const again = out.find((o) => {
+        const d = (o as SVGElement).dataset;
+        return d?.pvHandle === 'branch' && `${d.node}\u0000${d.port}` === key;
+      }) as SVGElement | undefined;
+      again?.focus({ preventScroll: true });
+    }
   }
 }
 

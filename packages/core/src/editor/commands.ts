@@ -517,6 +517,48 @@ export class EditorCommands {
     if (patch) this.diagram.preview((tx) => tx.updateLink(linkId, patch));
   }
 
+  // ------------------------------------------------------------------ branch points
+
+  /** The `branchPoints` patch that puts a port's branch point at `at` (diagram coordinates), or removes it. */
+  private branchPatch(
+    nodeId: string,
+    port: string,
+    at: Point | null,
+    snap = true,
+  ): { branchPoints: Record<string, Point> | undefined } | null {
+    const n = this.store.nodes.get(nodeId);
+    if (!n || this.isLocked('node', nodeId)) return null;
+    const next = { ...n.branchPoints };
+    if (at) {
+      const p = snap && this.diagram.options.grid?.snap ? snapPoint(at, this.gridSize) : at;
+      const rel = { x: Math.round(p.x - n.position.x), y: Math.round(p.y - n.position.y) };
+      const cur = next[port];
+      if (cur && cur.x === rel.x && cur.y === rel.y) return null;
+      next[port] = rel;
+    } else {
+      if (!(port in next)) return null;
+      delete next[port];
+    }
+    return { branchPoints: Object.keys(next).length ? next : undefined };
+  }
+
+  /**
+   * Puts the point where the links on a port part at `at` (diagram coordinates, snapped to the grid
+   * when snapping is on), or with `null` hands it back to the router. One undo step. Returns false
+   * when nothing changed (same point, locked or unknown node). `snap: false` keeps `at` exact.
+   */
+  setBranchPoint(nodeId: string, port: string, at: Point | null, snap = true): boolean {
+    const patch = this.branchPatch(nodeId, port, at, snap);
+    if (patch) this.diagram.update((tx) => tx.updateNode(nodeId, patch));
+    return !!patch;
+  }
+
+  /** Previews a branch point while the user drags it. Finish with `commitLinkPath` or `cancelLinkPath`. */
+  previewBranchPoint(nodeId: string, port: string, at: Point): void {
+    const patch = this.branchPatch(nodeId, port, at);
+    if (patch) this.diagram.preview((tx) => tx.updateNode(nodeId, patch));
+  }
+
   // ------------------------------------------------------------------ links
 
   /** Stores a user-edited path (full polyline, ports included) and switches the link to manual routing. */

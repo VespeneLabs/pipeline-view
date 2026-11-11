@@ -13,14 +13,14 @@ export interface GetDiffOptions {
 }
 
 /** Fields whose change counts as "moved" rather than "changed". */
-const NODE_GEOMETRY = new Set(['position', 'rotation', 'flipX', 'flipY']);
+const NODE_GEOMETRY = new Set(['position', 'rotation', 'flipX', 'flipY', 'branchPoints']);
 const LINK_GEOMETRY = new Set(['waypoints', 'routing', 'fromAttach', 'toAttach']);
 
 /**
  * Lists how `current` differs from `base`, item by item:
  * - `added`: only in current;
  * - `removed`: only in base;
- * - `moved`: only geometry changed (nodes: position, rotation, flips; links: waypoints, routing, and
+ * - `moved`: only geometry changed (nodes: position, rotation, flips, branch points; links: waypoints, routing, and
  *   the ends attached to another link);
  * - `changed`: anything else changed (type, label, ports, data, kind, ends, …), with or without a move.
  *
@@ -86,6 +86,8 @@ function normalize(key: string, v: unknown): unknown {
     return undefined;
   if (key === 'routing' && v === 'auto') return undefined;
   if (key === 'waypoints' && Array.isArray(v) && v.length === 0) return undefined;
+  if (key === 'branchPoints' && typeof v === 'object' && v !== null && !Object.keys(v).length)
+    return undefined;
   return v;
 }
 

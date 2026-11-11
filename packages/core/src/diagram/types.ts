@@ -226,6 +226,8 @@ export interface DiagramOptions {
   resolveAttach?: (proposal: AttachProposal) => AttachProposal | null | undefined | void;
   /** Phrases (or localizes) what moving an attach point along its host link announces to screen readers. */
   attachMessages?: AttachMessages;
+  /** Phrases (or localizes) what moving or clearing a branch point announces to screen readers. */
+  branchPointMessages?: BranchPointMessages;
   canDrop?: (type: string, position: Point) => ValidationResult;
   /**
    * Links always run from an 'out' port to an 'in' port, and arrows follow (FR-41). With `kinds`, only
@@ -342,6 +344,17 @@ export interface AttachMessages {
 }
 
 /**
+ * The announcements of a branch point edit (`NodeModel.branchPoints`), spoken through the polite live
+ * region. Return undefined to keep the English default, or an empty string to say nothing.
+ */
+export interface BranchPointMessages {
+  /** The point was moved; `at` is in diagram coordinates. */
+  moved?: (ctx: { node: NodeModel; port: string; at: Point }) => string | undefined;
+  /** The entry was removed and the router decides again. */
+  cleared?: (ctx: { node: NodeModel; port: string }) => string | undefined;
+}
+
+/**
  * The announcements of an annotation move (`DiagramOptions.annotationDrag`), spoken through the polite
  * live region. Each one replaces the English default: return undefined to keep the default, or an
  * empty string to say nothing.
@@ -411,6 +424,12 @@ export interface DiagramEvents {
    * back to).
    */
   annotationMove: { id: string; position: Point; final: boolean };
+  /**
+   * The user moved or cleared the branch point of a port in edit mode (`NodeModel.branchPoints`), once
+   * per committed move. `point` is the stored value, relative to the node's position, and `at` the same
+   * point in diagram coordinates; both are null when the entry was cleared and the router decides again.
+   */
+  branchPointMove: { node: string; port: string; point: Point | null; at: Point | null };
 }
 
 export interface Transaction {
@@ -457,6 +476,8 @@ export interface DiagramApi {
   screenToDiagram(p: Point): Point;
   diagramToScreen(p: Point): Point;
   getBounds(): Rect;
+  /** Where the links on a port part (see `NodeModel.branchPoints`). */
+  getBranchPoint?(node: string, port: string): { point: Point; fixed: boolean } | undefined;
 
   getSelection(): ItemRef[];
   setSelection(items: ItemRef[]): void;

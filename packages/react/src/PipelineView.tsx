@@ -150,6 +150,7 @@ export interface PipelineViewProps {
   onChangeDropped?: Handler<'changeDropped'>;
   /** An annotation is being dragged; `final` is true once, when the move ends. */
   onAnnotationMove?: Handler<'annotationMove'>;
+  onBranchPointMove?: Handler<'branchPointMove'>;
   className?: string;
   style?: CSSProperties;
   /** Rendered after the canvas, inside the DiagramContext (toolbars, legends, palettes). */
@@ -168,6 +169,7 @@ const EVENT_PROPS = {
   connectRejected: 'onConnectRejected',
   changeDropped: 'onChangeDropped',
   annotationMove: 'onAnnotationMove',
+  branchPointMove: 'onBranchPointMove',
 } as const satisfies Record<keyof DiagramEvents, keyof PipelineViewProps>;
 
 /**
