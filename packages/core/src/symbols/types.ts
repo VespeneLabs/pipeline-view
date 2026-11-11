@@ -24,6 +24,13 @@ export interface PortDef {
   label?: string;
 }
 
+/**
+ * A callback type that's checked bivariantly, like a method. That lets a `SymbolDef<MyData>` go
+ * into a `SymbolDef[]` (and `registerSymbol`) without a cast, while the callback itself still sees
+ * `NodeModel<MyData>`.
+ */
+type SymbolCallback<A, R> = { bivarianceHack(arg: A): R }['bivarianceHack'];
+
 export interface SymbolRenderContext<D extends DataRecord = DataRecord> {
   data: D;
   label?: string;
@@ -42,13 +49,13 @@ export interface SymbolDef<D extends DataRecord = DataRecord> {
    * Unrotated size. A function computes it per node instance, for example from `node.data` (FR-40).
    * Functions must tolerate missing data: palettes and galleries call them with `previewNode(def)`.
    */
-  size: Size | ((node: NodeModel) => Size);
+  size: Size | SymbolCallback<NodeModel<D>, Size>;
   /**
    * Ports, or a function computing them per node instance (FR-40). `node.ports` overrides both.
    * Read them through `nodePorts(def, node)`, never directly. Like `size`, a function must tolerate
    * missing data (`previewNode(def)`).
    */
-  ports: PortDef[] | ((node: NodeModel) => PortDef[]);
+  ports: PortDef[] | SymbolCallback<NodeModel<D>, PortDef[]>;
   /**
    * Static SVG markup (inner content, no <svg> wrapper), drawn in local coordinates 0..size.
    * Strokes must use currentColor or var(--pv-*) so that theming works (FR-35).
@@ -58,7 +65,7 @@ export interface SymbolDef<D extends DataRecord = DataRecord> {
    * Dynamic render for bindable parts (valve open/closed, pump running, tank level, instrument tag letters).
    * Returns inner SVG markup. When both are given, it takes precedence over `svg`.
    */
-  render?: (ctx: SymbolRenderContext<D>) => string;
+  render?: SymbolCallback<SymbolRenderContext<D>, string>;
   /** Where the label is placed, in local coordinates. The default is bottom-center below the symbol. */
   labelAnchor?: Point;
   keywords?: string[];
