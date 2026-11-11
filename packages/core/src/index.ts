@@ -37,6 +37,7 @@ export {
   findPort,
   previewNode,
   sidePorts,
+  withPorts,
   type SidePortsOptions,
 } from './symbols/resolve';
 export { migrateModel } from './model/migrate';

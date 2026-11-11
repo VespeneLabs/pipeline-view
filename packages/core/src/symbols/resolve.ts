@@ -6,7 +6,7 @@
  * in palettes, so they must tolerate missing data. Results are cached per node object: the model store
  * replaces a node object on every change, so a cached result can never go stale.
  */
-import type { NodeModel, Size } from '../model/types';
+import type { DataRecord, NodeModel, Size } from '../model/types';
 import type { PortDef, PortDirection, SymbolDef } from './types';
 
 /** Size used for nodes whose symbol type isn't registered. */
@@ -50,6 +50,35 @@ export function findPort(
   portId: string,
 ): PortDef | undefined {
   return nodePorts(def, node).find((p) => p.id === portId);
+}
+
+/**
+ * A copy of `def` with `extra` ports added, without restating the symbol's own ports. It works whether
+ * `def.ports` is a list or a function of the node, and `extra` may be either too. An extra port whose
+ * id the symbol already has replaces that port. Register the result under the same `type` to replace
+ * the symbol, or spread it with a new `type` to keep both:
+ * `registerSymbol(withPorts(gateValve, [{ id: 'side', position: { x: 20, y: 0 }, direction: 'top' }]))`.
+ */
+export function withPorts<D extends DataRecord = DataRecord>(
+  def: SymbolDef<D>,
+  extra: PortDef[] | ((node: NodeModel<D>) => PortDef[]),
+): SymbolDef<D> {
+  const base = def.ports;
+  const merge = (own: PortDef[], added: PortDef[]): PortDef[] => {
+    const ids = new Set(added.map((p) => p.id));
+    return [...own.filter((p) => !ids.has(p.id)), ...added];
+  };
+  if (typeof base !== 'function' && typeof extra !== 'function') {
+    return { ...def, ports: merge(base, extra) };
+  }
+  return {
+    ...def,
+    ports: (node: NodeModel<D>) =>
+      merge(
+        typeof base === 'function' ? base(node) : base,
+        typeof extra === 'function' ? extra(node) : extra,
+      ),
+  };
 }
 
 /** Drops ports with a duplicate id (the first one wins) and warns once per symbol type. */

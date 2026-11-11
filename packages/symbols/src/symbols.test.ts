@@ -1,4 +1,10 @@
-import { SymbolRegistry, nodePorts, nodeSize, type SymbolDef } from '@pipeline-view/core';
+import {
+  SymbolRegistry,
+  nodePorts,
+  nodeSize,
+  type NodeModel,
+  type SymbolDef,
+} from '@pipeline-view/core';
 import { describe, expect, it } from 'vitest';
 import {
   ACTUATION,
@@ -164,6 +170,38 @@ describe('round-3 process symbols', () => {
     expect(offPageInlet.render!({ data: {} })).toBe(offPageInlet.svg);
     expect(offPageInlet.render!({ data: { text: 'N2' } })).toContain('>N2</text>');
     expect(offPageOutlet.render!({ data: { text: '<b>' } })).toContain('&lt;b&gt;');
+  });
+
+  it('off-page connectors grow with a long tag and keep the port on the tip', () => {
+    const node = (type: string, text?: string): NodeModel => ({
+      id: 'n',
+      type,
+      position: { x: 0, y: 0 },
+      ...(text === undefined ? {} : { data: { text } }),
+    });
+    // Short tags and previews keep the original 96 px shape.
+    expect(nodeSize(offPageInlet)).toEqual({ width: 96, height: 36 });
+    expect(nodeSize(offPageInlet, node(offPageInlet.type, 'GAS'))).toEqual({
+      width: 96,
+      height: 36,
+    });
+    expect(nodePorts(offPageInlet)[0]!.position).toEqual({ x: 95, y: 18 });
+    expect(offPageInlet.render!({ data: { text: 'GAS' } })).toContain('M1 1H74L95 18L74 35H1Z');
+
+    const long = node(offPageInlet.type, 'DWG-1042-A01');
+    const { width } = nodeSize(offPageInlet, long);
+    expect(width).toBeGreaterThan(12 * 8);
+    expect(nodePorts(offPageInlet, long)[0]!.position).toEqual({ x: width - 1, y: 18 });
+    const drawn = offPageInlet.render!({ data: { text: 'DWG-1042-A01' } });
+    expect(drawn).toContain(`L${width - 1} 18`);
+    expect(drawn).toContain(`x="${40 + (width - 96) / 2}"`);
+    // The outlet's port stays on its left edge.
+    expect(nodePorts(offPageOutlet, node(offPageOutlet.type, 'DWG-1042-A01'))[0]!.position).toEqual(
+      {
+        x: 1,
+        y: 18,
+      },
+    );
   });
 
   it('inline instrument: pipe ports in/out, letters and loop from data, optional flow-element bars', () => {

@@ -187,10 +187,11 @@ describe('showDiff', () => {
 
   it('includes ghosts in getBounds while shown, so zoomToFit keeps them in view', () => {
     const bottom = () => d.getBounds().y + d.getBounds().height;
-    // Without c, the current nodes all sit at y 0..50; the removed "gone" (y 200..250) is a ghost.
+    // Without c, the current nodes all sit at y 0..50 with their labels down to 70; the removed "gone"
+    // (y 200..250) is a ghost.
     d.update((tx) => tx.removeNode('c'));
     d.showDiff(null);
-    expect(bottom()).toBe(50);
+    expect(bottom()).toBe(70);
     d.showDiff(base());
     expect(bottom()).toBe(250);
   });

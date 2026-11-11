@@ -34,7 +34,7 @@ import {
 } from '../viewport/math';
 import { applyViewportToView, createView, type View } from '../viewport/view';
 import { Emitter } from './emitter';
-import { nodeBounds, unionRects } from './geometry';
+import { nodeBounds, nodeLabelBox, unionRects } from './geometry';
 import { nodePorts } from '../symbols/resolve';
 import { connectLink } from './validate';
 import { SvgRenderer } from '../render/svg-renderer';
@@ -876,12 +876,24 @@ export class Diagram implements DiagramApi {
     this.liveRegion.textContent = text;
   }
 
-  /** Diagram-space bounds of every node, link waypoint and annotation. An empty diagram returns a zero rect. */
+  /**
+   * Diagram-space bounds of every node with its label, every link and every annotation. An empty
+   * diagram returns a zero rect. Label boxes are estimated from the text. Links count with their routed
+   * paths once the diagram is mounted, and with their manual waypoints before that.
+   */
   getBounds(): Rect {
     const rects: Rect[] = [];
-    for (const n of this.store.nodes.values()) rects.push(nodeBounds(n, this.symbols.get(n.type)));
+    for (const n of this.store.nodes.values()) {
+      const def = this.symbols.get(n.type);
+      rects.push(nodeBounds(n, def));
+      const label = nodeLabelBox(n, def);
+      if (label) rects.push(label);
+    }
     for (const l of this.store.links.values())
       for (const p of l.waypoints ?? []) rects.push({ ...p, width: 0, height: 0 });
+    this.renderer?.flush();
+    const routed = this.renderer?.routeBounds();
+    if (routed) rects.push(routed);
     for (const a of this.store.annotations.values()) {
       if (this.hiddenAnnotations?.(a)) continue;
       const b = this.itemBounds({ kind: 'annotation', id: a.id });
