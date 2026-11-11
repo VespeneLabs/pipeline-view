@@ -104,8 +104,6 @@ export class EditorController {
     kind: string;
     index: number;
   } | null = null;
-  /** Polite live region for announcements (keyboard connect, refusals). */
-  private readonly live: HTMLElement;
   /** Placement mode (FR-50): the symbol being placed, its init and where its centre is now. */
   private placement: {
     type: string;
@@ -163,14 +161,6 @@ export class EditorController {
         this.redraw();
       }),
     );
-    this.live = root.ownerDocument.createElement('div');
-    this.live.className = 'pv-live';
-    this.live.setAttribute('role', 'status');
-    this.live.setAttribute('aria-live', 'polite');
-    // Visually hidden, but read by screen readers.
-    this.live.style.cssText =
-      'position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap';
-    root.append(this.live);
     this.cleanup.push(diagram.on('connectRejected', ({ reason }) => this.announce(reason)));
     root.classList.add('pv-editing');
     this.redraw();
@@ -180,7 +170,6 @@ export class EditorController {
     if (controllers.get(this.diagram) === this) controllers.delete(this.diagram);
     this.placement = null;
     this.kb = null;
-    this.live.remove();
     this.root.classList.remove('pv-placing');
     this.cancelGesture();
     this.closeLabelEditor(false);
@@ -731,9 +720,7 @@ export class EditorController {
 
   /** Says `text` through the live region (screen readers). */
   announce(text: string): void {
-    // Clear first, so repeating the same message is announced again.
-    this.live.textContent = '';
-    this.live.textContent = text;
+    this.diagram.announce(text);
   }
 
   private describePort(e: LinkEnd): string {

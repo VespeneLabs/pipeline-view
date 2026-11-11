@@ -65,11 +65,14 @@ export class ViewportController {
     if (this.host.isLocked()) return false;
     if (e.button === 1) return true;
     if (e.button !== 0) return false;
-    if (this.spaceDown || this.host.getMode() === 'view') return true;
+    if (this.spaceDown) return true;
+    const t = e.target as Element | null;
+    // A draggable annotation owns its primary press (see AnnotationDrag), in view mode too.
+    if (t?.closest?.('[data-draggable]')) return false;
+    if (this.host.getMode() === 'view') return true;
     // Edit mode: the editor owns mouse presses (marquee, node drag). Touch on the empty background pans,
     // except while a symbol is being placed (FR-50), when a touch drag moves the preview.
     if (this.host.root.classList.contains('pv-placing')) return false;
-    const t = e.target as Element | null;
     return e.pointerType === 'touch' && !t?.closest?.(ITEM_SELECTOR);
   }
 

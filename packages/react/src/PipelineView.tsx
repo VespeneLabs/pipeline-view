@@ -90,10 +90,24 @@ export interface PipelineViewProps {
    * change. Applied whenever the value's identity changes, so memoize it.
    */
   hiddenAnnotations?: Iterable<string> | ((a: AnnotationModel) => boolean) | null;
+  /**
+   * Lets users drag annotations (reading cards, text): `'edit'` in edit mode only, `'always'` in view
+   * mode too. Default false. `AnnotationModel.draggable` overrides it per annotation. Can change at any time.
+   */
+  annotationDrag?: DiagramOptions['annotationDrag'];
+  /**
+   * Where a finished drag goes: `'model'` (the default) commits one undoable change, reported through
+   * onModelChange. `'display'` leaves the model alone: save the position from `onAnnotationMove` (when
+   * `final`) and restore it with `diagram.setAnnotationPositions()`.
+   */
+  annotationMoves?: DiagramOptions['annotationMoves'];
   /** Accessible name for the diagram root. Unlike `options.ariaLabel`, it can change at any time. */
   ariaLabel?: string;
   /** Other DiagramOptions. Read once, when the diagram is created. */
-  options?: Omit<DiagramOptions, 'mode' | 'theme' | 'symbols' | 'htmlRenderers'>;
+  options?: Omit<
+    DiagramOptions,
+    'mode' | 'theme' | 'symbols' | 'htmlRenderers' | 'annotationDrag' | 'annotationMoves'
+  >;
   /** Editor options (guides, port snap). The editor attaches itself whenever mode is 'edit'. Read once. */
   editor?: EditorControllerOptions;
   /**
@@ -120,6 +134,8 @@ export interface PipelineViewProps {
   onViewportChange?: Handler<'viewportChange'>;
   onConnectRejected?: Handler<'connectRejected'>;
   onChangeDropped?: Handler<'changeDropped'>;
+  /** An annotation is being dragged; `final` is true once, when the move ends. */
+  onAnnotationMove?: Handler<'annotationMove'>;
   className?: string;
   style?: CSSProperties;
   /** Rendered after the canvas, inside the DiagramContext (toolbars, legends, palettes). */
@@ -137,6 +153,7 @@ const EVENT_PROPS = {
   viewportChange: 'onViewportChange',
   connectRejected: 'onConnectRejected',
   changeDropped: 'onChangeDropped',
+  annotationMove: 'onAnnotationMove',
 } as const satisfies Record<keyof DiagramEvents, keyof PipelineViewProps>;
 
 /**
@@ -185,6 +202,8 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
         fitOnLoad: fit === true ? 'if-no-viewport' : fit === false ? 'never' : fit,
         mode: p.mode,
         theme: p.theme,
+        annotationDrag: p.annotationDrag,
+        annotationMoves: p.annotationMoves,
         symbols: p.symbols,
         htmlRenderers,
         nodeRenderers,
@@ -256,6 +275,11 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
     useEffect(() => {
       diagram?.setHiddenAnnotations(hiddenAnnotations ?? null);
     }, [diagram, hiddenAnnotations]);
+
+    const { annotationDrag, annotationMoves } = props;
+    useEffect(() => {
+      diagram?.setAnnotationDrag(annotationDrag ?? false, annotationMoves ?? 'model');
+    }, [diagram, annotationDrag, annotationMoves]);
 
     useEffect(() => {
       diagram?.showDiff(compareWith ?? null);

@@ -40,6 +40,7 @@ import { connectLink } from './validate';
 import { SvgRenderer } from '../render/svg-renderer';
 import { OverlayRenderer } from '../render/overlay';
 import { attachPointerEvents } from '../render/input';
+import { AnnotationDrag } from '../render/annotation-drag';
 import { KeyboardNavigation } from '../render/a11y';
 import { CullingController } from '../render/culling';
 import { DiffLayer } from '../render/diff';
@@ -134,6 +135,7 @@ export class Diagram implements DiagramApi {
   /** @internal Annotations and HTML overlays. Created on mount. */
   overlay: OverlayRenderer | undefined;
   private detachPointerEvents: (() => void) | undefined;
+  private annotationDrag: AnnotationDrag | undefined;
   /** @internal Culling and level of detail for large diagrams (FR-55). Created on mount. */
   culling: CullingController | undefined;
   /** @internal Keyboard focus navigation. Created on mount. */
@@ -203,6 +205,16 @@ export class Diagram implements DiagramApi {
     this.renderer = new SvgRenderer(this, view);
     this.overlay = new OverlayRenderer(this, view);
     this.detachPointerEvents = attachPointerEvents(this, view);
+    this.annotationDrag = new AnnotationDrag(this, view);
+    // In the DOM from the start: live regions added together with their first message may go unread.
+    const live = (this.liveRegion = container.ownerDocument.createElement('div'));
+    live.className = 'pv-live';
+    live.setAttribute('role', 'status');
+    live.setAttribute('aria-live', 'polite');
+    // Visually hidden, but read by screen readers.
+    live.style.cssText =
+      'position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap';
+    view.root.append(live);
     this.keyboard = new KeyboardNavigation(this, view);
     this.culling = new CullingController(this, view);
     this.diffLayer = new DiffLayer(this, view);
@@ -644,6 +656,7 @@ export class Diagram implements DiagramApi {
     this.mode = mode;
     if (this.view) this.view.root.dataset.mode = mode;
     this.internal.emit('mode', { mode });
+    if (this.options.annotationDrag === 'edit') this.refreshAnnotations();
   }
 
   getTheme(): ThemeName {
@@ -774,6 +787,73 @@ export class Diagram implements DiagramApi {
   isAnnotationHidden(id: string): boolean {
     const a = this.store.annotations.get(id);
     return !!a && !!this.hiddenAnnotations?.(a);
+  }
+
+  private refreshAnnotations(): void {
+    this.internal.emit('annotationView', { ids: [...this.store.annotations.keys()] });
+  }
+
+  /** Display positions by annotation id (`annotationMoves: 'display'`, and any drag in progress). */
+  private readonly annotationPositions = new Map<string, Point>();
+
+  /**
+   * Replaces the display positions of annotations: per-annotation overrides of `AnnotationModel.position`,
+   * in the same space (relative to the anchor node when anchored). Like hidden annotations, they're
+   * display state: not in the model, `toJSON()`, undo history or dirty state, and they survive `load()`.
+   * Annotations left out go back to their model position, and null clears every override.
+   */
+  setAnnotationPositions(positions: Record<string, Point> | null): void {
+    const ids = new Set(this.annotationPositions.keys());
+    this.annotationPositions.clear();
+    for (const [id, p] of Object.entries(positions ?? {})) {
+      this.annotationPositions.set(id, { x: p.x, y: p.y });
+      ids.add(id);
+    }
+    this.internal.emit('annotationView', { ids: [...ids] });
+  }
+
+  /** Where an annotation is shown: its display position if it has one, else its model position. */
+  getAnnotationPosition(id: string): Point | undefined {
+    const a = this.store.annotations.get(id);
+    if (!a) return undefined;
+    const p = this.annotationPositions.get(id) ?? a.position;
+    return { x: p.x, y: p.y };
+  }
+
+  /** @internal One annotation's display position (a drag frame). null removes the override. */
+  moveAnnotationView(id: string, position: Point | null): void {
+    if (position) this.annotationPositions.set(id, position);
+    else if (!this.annotationPositions.delete(id)) return;
+    this.internal.emit('annotationView', { ids: [id] });
+  }
+
+  /** Changes `annotationDrag` (and optionally `annotationMoves`) at any time. */
+  setAnnotationDrag(
+    drag: DiagramOptions['annotationDrag'],
+    moves?: DiagramOptions['annotationMoves'],
+  ): void {
+    if (moves) this.options.annotationMoves = moves;
+    if (drag === this.options.annotationDrag) return;
+    this.options.annotationDrag = drag;
+    this.refreshAnnotations();
+  }
+
+  /** Whether the user can drag this annotation now (`annotationDrag`, the mode, and its `draggable`). */
+  isAnnotationDraggable(id: string): boolean {
+    const a = this.store.annotations.get(id);
+    if (!a || a.draggable === false) return false;
+    const o = this.options.annotationDrag;
+    return a.draggable === true || o === 'always' || (o === 'edit' && this.mode === 'edit');
+  }
+
+  private liveRegion: HTMLElement | undefined;
+
+  /** @internal Says `text` through a polite live region (screen readers). */
+  announce(text: string): void {
+    if (!this.liveRegion) return;
+    // Clear first, so repeating the same message is announced again.
+    this.liveRegion.textContent = '';
+    this.liveRegion.textContent = text;
   }
 
   /** Diagram-space bounds of every node, link waypoint and annotation. An empty diagram returns a zero rect. */
@@ -930,8 +1010,9 @@ export class Diagram implements DiagramApi {
     const a = this.store.annotations.get(item.id);
     if (!a) return undefined;
     const anchor = a.anchor && this.store.nodes.get(a.anchor.node);
-    const x = a.position.x + (anchor?.position.x ?? 0);
-    const y = a.position.y + (anchor?.position.y ?? 0);
+    const p = this.annotationPositions.get(a.id) ?? a.position;
+    const x = p.x + (anchor?.position.x ?? 0);
+    const y = p.y + (anchor?.position.y ?? 0);
     const size = a.kind === 'html' ? (this.annotationSizes.get(a.id) ?? a.size) : undefined;
     return { x, y, width: size?.width ?? 0, height: size?.height ?? 0 };
   }
@@ -1057,12 +1138,14 @@ export class Diagram implements DiagramApi {
     this.diffLayer?.destroy();
     this.issueLayer?.destroy();
     this.detachPointerEvents?.();
+    this.annotationDrag?.destroy();
     this.overlay?.destroy();
     this.renderer?.destroy();
     this.viewportController?.destroy();
     this.resizeObserver?.disconnect();
     this.view?.root.remove();
     this.view = undefined;
+    this.liveRegion = undefined;
     this.events.clear();
     this.internal.clear();
     this.undoStack = [];

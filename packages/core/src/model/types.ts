@@ -100,6 +100,11 @@ interface AnnotationBase<D extends DataRecord> {
    */
   leaderWaypoints?: Point[];
   status?: string;
+  /**
+   * Whether the user can drag this annotation, overriding `DiagramOptions.annotationDrag`: `true` makes
+   * it draggable in every mode, `false` never. Omitted: the option decides.
+   */
+  draggable?: boolean;
   data?: D;
 }
 
