@@ -102,7 +102,9 @@ describe('culling (FR-55)', () => {
     expect(symbol()).toContain('data-open="false"');
   });
 
-  it('exports culled items too', () => {
+  // Mounts 400 nodes, serializes the whole diagram and parses it back: about 1.4 s in the simulated
+  // DOM, and over vitest's default 5 s on a busy machine. 30 s leaves room; a real hang still fails.
+  it('exports culled items too', { timeout: 30_000 }, () => {
     mount(grid(20, 20));
     const svg = d.exportSVG();
     expect(svg).toContain('data-node-id="n15-15"');
