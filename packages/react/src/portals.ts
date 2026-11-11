@@ -1,16 +1,24 @@
 import type { DataRecord, HtmlRenderer } from '@pipeline-view/core';
 import type { ReactNode } from 'react';
 
-/** What a React overlay renderer receives: the same item core passes to an HtmlRenderer. */
-export interface OverlayItem {
+/**
+ * What a React overlay renderer receives: the same item core passes to an HtmlRenderer. `D` types
+ * `data`, for example the reading-card fields of an annotation and its anchor node.
+ */
+export interface OverlayItem<D extends DataRecord = DataRecord> {
   kind: 'node' | 'annotation';
   id: string;
-  data: DataRecord | undefined;
+  data: D | undefined;
   status?: string;
 }
 
-/** A React overlay renderer: returns the content for one overlay slot. */
-export type ReactRenderer = (item: OverlayItem) => ReactNode;
+/**
+ * A React overlay renderer: returns the content for one overlay slot. Checked bivariantly, so a
+ * `ReactRenderer<MyData>` goes into `renderers` without a cast.
+ */
+export type ReactRenderer<D extends DataRecord = DataRecord> = {
+  bivarianceHack(item: OverlayItem<D>): ReactNode;
+}['bivarianceHack'];
 
 export interface PortalEntry {
   key: string;

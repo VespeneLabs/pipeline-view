@@ -83,7 +83,7 @@ export interface PipelineViewProps {
    * `{ component, sizing: 'content' }` to size the node from its content. The set of types is read
    * once, at creation; the components may change.
    */
-  nodeRenderers?: Record<string, NodeRendererEntry>;
+  nodeRenderers?: Record<string, AnyNodeRendererEntry>;
   /** Accessible name for the diagram root. Unlike `options.ariaLabel`, it can change at any time. */
   ariaLabel?: string;
   /** Other DiagramOptions. Read once, when the diagram is created. */
@@ -169,7 +169,7 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
       const nodeRenderers: Record<string, NodeRendererSpec> = {};
       for (const [type, entry] of Object.entries(p.nodeRenderers ?? {})) {
         const render = portals.htmlRenderer(`node:${type}`);
-        nodeRenderers[type] = isComponent(entry) ? render : { render, sizing: entry.sizing };
+        nodeRenderers[type] = withSizing(entry) ? { render, sizing: entry.sizing } : render;
       }
       const fit = p.fitOnLoad ?? true;
       const d = new Diagram({
@@ -290,23 +290,37 @@ const serverSnapshot = () => NO_ENTRIES;
 
 /** One overlay slot. Memoized on the entry object, which changes only when that slot's item changes. */
 /** Props of a React node renderer (FR-45). */
-export interface NodeRendererProps {
-  node: NodeModel;
-  data: DataRecord | undefined;
+/** Props of a React node renderer. `D` types the node's data. */
+export interface NodeRendererProps<D extends DataRecord = DataRecord> {
+  node: NodeModel<D>;
+  data: D | undefined;
   status?: string;
   selected: boolean;
   /** The node's ports, resolved for this instance. The library draws them; use them for layout hints. */
   ports: PortDef[];
 }
 
-export type NodeRendererEntry =
-  | ComponentType<NodeRendererProps>
-  | { component: ComponentType<NodeRendererProps>; sizing?: 'fixed' | 'content' };
+export type NodeRendererEntry<D extends DataRecord = DataRecord> =
+  | ComponentType<NodeRendererProps<D>>
+  | { component: ComponentType<NodeRendererProps<D>>; sizing?: 'fixed' | 'content' };
 
-const isComponent = (e: NodeRendererEntry): e is ComponentType<NodeRendererProps> =>
-  typeof e === 'function' || (typeof e === 'object' && e !== null && !('component' in e));
-const componentOf = (e: NodeRendererEntry | undefined) =>
-  e === undefined ? undefined : isComponent(e) ? e : e.component;
+/**
+ * An entry for any data type: the map holds renderers typed for different nodes, and each component
+ * gets its own node's data. (`never` doesn't work here: component types carry covariant statics such
+ * as `defaultProps`.)
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyNodeRendererEntry = NodeRendererEntry<any>;
+
+/** The `{ component, sizing }` form (a component itself may be a function or an exotic object). */
+const withSizing = (
+  e: AnyNodeRendererEntry,
+): e is Extract<AnyNodeRendererEntry, { component: unknown }> =>
+  typeof e === 'object' && e !== null && 'component' in e;
+const componentOf = (
+  e: AnyNodeRendererEntry | undefined,
+): ComponentType<NodeRendererProps> | undefined =>
+  e === undefined ? undefined : withSizing(e) ? e.component : e;
 
 const NO_SELECTION = () => () => {};
 

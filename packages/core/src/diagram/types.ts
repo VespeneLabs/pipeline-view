@@ -36,10 +36,17 @@ export interface Viewport {
  * call is kept, and it runs when the item is removed. For annotations anchored to a node, `data` is the
  * node's live data merged under the annotation's own data, and `status` falls back to the node's.
  */
-export type HtmlRenderer = (
-  el: HTMLElement,
-  item: { kind: 'node' | 'annotation'; id: string; data: DataRecord | undefined; status?: string },
-) => void | (() => void);
+/**
+ * Renders an overlay slot. `D` types `item.data` (an anchored annotation sees its node's data merged
+ * under its own). Checked bivariantly, like a method, so an `HtmlRenderer<MyData>` goes into
+ * `htmlRenderers` without a cast.
+ */
+export type HtmlRenderer<D extends DataRecord = DataRecord> = {
+  bivarianceHack(
+    el: HTMLElement,
+    item: { kind: 'node' | 'annotation'; id: string; data: D | undefined; status?: string },
+  ): void | (() => void);
+}['bivarianceHack'];
 
 /** Built-in refusal codes (FR-42). Hosts may return their own codes too. */
 export type RefusalCode =
