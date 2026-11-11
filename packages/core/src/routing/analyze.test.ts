@@ -11,17 +11,14 @@ const norm = (r: { crossings: Crossing[]; junctions: Junction[] }) => ({
 });
 
 /**
- * Seed for the property test below. Fixed, so every run checks the same 60 scenes and does the same
- * amount of work. Change it to explore other scenes; fast-check prints the seed of a failing run.
- */
-const SEED = 20261111;
-
-/**
  * The property test routes 60 scenes of 40 nodes / 70 links from scratch and runs a full analysis as
  * the oracle after each of about 210 moves. That takes 1-2 s locally and 1.2-2.2 s on CI: about 40% is
  * the initial routing of each scene and 30% the oracle, and neither can go without losing coverage.
  * With vitest's default 5 s timeout a busy machine was enough to fail it (9-12 s measured at a load
  * average of 40), so it gets 30 s instead. A real hang still fails, just later.
+ *
+ * The seed is deliberately not fixed: every run explores new scenes, and fast-check prints the seed
+ * and path of a failing run, which reproduces it.
  */
 const slow = { timeout: 30_000 };
 
@@ -82,7 +79,7 @@ describe('RouteAnalyzer (incremental)', () => {
           }
         },
       ),
-      { numRuns: 60, seed: SEED },
+      { numRuns: 60 },
     );
   });
 
