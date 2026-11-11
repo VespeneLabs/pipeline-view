@@ -25,7 +25,7 @@
       "packages/pipeline-view/dist/symbols.js",
       "packages/pipeline-view/dist/react.js"
     ],
-    "limit": "55 kB",
+    "limit": "58 kB",
     "gzip": true,
     "ignore": ["react", "react-dom"]
   },

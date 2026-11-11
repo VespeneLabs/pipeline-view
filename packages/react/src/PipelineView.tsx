@@ -76,6 +76,8 @@ export interface PipelineViewProps {
    * once, at creation; the components may change.
    */
   nodeRenderers?: Record<string, NodeRendererEntry>;
+  /** Accessible name for the diagram root. Unlike `options.ariaLabel`, it can change at any time. */
+  ariaLabel?: string;
   /** Other DiagramOptions. Read once, when the diagram is created. */
   options?: Omit<DiagramOptions, 'mode' | 'theme' | 'symbols' | 'htmlRenderers'>;
   /** Editor options (guides, port snap). The editor attaches itself whenever mode is 'edit'. Read once. */
@@ -164,6 +166,7 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
       const fit = p.fitOnLoad ?? true;
       const d = new Diagram({
         ...p.options,
+        ariaLabel: p.ariaLabel ?? p.options?.ariaLabel,
         initialViewport: p.initialViewport ?? p.options?.initialViewport,
         fitOnLoad: fit === true ? 'if-no-viewport' : fit === false ? 'never' : fit,
         mode: p.mode,
@@ -201,7 +204,7 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
       };
     }, [portals]);
 
-    const { model, mode, theme, compareWith, issues, symbols, documentKey } = props;
+    const { model, mode, theme, compareWith, issues, symbols, documentKey, ariaLabel } = props;
 
     useEffect(() => {
       if (!diagram || !model) return;
@@ -230,6 +233,10 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
     useEffect(() => {
       if (diagram && theme) diagram.setTheme(theme);
     }, [diagram, theme]);
+
+    useEffect(() => {
+      if (diagram && ariaLabel !== undefined) diagram.setAriaLabel(ariaLabel);
+    }, [diagram, ariaLabel]);
 
     useEffect(() => {
       diagram?.showDiff(compareWith ?? null);

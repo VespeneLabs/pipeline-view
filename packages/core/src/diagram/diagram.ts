@@ -93,6 +93,8 @@ export class Diagram implements DiagramApi {
   readonly symbols: SymbolRegistry;
   /** Measured sizes of content-sized HTML nodes (FR-45). View state: never saved, never undone. */
   private readonly measuredSizes = new Map<string, Size>();
+  /** Measured boxes of content-sized HTML annotations, by annotation id. */
+  private readonly annotationSizes = new Map<string, Size>();
   private htmlTypesCache:
     | { spec: DiagramOptions['nodeRenderers']; types: Record<string, 'fixed' | 'content'> }
     | undefined;
@@ -145,7 +147,7 @@ export class Diagram implements DiagramApi {
   private readonly maxZoom: number;
   private resizeObserver: ResizeObserver | undefined;
   private animFrame = 0;
-  private pendingFit: { padding?: number } | null = null;
+  private pendingFit: { padding?: number; minZoom?: number } | null = null;
   /** A fit-on-load is wanted once the content (HTML/React included) has rendered and been measured. */
   private fitWanted = false;
   private fitFrame = 0;
@@ -652,6 +654,12 @@ export class Diagram implements DiagramApi {
     this.internal.emit('theme', { theme });
   }
 
+  /** Changes the diagram root's accessible name (`DiagramOptions.ariaLabel`) at any time. */
+  setAriaLabel(label: string): void {
+    this.options.ariaLabel = label;
+    this.view?.root.setAttribute('aria-label', label);
+  }
+
   // ---- viewport ------------------------------------------------------------
 
   getViewport(): Viewport {
@@ -705,19 +713,22 @@ export class Diagram implements DiagramApi {
     this.animFrame = 0;
   }
 
-  /** Fits the whole diagram. Before mount, or while the container has no size, it's deferred until it can run. */
-  zoomToFit(opts: { padding?: number; animate?: boolean } = {}): void {
+  /**
+   * Fits the whole diagram. Before mount, or while the container has no size, it's deferred until it can run.
+   * `minZoom` (default `options.fitMinZoom`) keeps the fit legible: when the whole diagram would need a
+   * smaller zoom, it stays at `minZoom` and shows the top-left part, and the user can pan to the rest.
+   */
+  zoomToFit(opts: { padding?: number; animate?: boolean; minZoom?: number } = {}): void {
     if (!this.view || this.size.width === 0 || this.size.height === 0) {
-      this.pendingFit = { padding: opts.padding };
+      this.pendingFit = { padding: opts.padding, minZoom: opts.minZoom };
       return;
     }
     this.pendingFit = null;
     const bounds = this.getBounds();
     if (bounds.width === 0 && bounds.height === 0 && this.store.nodes.size === 0) return;
-    this.setViewport(
-      fitRect(bounds, this.size, opts.padding ?? 24, this.minZoom, Math.min(this.maxZoom, 2)),
-      opts,
-    );
+    const maxZoom = Math.min(this.maxZoom, 2);
+    const floor = clamp(opts.minZoom ?? this.options.fitMinZoom ?? 0, this.minZoom, maxZoom);
+    this.setViewport(fitRect(bounds, this.size, opts.padding ?? 24, floor, maxZoom), opts);
   }
 
   /** Centers an item and zooms to fit it, never zooming in past 2x. */
@@ -832,6 +843,12 @@ export class Diagram implements DiagramApi {
    * @internal Reports the measured content size of an HTML node (FR-45). Bounds, ports and routes
    * follow it. It's view state, so there's no modelChange and no undo step.
    */
+  /** @internal The overlay reports the measured box of a content-sized HTML annotation. */
+  setAnnotationSize(id: string, size: Size | null): void {
+    if (size) this.annotationSizes.set(id, size);
+    else this.annotationSizes.delete(id);
+  }
+
   setMeasuredSize(id: string, size: Size | null): void {
     const prev = this.measuredSizes.get(id);
     if (size && prev && prev.width === size.width && prev.height === size.height) return;
@@ -885,7 +902,7 @@ export class Diagram implements DiagramApi {
     const anchor = a.anchor && this.store.nodes.get(a.anchor.node);
     const x = a.position.x + (anchor?.position.x ?? 0);
     const y = a.position.y + (anchor?.position.y ?? 0);
-    const size = a.kind === 'html' ? a.size : undefined;
+    const size = a.kind === 'html' ? (this.annotationSizes.get(a.id) ?? a.size) : undefined;
     return { x, y, width: size?.width ?? 0, height: size?.height ?? 0 };
   }
 

@@ -34,9 +34,16 @@ export function fitRect(
   const zx = bounds.width > 0 ? aw / bounds.width : maxZoom;
   const zy = bounds.height > 0 ? ah / bounds.height : maxZoom;
   const zoom = clamp(Math.min(zx, zy), minZoom, maxZoom);
-  const cx = bounds.x + bounds.width / 2;
-  const cy = bounds.y + bounds.height / 2;
-  return { zoom, x: size.width / 2 - cx * zoom, y: size.height / 2 - cy * zoom };
+  // Centered on each axis where the content fits; otherwise its top/left edge shows (FR-47 minZoom).
+  const axis = (start: number, length: number, screen: number) =>
+    length * zoom <= screen - 2 * padding + 0.5
+      ? screen / 2 - (start + length / 2) * zoom
+      : padding - start * zoom;
+  return {
+    zoom,
+    x: axis(bounds.x, bounds.width, size.width),
+    y: axis(bounds.y, bounds.height, size.height),
+  };
 }
 
 /** Ease-out cubic interpolation between viewports, zooming geometrically so it feels uniform. */

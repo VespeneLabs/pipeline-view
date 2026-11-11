@@ -292,3 +292,50 @@ describe('pointer events', () => {
     expect(onHover.mock.calls[0]![0].item).toEqual({ kind: 'node', id: 'tank' });
   });
 });
+
+describe("HTML annotations with sizing: 'content'", () => {
+  it('grow to their content (size as minimum) and follow content resizes', () => {
+    const callbacks: (() => void)[] = [];
+    const win = container.ownerDocument.defaultView! as unknown as { ResizeObserver: unknown };
+    const original = win.ResizeObserver;
+    win.ResizeObserver = class {
+      constructor(cb: () => void) {
+        callbacks.push(cb);
+      }
+      observe() {}
+      disconnect() {}
+    };
+    let width = 180;
+    const spy = vi
+      .spyOn(HTMLElement.prototype, 'offsetWidth', 'get')
+      .mockImplementation(() => width);
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(60);
+    try {
+      d.update((tx) => tx.updateAnnotation('reading', { sizing: 'content' }), { undoable: false });
+      flush();
+      const el = $('.pv-overlay [data-annotation-id="reading"]') as HTMLElement;
+      expect(el.style.width).toBe('');
+      expect(el.style.minWidth).toBe('100px');
+      expect(el.style.minHeight).toBe('40px');
+      expect(d.itemBounds({ kind: 'annotation', id: 'reading' })).toMatchObject({
+        width: 180,
+        height: 60,
+      });
+      // The content grows: the observer re-places the card and its bounds follow.
+      width = 240;
+      for (const cb of callbacks) cb();
+      flush();
+      expect(d.itemBounds({ kind: 'annotation', id: 'reading' })!.width).toBe(240);
+      // Back to fixed: exact size again, no measurement left over.
+      d.update((tx) => tx.updateAnnotation('reading', { sizing: 'fixed' }), { undoable: false });
+      flush();
+      expect(el.style.width).toBe('100px');
+      expect(el.style.minWidth).toBe('');
+      expect(d.itemBounds({ kind: 'annotation', id: 'reading' })!.width).toBe(100);
+    } finally {
+      spy.mockRestore();
+      vi.restoreAllMocks();
+      win.ResizeObserver = original;
+    }
+  });
+});

@@ -31,6 +31,14 @@ describe('<PipelineView>', () => {
     expect(ref.current!.toJSON().nodes).toHaveLength(2);
   });
 
+  it('applies ariaLabel at creation and when it changes', () => {
+    const { container, rerender } = render(<PipelineView model={model()} ariaLabel="Station A" />);
+    const root = () => container.querySelector('.pv-root')!;
+    expect(root().getAttribute('aria-label')).toBe('Station A');
+    rerender(<PipelineView model={model()} ariaLabel="Station B" />);
+    expect(root().getAttribute('aria-label')).toBe('Station B');
+  });
+
   it('survives StrictMode double effects with exactly one root', () => {
     const { container } = render(
       <StrictMode>
