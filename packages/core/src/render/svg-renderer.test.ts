@@ -519,7 +519,12 @@ describe('SvgRenderer', () => {
 });
 
 describe('NFR-1 data tick budget', () => {
-  it('applies 2,000 value updates over 500 nodes in a few ms', () => {
+  /** CLAUDE.md / PRD NFR-1: a data tick (2,000 values over 500 nodes) takes <= 4 ms in a real browser. */
+  const TICK_BUDGET_MS = 4;
+  const WARMUP = 5;
+  const SAMPLES = 15;
+
+  it('applies 2,000 value updates over 500 nodes at close to the cost of the DOM writes alone', () => {
     const nodes = Array.from({ length: 500 }, (_, i) => ({
       id: `n${i}`,
       type: 'test/valve',
@@ -527,9 +532,18 @@ describe('NFR-1 data tick budget', () => {
     }));
     d.load({ version: 2, nodes, links: [] });
     d.renderer!.flush();
-    // Best of three ticks: a single sample is at the mercy of GC and of other test files running in parallel.
-    let best = Infinity;
-    for (let tick = 0; tick < 3; tick++) {
+    const symbols = $$('.pv-symbol');
+    const groups = $$('.pv-node') as SVGElement[];
+    expect(symbols).toHaveLength(500);
+
+    // Wall-clock time in a simulated DOM on a shared CI runner says little by itself: the same tick
+    // takes 3 ms on a laptop and 60 ms on a busy runner. So each tick is timed next to a reference
+    // that does only the DOM writes a tick cannot avoid (500 symbol markups, 500 data-status), in the
+    // same process and under the same load, and the tick is judged against that. Warm-up ticks let
+    // the JIT settle, and the best of several samples drops GC pauses and scheduling noise.
+    const ticks: number[] = [];
+    const reference: number[] = [];
+    for (let tick = 0; tick < WARMUP + SAMPLES; tick++) {
       const updates: Record<string, { data: Record<string, unknown>; status: string }> = {};
       for (let i = 0; i < 500; i++) {
         updates[`n${i}`] = {
@@ -539,9 +553,35 @@ describe('NFR-1 data tick budget', () => {
       }
       d.setNodeDataBatch(updates);
       d.renderer!.flush();
-      best = Math.min(best, d.renderer!.metrics.lastDataFlushMs);
+      const tickMs = d.renderer!.metrics.lastDataFlushMs;
+
+      const t0 = performance.now();
+      for (let i = 0; i < 500; i++) {
+        symbols[i]!.innerHTML =
+          (i + tick) % 2 === 0
+            ? '<path d="M0 10H40" fill="currentColor"/>'
+            : '<path d="M0 10H40"/>';
+        groups[i]!.dataset.status = (i + tick) % 7 ? 'alarm' : 'normal';
+      }
+      const referenceMs = performance.now() - t0;
+      if (tick >= WARMUP) {
+        ticks.push(tickMs);
+        reference.push(referenceMs);
+      }
     }
-    // The PRD target is 4 ms in a real browser; happy-dom is much slower, so this only guards against regressions.
-    expect(best).toBeLessThan(60);
-  });
+    const best = Math.min(...ticks);
+    const bestReference = Math.min(...reference);
+    console.info(
+      `data tick: best ${best.toFixed(2)} ms, DOM writes alone ${bestReference.toFixed(2)} ms`,
+    );
+    // A tick costs about as much as its DOM writes (ratio ~1.0 in happy-dom and jsdom). Anything the
+    // library adds on top (re-routing, undo, layout, per-node work that grows with the diagram) shows
+    // up as a higher ratio, however fast or slow the machine is. The extra 1 ms absorbs timer
+    // resolution when both numbers are tiny.
+    expect(best).toBeLessThan(2 * bestReference + 1);
+    // Absolute backstop. The simulated DOM is far slower than a browser, and CI runners slower still
+    // (best-of-three samples of 60 ms have been seen there against ~3 ms locally), so this is set at
+    // 50x the real-browser budget and only catches a tick that is wildly off.
+    expect(best).toBeLessThan(TICK_BUDGET_MS * 50);
+  }, 30_000);
 });
