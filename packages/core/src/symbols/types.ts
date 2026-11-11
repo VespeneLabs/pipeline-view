@@ -22,6 +22,15 @@ export interface PortDef {
   maxLinks?: number;
   /** Short text drawn next to the port, for example its index on a manifold (FR-40). */
   label?: string;
+  /**
+   * Where `label` goes. 'inside' (the default) puts it inside the symbol, in line with the port.
+   * 'above' raises it off the pipe stub, and 'outside' puts it beyond the port, also off the line:
+   * above it for horizontal ports, beside it for vertical ones. Placement follows rotation, but the
+   * text never rotates.
+   */
+  labelPlacement?: 'inside' | 'above' | 'outside';
+  /** Extra offset for `label` in diagram units, applied after placement and rotation. */
+  labelOffset?: Point;
 }
 
 /**
