@@ -51,6 +51,75 @@ afterEach(() => {
 });
 
 describe('SvgRenderer', () => {
+  it('routes links around node labels, follows label edits, and can be turned off', () => {
+    const box: SymbolDef = {
+      type: 'test/box',
+      name: 'Box',
+      category: 'Test',
+      size: { width: 40, height: 20 },
+      ports: [
+        { id: 'in', position: { x: 0, y: 10 }, direction: 'left' },
+        { id: 'out', position: { x: 40, y: 10 }, direction: 'right' },
+      ],
+    };
+    // L and R are level with M's label (drawn 16 below M, so around y 23..40): a straight pipe at
+    // y 33 would cut through the text.
+    const scene = (label: string | undefined): DiagramModel => ({
+      version: 2,
+      nodes: [
+        { id: 'M', type: 'test/box', position: { x: 0, y: 0 }, label },
+        { id: 'L', type: 'test/box', position: { x: -200, y: 23 } },
+        { id: 'R', type: 'test/box', position: { x: 200, y: 23 } },
+      ],
+      links: [
+        {
+          id: 'lr',
+          from: { node: 'L', port: 'out' },
+          to: { node: 'R', port: 'in' },
+          kind: 'process',
+        },
+      ],
+    });
+    const path = (dd: Diagram) => dd.getLinkPath('lr')!;
+    const run = (opts: { routeAroundLabels?: boolean }, label?: string) => {
+      const c = document.createElement('div');
+      document.body.append(c);
+      const dd = new Diagram({ symbols: [box], ...opts });
+      dd.load(scene(label));
+      dd.mount(c);
+      dd.renderer!.flush();
+      return { dd, c };
+    };
+    const straight = (pts: { x: number; y: number }[]) => pts.length === 2;
+
+    const plain = run({}, undefined);
+    expect(straight(path(plain.dd))).toBe(true);
+    // A label under M now sits in the way: the pipe goes around it.
+    plain.dd.update((tx) => tx.updateNode('M', { label: 'process1 line 5 flow' }));
+    plain.dd.renderer!.flush();
+    const around = path(plain.dd);
+    expect(straight(around)).toBe(false);
+    for (let i = 0; i + 1 < around.length; i++) {
+      const a = around[i]!;
+      const b = around[i + 1]!;
+      // No horizontal run passes through the label's band under M.
+      if (a.y === b.y && a.y > 19 && a.y < 44) {
+        expect(Math.max(a.x, b.x) < -65 || Math.min(a.x, b.x) > 105).toBe(true);
+      }
+    }
+    // Removing the label frees the straight route again.
+    plain.dd.update((tx) => tx.updateNode('M', { label: undefined }));
+    plain.dd.renderer!.flush();
+    expect(straight(path(plain.dd))).toBe(true);
+    plain.dd.destroy();
+    plain.c.remove();
+
+    const off = run({ routeAroundLabels: false }, 'process1 line 5 flow');
+    expect(straight(path(off.dd))).toBe(true);
+    off.dd.destroy();
+    off.c.remove();
+  });
+
   it('draws link labels on the route, names the link for assistive tech, and removes them', () => {
     d.update((tx) => tx.updateLink('ab', { label: 'Yes' }));
     d.renderer!.flush();
