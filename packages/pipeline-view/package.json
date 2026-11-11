@@ -1,6 +1,6 @@
 {
   "name": "@vespenelabs/pipeline-view",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Interactive process / P&ID diagrams for SCADA-style live monitors and editors: core, symbols and React bindings in one package",
   "license": "MIT",
   "author": "VespeneLabs",

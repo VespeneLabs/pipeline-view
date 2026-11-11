@@ -1,5 +1,39 @@
 # @vespenelabs/pipeline-view
 
+## 1.5.0
+
+### Model
+
+- HTML annotations can carry the optional `sizing: 'fixed' | 'content'`. The model version stays 2, since omitting the field keeps the 1.4 behavior and older readers ignore it.
+
+### Minor Changes
+
+- 59ec57d: HTML annotations can size themselves to their content: `{ kind: 'html', sizing: 'content' }`. The box grows to fit what the renderer draws, with `size` as the minimum, and its leader and bounds follow as the content resizes (live readings, late-loading React content). The default stays `'fixed'`, where the box is exactly `size` and content that doesn't fit overflows it.
+  
+- 25a316f: `<PipelineView ariaLabel>` sets the diagram's accessible name and can change at any time. `options.ariaLabel` is read only once, at creation. The new `diagram.setAriaLabel(label)` does the same thing in core.
+- 7cbbe79: Fitting can keep large drawings legible. `zoomToFit({ minZoom })`, and the new `fitMinZoom` option for fit-on-load and the fit button, set a floor for the fit zoom. When the whole diagram can't fit at that zoom, the view shows its top-left part and the user can pan to the rest. Manual zoom-out is still limited only by `minZoom`. Any fit whose content overflows (including at `minZoom`) now aligns to the top/left edge instead of centering, which used to cut off both ends.
+- 42b2ebf: Port labels can be kept off the pipe. `PortDef.labelPlacement` is one of:
+  
+  - `'inside'`: the default, unchanged.
+  - `'above'`: inside the symbol, lifted off the stub.
+  - `'outside'`: beyond the port, lifted off the line.
+  
+  `PortDef.labelOffset` nudges the label in diagram units. Placement follows rotation, but the text never rotates. Before this, a manifold's index numbers sat on the pipe stubs and looked struck through.
+- 4100fe9: Five new industry-neutral process symbols (`registerProcessSymbols()`):
+  
+  - `process/off-page-inlet` / `process/off-page-outlet`: where a line enters from or leaves to another drawing or a utility. The tag (`"GAS"`, `"N2"`, a drawing ref) comes from `data.text`.
+  - `process/inline-instrument`: the pipe runs through, with an ISA bubble on a short tap above. Letters and loop come from data, and `data.flowElement: true` adds flow-element bars. It has `in`/`out` pipe ports plus a `signal` port.
+  - `process/header`: a header/manifold with `data.inlets` / `data.outlets` (1–32) indexed ports, growing with the count.
+  - `process/burner`: a consumer / burner with one inlet.
+  
+  The gas pack stays the 50 numbered reference symbols.
+- 677a43f: `SymbolDef<D>`'s `size` and `ports` callbacks now receive `NodeModel<D>`, so `node.data` is typed without a cast. A `SymbolDef<D>` can also go into a `SymbolDef[]` or `registerSymbol()` without a cast. All three callbacks (`size`, `ports`, `render`) are now checked bivariantly, the way methods are. Existing code compiles unchanged, but casts like `node.data as MyData` are now unnecessary.
+
+### Patch Changes
+
+- 0737521: `process/header` draws its port index numbers just outside the body, above the pipe, instead of on the pipe stubs.
+- 420b61e: Parallel links that share a corridor now get nested lanes instead of reversed ones. Before, a stack of manifold outputs turning the same way gave the topmost output the outermost lane, so every pipe crossed the ones below it and got line jumps. After lanes are spread, the router now swaps lanes within each bundle while that reduces crossings, keeping every obstacle and lane rule. On the reported 8-output scene the crossings drop from 12 to 0, at the default spacing and at spacing 14.
+
 ## 1.4.0
 
 ### Minor Changes
