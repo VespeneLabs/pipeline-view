@@ -134,7 +134,7 @@ function letterSize(letters: string): number {
   return letters.length <= 3 ? 19 : letters.length === 4 ? 16 : 13;
 }
 
-function drawInstrument(letters: string, sub: string | undefined, panel: boolean): string {
+export function drawInstrument(letters: string, sub: string | undefined, panel: boolean): string {
   const size = letterSize(letters);
   const labels: Label[] = [];
   if (panel) {

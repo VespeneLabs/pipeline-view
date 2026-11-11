@@ -377,7 +377,7 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
       },
       {
         sig: 'gasSymbols / processSymbols',
-        doc: 'Built-in packs as arrays (50 gas symbols, 4 process symbols).',
+        doc: 'Built-in packs as arrays (50 gas symbols, 9 process symbols).',
       },
       {
         sig: 'registerGasSymbols(registry?) / registerProcessSymbols(registry?)',

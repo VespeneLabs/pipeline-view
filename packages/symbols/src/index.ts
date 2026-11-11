@@ -20,7 +20,7 @@ export function registerGasSymbols(registry: SymbolRegistry = globalSymbols): vo
   registry.register(...gasSymbols);
 }
 
-/** Register the process equipment symbols (tank, pump, control valve). */
+/** Register the process symbols (tanks, pump, control valve, connectors, inline instrument, header, burner). */
 export function registerProcessSymbols(registry: SymbolRegistry = globalSymbols): void {
   registry.register(...processSymbols);
 }
