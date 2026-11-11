@@ -521,19 +521,31 @@ export class SvgRenderer {
     ports.forEach((p, i) => {
       if (!p.label) return;
       const r = resolved[i]!;
-      // Inside the symbol, next to the port: step back against the outward direction.
-      const d = PORT_LABEL_INSET;
+      // 'inside': in the symbol, next to the port (step back against the outward direction).
+      // 'outside': beyond the port. 'above'/'outside' also lift the text off the pipe line.
+      const placement = p.labelPlacement ?? 'inside';
+      const horizontal = r.direction === 'left' || r.direction === 'right';
+      const out = placement === 'outside' ? 1 : -1;
+      const d = PORT_LABEL_INSET * out;
+      const lift = placement === 'inside' ? 0 : PORT_LABEL_LIFT;
       const at = {
-        x: r.point.x + (r.direction === 'left' ? d : r.direction === 'right' ? -d : 0),
-        y: r.point.y + (r.direction === 'top' ? d : r.direction === 'bottom' ? -d : 0),
+        x:
+          r.point.x +
+          (r.direction === 'left' ? -d : r.direction === 'right' ? d : lift) +
+          (p.labelOffset?.x ?? 0),
+        y:
+          r.point.y +
+          (r.direction === 'top' ? -d : r.direction === 'bottom' ? d : -lift) +
+          (p.labelOffset?.y ?? 0),
       };
+      // Text runs away from the port: into the symbol when inside, away from it when outside.
+      const towardsLeft = (r.direction === 'right') === out < 0;
       const t = this.svg('text', {
         class: 'pv-port-label',
         x: at.x,
         y: at.y,
-        'text-anchor':
-          r.direction === 'left' ? 'start' : r.direction === 'right' ? 'end' : 'middle',
-        'dominant-baseline': 'middle',
+        'text-anchor': horizontal ? (towardsLeft ? 'end' : 'start') : lift ? 'start' : 'middle',
+        'dominant-baseline': horizontal && lift ? 'auto' : 'middle',
       });
       t.dataset.portId = p.id;
       t.textContent = p.label;
@@ -816,6 +828,8 @@ const portSignature = (ports: PortDef[]) =>
 const sameSize = (a: { width: number; height: number }, b: { width: number; height: number }) =>
   a.width === b.width && a.height === b.height;
 const PORT_LABEL_INSET = 8;
+/** How far 'above' / 'outside' port labels sit off the pipe line. */
+const PORT_LABEL_LIFT = 4;
 
 /**
  * True when a route's inner segments come closer than `clearance` to `r`, which the router never

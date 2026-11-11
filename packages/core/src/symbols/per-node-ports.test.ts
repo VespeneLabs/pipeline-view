@@ -321,3 +321,61 @@ describe('rendering per-node ports', () => {
     d.destroy();
   });
 });
+
+describe('port label placement (labelPlacement / labelOffset)', () => {
+  const labelled: SymbolDef = {
+    type: 'test/labelled',
+    name: 'Labelled',
+    category: 'Test',
+    size: { width: 40, height: 40 },
+    ports: [
+      { id: 'a', position: { x: 40, y: 10 }, direction: 'right', label: 'A' },
+      {
+        id: 'b',
+        position: { x: 40, y: 20 },
+        direction: 'right',
+        label: 'B',
+        labelPlacement: 'above',
+      },
+      {
+        id: 'c',
+        position: { x: 40, y: 30 },
+        direction: 'right',
+        label: 'C',
+        labelPlacement: 'outside',
+      },
+      {
+        id: 'd',
+        position: { x: 0, y: 20 },
+        direction: 'left',
+        label: 'D',
+        labelOffset: { x: 1, y: 2 },
+      },
+      { id: 'e', position: { x: 20, y: 0 }, direction: 'top', label: 'E', labelPlacement: 'above' },
+    ],
+  };
+
+  it('keeps labels off the pipe stub when asked, and applies the offset', () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const d = new Diagram({ symbols: [labelled] });
+    d.load({
+      version: 2,
+      nodes: [{ id: 'n', type: 'test/labelled', position: { x: 100, y: 100 } }],
+      links: [],
+    });
+    d.mount(container);
+    d.renderer!.flush();
+    const label = (id: string) => {
+      const t = container.querySelector(`.pv-port-label[data-port-id="${id}"]`)!;
+      return [t.getAttribute('x'), t.getAttribute('y'), t.getAttribute('text-anchor')];
+    };
+    expect(label('a')).toEqual(['132', '110', 'end']); // inside, on the line (unchanged default)
+    expect(label('b')).toEqual(['132', '116', 'end']); // inside the symbol, lifted off the line
+    expect(label('c')).toEqual(['148', '126', 'start']); // beyond the port, lifted
+    expect(label('d')).toEqual(['109', '122', 'start']); // inside + offset
+    expect(label('e')).toEqual(['124', '108', 'start']); // vertical port: beside the stub
+    d.destroy();
+    container.remove();
+  });
+});
