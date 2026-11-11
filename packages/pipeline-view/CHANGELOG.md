@@ -1,5 +1,11 @@
 # @vespenelabs/pipeline-view
 
+## 1.9.0
+
+### Minor Changes
+
+- b070ef7: Renderer data is typed. `ReactRenderer<D>` / `OverlayItem<D>`, `NodeRendererProps<D>` / `NodeRendererEntry<D>` and core's `HtmlRenderer<D>` take the data type, so `item.data`, `props.data` and `props.node` are typed without casts. Typed renderers go straight into `renderers`, `nodeRenderers` and `htmlRenderers`, and one map can mix renderers typed for different data. Every type parameter defaults to `DataRecord`, so existing code compiles unchanged.
+
 ## 1.8.0
 
 ### Minor Changes
