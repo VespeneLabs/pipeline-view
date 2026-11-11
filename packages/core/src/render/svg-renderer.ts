@@ -765,11 +765,32 @@ export class SvgRenderer {
 
   private drawJunctions(junctions: Junction[]): void {
     const r = this.cssNumber('--pv-junction-radius', 4.8);
+    const shown =
+      this.diagram.options.mergeJunctions === false
+        ? junctions.filter((j) => !this.isMerge(j))
+        : junctions;
     this.junctionLayer.replaceChildren(
-      ...junctions.map((j) =>
+      ...shown.map((j) =>
         this.svg('circle', { class: 'pv-junction', cx: j.point.x, cy: j.point.y, r }),
       ),
     );
+  }
+
+  /** Whether every link at the junction ends on one port, or every one starts from one port. */
+  private isMerge(j: Junction): boolean {
+    const links = this.diagram.store.links;
+    let to: string | null | undefined;
+    let from: string | null | undefined;
+    for (const id of j.linkIds) {
+      const l = links.get(id);
+      if (!l) return false;
+      const t = `${l.to.node}\u0000${l.to.port}`;
+      const f = `${l.from.node}\u0000${l.from.port}`;
+      to = to === undefined || to === t ? t : null;
+      from = from === undefined || from === f ? f : null;
+      if (to === null && from === null) return false;
+    }
+    return true;
   }
 
   /** Sets data-occupied on ports that have links, touching only the ports whose state changed. */

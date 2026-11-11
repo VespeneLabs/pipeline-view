@@ -191,6 +191,12 @@ export interface DiagramOptions {
    * is estimated from its text, so it needs no layout read.
    */
   routeAroundLabels?: boolean;
+  /**
+   * Draw junction dots where links merge into one port or fan out of one port (default true). With
+   * `false`, a dot is skipped when every link meeting there ends on the same port, or every one starts
+   * from the same port; real branches (links with different ends) keep their dots.
+   */
+  mergeJunctions?: boolean;
   /** Edit-mode validation hooks (FR-29, FR-42). Return a reason to explain a refusal. */
   canConnect?: (
     from: { node: NodeModel; port: string },
