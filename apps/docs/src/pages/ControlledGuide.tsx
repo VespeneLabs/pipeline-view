@@ -111,7 +111,11 @@ export function ControlledGuide() {
         A new document that shares node or link ids with the current one is applied with{' '}
         <code>diagram.patch()</code>. Patches from outside are <strong>not</strong> undoable by
         default: they aren&apos;t the user&apos;s edits. Pass <code>{'{ undoable: true }'}</code> to{' '}
-        <code>patch()</code> if they should be.
+        <code>patch()</code> if they should be. With React, set{' '}
+        <code>{'<PipelineView modelUpdates="undoable">'}</code> instead: every new version of the
+        same document from your store (an inspector edit, say) becomes one undo step, like a canvas
+        edit. Undo then reports <code>origin: &apos;history&apos;</code> through{' '}
+        <code>onModelChange</code>, so the store follows.
       </p>
       <Code>{OUTSIDE}</Code>
 

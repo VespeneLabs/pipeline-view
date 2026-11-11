@@ -61,6 +61,52 @@ describe('<PipelineView>', () => {
     expect(ref.current!.canUndo()).toBe(true);
   });
 
+  it("makes host model updates undoable with modelUpdates='undoable'", () => {
+    const ref = createRef<Diagram>();
+    const onModelChange = vi.fn();
+    const first = model();
+    const { rerender } = render(
+      <PipelineView
+        ref={ref}
+        model={first}
+        modelUpdates="undoable"
+        onModelChange={onModelChange}
+      />,
+    );
+    const edited: DiagramModel = {
+      ...first,
+      nodes: first.nodes.map((n) => (n.id === 'a' ? { ...n, label: 'Inlet' } : n)),
+    };
+    rerender(
+      <PipelineView
+        ref={ref}
+        model={edited}
+        modelUpdates="undoable"
+        onModelChange={onModelChange}
+      />,
+    );
+    const d = ref.current!;
+    expect(d.store.nodes.get('a')!.label).toBe('Inlet');
+    expect(d.canUndo()).toBe(true);
+    d.undo();
+    expect(d.store.nodes.get('a')!.label).toBeUndefined();
+    // The host store hears about the undo, so it can follow.
+    expect(onModelChange).toHaveBeenLastCalledWith(expect.objectContaining({ origin: 'history' }));
+  });
+
+  it('keeps host model updates out of the undo history by default', () => {
+    const ref = createRef<Diagram>();
+    const first = model();
+    const { rerender } = render(<PipelineView ref={ref} model={first} />);
+    rerender(
+      <PipelineView
+        ref={ref}
+        model={{ ...first, nodes: first.nodes.map((n) => ({ ...n, label: 'x' })) }}
+      />,
+    );
+    expect(ref.current!.canUndo()).toBe(false);
+  });
+
   it('patches a new version of the same document instead of reloading it', () => {
     const ref = createRef<Diagram>();
     const { rerender } = render(<PipelineView ref={ref} model={model()} />);

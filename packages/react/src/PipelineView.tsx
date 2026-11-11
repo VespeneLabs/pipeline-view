@@ -53,6 +53,14 @@ export interface PipelineViewProps {
    * link ids are treated as one, so set it whenever your app switches between documents.
    */
   documentKey?: string | number;
+  /**
+   * How a new version of the same document (a changed `model`) is applied. 'host' (the default)
+   * patches it outside the undo history, since the host owns its history. 'undoable' makes each such
+   * update one undo step, like a canvas edit, for hosts whose own panels (an inspector, a side panel)
+   * edit the document and want Ctrl+Z to cover them. Loading a different document always starts a
+   * fresh history.
+   */
+  modelUpdates?: 'host' | 'undoable';
   mode?: DiagramMode;
   theme?: ThemeName;
   /**
@@ -220,7 +228,7 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
         documentKey !== undefined ? !keyChanged : !!prev && sharesItems(prev, model);
       loadedKey.current = documentKey;
       if (sameDocument) {
-        diagram.patch(model);
+        diagram.patch(model, { undoable: propsRef.current.modelUpdates === 'undoable' });
         return;
       }
       diagram.load(model); // the diagram fits on load per fitOnLoad, after content is measured
