@@ -1,5 +1,15 @@
 # @vespenelabs/pipeline-view
 
+## 1.7.0
+
+### Minor Changes
+
+- c0e888e: `<PipelineView modelUpdates="undoable">` makes host edits undoable. Each new version of the same document that comes in through the `model` prop, for example from an inspector or side panel editing the host store, becomes one undo step, like a canvas edit. Undo and redo report `origin: 'history'` through `onModelChange`, so the store follows. The default `'host'` keeps the current behavior: patches stay outside the undo history. Loading a different document still starts a fresh history. Before this, hosts called `diagram.patch(model, { undoable: true })` themselves before rendering.
+
+### Patch Changes
+
+- bb19f94: Lane ordering now handles fans that turn both ways. In 1.5.0 a header whose outlets fan out up and down could still put two links on one vertical run, drawn with junction dots as if they were a tee, and its downward bundle could cross itself. Parallel segments of different links now form a bundle whenever their spans overlap with no node between them, even when they started on different lanes. Each bundle gets the order with the fewest crossings: its own lanes, or lanes packed against either side within how far each segment can move. Members never share a lane on overlapping spans, and crossings with other links nearby count too. On the reported 8-outlet header drawing, crossings and junction dots drop from 4 and 4 to 0.
+
 ## 1.6.0
 
 ### Model
