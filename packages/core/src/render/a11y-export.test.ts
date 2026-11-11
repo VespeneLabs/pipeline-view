@@ -124,8 +124,9 @@ describe('export', () => {
     const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
     const root = doc.documentElement;
     expect(root.getAttribute('xmlns')).toBe('http://www.w3.org/2000/svg');
-    // Nodes span 0..240 x 0..240 and the text annotation sits at y = -30; padded by 10.
-    expect(root.getAttribute('viewBox')).toBe('-10 -40 260 290');
+    // Nodes span 0..240 x 0..240, a's label "Tank A" (51 wide, centred on x = 20) reaches x = -5.5,
+    // and the text annotation sits at y = -30; padded by 10.
+    expect(root.getAttribute('viewBox')).toBe('-15.5 -40 265.5 290');
     expect(doc.querySelectorAll('[data-node-id]').length).toBe(3);
     expect(doc.querySelector('[data-link-id="ab"] .pv-link-line')).not.toBeNull();
     expect(
@@ -133,6 +134,24 @@ describe('export', () => {
     ).toBeNull();
     expect(doc.querySelector('[tabindex]')).toBeNull();
     expect(doc.querySelector('text.pv-annotation')!.textContent).toBe('Area');
+  });
+
+  it('keeps host CSS for a custom link kind', () => {
+    const style = document.createElement('style');
+    style.textContent =
+      ".pv-link[data-kind='steam'] .pv-link-line { stroke: rgb(1, 2, 3); stroke-width: 5px; stroke-dasharray: 3 2; }";
+    document.head.append(style);
+    try {
+      d.update((tx) => tx.updateLink('ab', { kind: 'steam' }));
+      d.renderer!.flush();
+      const doc = new DOMParser().parseFromString(d.exportSVG(), 'image/svg+xml');
+      const line = doc.querySelector('[data-kind="steam"] .pv-link-line')!;
+      expect(line.getAttribute('stroke')).toBe('rgb(1, 2, 3)');
+      expect(line.getAttribute('stroke-width')).toBe('5px');
+      expect(line.getAttribute('stroke-dasharray')).toMatch(/^3(px)?,? 2(px)?$/);
+    } finally {
+      style.remove();
+    }
   });
 
   it('can export only the visible viewport', () => {

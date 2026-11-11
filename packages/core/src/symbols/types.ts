@@ -75,6 +75,13 @@ export interface SymbolDef<D extends DataRecord = DataRecord> {
    * Returns inner SVG markup. When both are given, it takes precedence over `svg`.
    */
   render?: SymbolCallback<SymbolRenderContext<D>, string>;
+  /**
+   * Text drawn inside the symbol (`<text>` in `svg` / `render`) stays upright and unmirrored when the
+   * node is rotated or flipped, like node labels do (default true). Each text turns back around its own
+   * centre, and stacked lines turn as one block, so they stay where they are in the shape and in
+   * order. Set `false` when the text is part of the drawing and must turn with it.
+   */
+  uprightText?: boolean;
   /** Where the label is placed, in local coordinates. The default is bottom-center below the symbol. */
   labelAnchor?: Point;
   keywords?: string[];

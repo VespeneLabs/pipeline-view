@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Diagram } from '../diagram/diagram';
 import type { DiagramModel, NodeModel } from '../model/types';
-import { nodePorts, nodeSize, sidePorts } from './resolve';
+import { nodePorts, nodeSize, sidePorts, withPorts } from './resolve';
 import type { SymbolDef } from './types';
 
 /** A manifold whose inlet/outlet counts come from node.data, and whose height grows with the busier side. */
@@ -377,5 +377,51 @@ describe('port label placement (labelPlacement / labelOffset)', () => {
     expect(label('e')).toEqual(['124', '108', 'start']); // vertical port: beside the stub
     d.destroy();
     container.remove();
+  });
+});
+
+describe('withPorts', () => {
+  const side = { id: 'side', position: { x: 20, y: 0 }, direction: 'top' as const };
+
+  it('appends ports to a symbol with a port list and leaves the original alone', () => {
+    const tapped = withPorts(pump, [side]);
+    expect(nodePorts(tapped).map((p) => p.id)).toEqual(['in', 'out', 'side']);
+    expect(nodePorts(pump).map((p) => p.id)).toEqual(['in', 'out']);
+    expect(Array.isArray(tapped.ports)).toBe(true);
+    expect(tapped.type).toBe(pump.type);
+  });
+
+  it('appends ports to a symbol whose ports are computed per node', () => {
+    const tapped = withPorts(manifold, [side]);
+    const node: NodeModel = {
+      id: 'm',
+      type: 'test/manifold',
+      position: { x: 0, y: 0 },
+      data: { inputs: 2, outputs: 1 },
+    };
+    expect(nodePorts(tapped, node).map((p) => p.id)).toEqual(['in-1', 'in-2', 'out-1', 'side']);
+    expect(nodePorts(tapped).map((p) => p.id)).toEqual(['in-1', 'out-1', 'side']);
+  });
+
+  it('takes a function of the node, and an extra port replaces one with the same id', () => {
+    const tapped = withPorts(pump, (n) => [
+      { id: 'out', position: { x: 40, y: (n.data?.y as number) ?? 10 }, direction: 'right' },
+    ]);
+    const node: NodeModel = {
+      id: 'p',
+      type: 'test/pump',
+      position: { x: 0, y: 0 },
+      data: { y: 30 },
+    };
+    expect(nodePorts(tapped, node)).toEqual([
+      { id: 'in', position: { x: 0, y: 20 }, direction: 'left' },
+      { id: 'out', position: { x: 40, y: 30 }, direction: 'right' },
+    ]);
+  });
+
+  it('still lets NodeModel.ports override everything', () => {
+    const tapped = withPorts(pump, [side]);
+    const node: NodeModel = { id: 'p', type: 'test/pump', position: { x: 0, y: 0 }, ports: [side] };
+    expect(nodePorts(tapped, node)).toEqual([side]);
   });
 });
