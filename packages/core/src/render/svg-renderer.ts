@@ -26,6 +26,7 @@ import { nodePorts, nodeSize } from '../symbols/resolve';
 import type { PortDef } from '../symbols/types';
 import { arrowsPath, linkPath, ticksPath } from './paths';
 import { LinkLabelLayout } from './link-labels';
+import { orientationKey, uprightTexts } from './upright';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const LABEL_GAP = 16;
@@ -51,6 +52,8 @@ interface NodeEl {
   /** Obstacle rect and resolved port points (diagram coordinates) last given to the router. */
   obstacleSig?: string;
   portPointSig?: string;
+  /** Orientation the text counter-transforms were written for (see render/upright.ts). */
+  orient?: string;
   /** Label obstacle last given to the router ('' when there is none). */
   labelSig?: string;
 }
@@ -550,9 +553,15 @@ export class SvgRenderer {
     } else {
       markup = def.svg ?? '';
     }
-    if (markup === el.markup) return;
+    // Text inside the symbol stays upright and unmirrored however the node is turned.
+    const orient = def?.uprightText === false ? '' : orientationKey(n);
+    if (markup === el.markup && orient === (el.orient ?? '')) return;
+    const hasText = markup.includes('<text');
+    // Rewriting the markup also drops the counter-transforms of the previous orientation.
+    if (markup !== el.markup || hasText) el.symbol.innerHTML = markup;
     el.markup = markup;
-    el.symbol.innerHTML = markup;
+    el.orient = orient;
+    if (orient && hasText) uprightTexts(el.symbol, n);
   }
 
   private renderPorts(el: NodeEl, n: NodeModel): void {

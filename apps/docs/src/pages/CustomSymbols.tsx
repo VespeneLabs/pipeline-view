@@ -77,6 +77,12 @@ export function CustomSymbols() {
           attributes (a symbol appears many times on a page).
         </li>
         <li>
+          Text inside a symbol (<code>&lt;text&gt;</code>) stays upright and unmirrored when the
+          node is rotated or flipped; stacked lines turn as one block. Give it <code>x</code>,{' '}
+          <code>y</code> and <code>text-anchor</code>, and set <code>uprightText: false</code> on
+          the definition if the text is part of the drawing and must turn with it.
+        </li>
+        <li>
           Place every port inside <code>size</code>, at the end of its pipe stub, with the{' '}
           <code>direction</code> a pipe leaves in. Use <code>accepts</code> to restrict link kinds.
         </li>

@@ -239,6 +239,10 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
         doc: 'Per-node ports, e.g. a manifold whose inlet count comes from node.data. NodeModel.ports overrides the symbol. Always read them through nodePorts(def, node) / nodeSize(def, node) / findPort(). Change port-driving data with update(): the live path redraws ports but never edits the model, so links on a vanished port stay.',
       },
       {
+        sig: 'SymbolDef.uprightText?: boolean',
+        doc: 'Text drawn inside a symbol stays upright and unmirrored when the node is rotated or flipped, as node labels do (default true). Each <text> turns back around its own centre and stacked lines turn as one block, so an instrument bubble flipped to put its stem on top still reads "PT" over its loop number. false lets the text turn with the drawing.',
+      },
+      {
         sig: 'sidePorts(size, side, count, { idPrefix?, start?, labels?, spacing?, role?, maxLinks?, accepts? })',
         doc: 'Evenly spaced ports along one side, with optional index labels.',
       },
