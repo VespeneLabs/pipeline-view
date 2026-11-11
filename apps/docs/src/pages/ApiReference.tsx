@@ -247,6 +247,10 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
         doc: 'An inlet can start a drag, but the link is always stored outlet → inlet. maxLinks limits links per port (connected ports get data-occupied). label is drawn unrotated next to the port.',
       },
       {
+        sig: 'DiagramOptions.mergeJunctions: boolean',
+        doc: 'Whether junction dots are drawn where links merge into one port or fan out of one port (default true). With false, a dot is skipped when every link meeting at that point ends on the same node and port, or every one starts from the same node and port, so several arrows into one flowchart step no longer read as a tee. Links with different ends that share a trunk keep their dot, and line jumps are unaffected.',
+      },
+      {
         sig: 'DiagramOptions.directed: boolean | { kinds }',
         doc: 'Links of these kinds must run from an out port to an in port; arrows follow.',
       },
