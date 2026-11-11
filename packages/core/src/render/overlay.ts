@@ -157,6 +157,12 @@ export class OverlayRenderer {
     if (any) this.schedule();
   }
 
+  /** @internal Updates the accessible names of draggable annotations in place (no layout, no re-place). */
+  refreshNames(): void {
+    for (const item of this.items.values())
+      if (item.draggable) setName(item.el, this.diagram.annotationName(item.id));
+  }
+
   /** @internal The overlay slots of a node: its own and those of annotations anchored to it. */
   slotsOf(nodeId: string): HTMLElement[] {
     const out: HTMLElement[] = [];
@@ -293,6 +299,8 @@ export class OverlayRenderer {
       item.anchorPos === anchor?.position &&
       item.anchorStatus === anchor?.status
     ) {
+      // The name may come from the anchor's live data (annotationName).
+      if (item.draggable) setName(item.el, this.diagram.annotationName(id));
       if (a.kind === 'html' && item.anchorSource !== anchor) {
         item.anchorSource = anchor;
         this.callRenderer(
@@ -356,8 +364,7 @@ export class OverlayRenderer {
     const draggable = this.diagram.isAnnotationDraggable(id);
     if (draggable || item.draggable) {
       item.draggable = draggable;
-      const name = a.kind === 'text' ? a.text : (anchor?.label ?? anchor?.id ?? id);
-      setDraggable(item.el, draggable, name);
+      setDraggable(item.el, draggable, draggable ? this.diagram.annotationName(id) : '');
     }
     // Hidden by the host (display state): keep the element and its renderer, show nothing.
     const hidden = this.diagram.isAnnotationHidden(id);
@@ -527,6 +534,10 @@ export class OverlayRenderer {
     this.frame.cancel();
     for (const key of [...this.items.keys()]) this.remove(key);
   }
+}
+
+function setName(el: Element, name: string): void {
+  if (el.getAttribute('aria-label') !== name) el.setAttribute('aria-label', name);
 }
 
 /** Draggable annotations are focusable (arrow keys move them) and named for screen readers. */

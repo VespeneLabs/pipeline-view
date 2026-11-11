@@ -101,12 +101,26 @@ export interface PipelineViewProps {
    * `final`) and restore it with `diagram.setAnnotationPositions()`.
    */
   annotationMoves?: DiagramOptions['annotationMoves'];
+  /**
+   * Accessible name of a draggable annotation (its aria-label, and the name in move announcements).
+   * Return undefined for the default. Can change at any time; names update in place.
+   */
+  annotationName?: DiagramOptions['annotationName'];
+  /** Phrases or localizes the move announcements. Can change at any time. */
+  annotationMessages?: DiagramOptions['annotationMessages'];
   /** Accessible name for the diagram root. Unlike `options.ariaLabel`, it can change at any time. */
   ariaLabel?: string;
   /** Other DiagramOptions. Read once, when the diagram is created. */
   options?: Omit<
     DiagramOptions,
-    'mode' | 'theme' | 'symbols' | 'htmlRenderers' | 'annotationDrag' | 'annotationMoves'
+    | 'mode'
+    | 'theme'
+    | 'symbols'
+    | 'htmlRenderers'
+    | 'annotationDrag'
+    | 'annotationMoves'
+    | 'annotationName'
+    | 'annotationMessages'
   >;
   /** Editor options (guides, port snap). The editor attaches itself whenever mode is 'edit'. Read once. */
   editor?: EditorControllerOptions;
@@ -204,6 +218,13 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
         theme: p.theme,
         annotationDrag: p.annotationDrag,
         annotationMoves: p.annotationMoves,
+        // Read through the latest props, so both can change after creation.
+        annotationName: (a, anchor) => propsRef.current.annotationName?.(a, anchor),
+        annotationMessages: {
+          moved: (name, position, final) =>
+            propsRef.current.annotationMessages?.moved?.(name, position, final),
+          cancelled: (name) => propsRef.current.annotationMessages?.cancelled?.(name),
+        },
         symbols: p.symbols,
         htmlRenderers,
         nodeRenderers,
@@ -280,6 +301,12 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
     useEffect(() => {
       diagram?.setAnnotationDrag(annotationDrag ?? false, annotationMoves ?? 'model');
     }, [diagram, annotationDrag, annotationMoves]);
+
+    const { annotationName } = props;
+    useEffect(() => {
+      // Cheap (attribute compares only), so an inline function is fine.
+      diagram?.refreshAnnotationNames();
+    }, [diagram, annotationName]);
 
     useEffect(() => {
       diagram?.showDiff(compareWith ?? null);

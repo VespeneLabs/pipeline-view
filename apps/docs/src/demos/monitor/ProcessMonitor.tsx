@@ -175,6 +175,8 @@ export function ProcessMonitor() {
           annotationDrag="always"
           annotationMoves="display"
           onAnnotationMove={({ final }) => final && setCardsMoved(true)}
+          // Screen readers hear the card's tag ("TI-101 · MHWT"), which lives in the annotation's data.
+          annotationName={(a) => (typeof a.data?.tag === 'string' ? a.data.tag : undefined)}
           options={{ ariaLabel: 'Mix and transfer process monitor' }}
           onReady={onReady}
           onSelectionChange={({ selection }) =>

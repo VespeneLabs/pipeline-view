@@ -265,8 +265,33 @@ export interface DiagramOptions {
    * `setAnnotationPositions()`.
    */
   annotationMoves?: 'model' | 'display';
+  /**
+   * The accessible name of a draggable annotation: its `aria-label`, and the name used in move
+   * announcements. Return undefined to keep the default: a text annotation's text, else the anchor
+   * node's label, else the annotation id. It's read again whenever the annotation or its anchor changes
+   * (live data included); call `refreshAnnotationNames()` when anything else it depends on changes.
+   */
+  annotationName?: (a: AnnotationModel, anchor: NodeModel | undefined) => string | undefined;
+  /** Phrases (or localizes) what an annotation move announces to screen readers. */
+  annotationMessages?: AnnotationMessages;
   /** Accessible name for the diagram root. */
   ariaLabel?: string;
+}
+
+/**
+ * The announcements of an annotation move (`DiagramOptions.annotationDrag`), spoken through the polite
+ * live region. Each one replaces the English default: return undefined to keep the default, or an
+ * empty string to say nothing.
+ */
+export interface AnnotationMessages {
+  /**
+   * `final: false` is one keyboard step (default: the rounded position, "12, -80"); pointer frames aren't
+   * announced. `final: true` is a committed move, by pointer or keyboard (default: "Moved {name}.").
+   * `position` is in the space of `AnnotationModel.position`.
+   */
+  moved?: (name: string, position: Point, final: boolean) => string | undefined;
+  /** The move was reverted: Escape, a cancelled pointer, or a vetoed commit. Default: "Move cancelled. {name}." */
+  cancelled?: (name: string) => string | undefined;
 }
 
 export interface ModelDiff {

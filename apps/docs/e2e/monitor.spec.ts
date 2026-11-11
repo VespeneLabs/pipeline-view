@@ -80,7 +80,8 @@ test('reading cards can be dragged in view mode as display state', async ({ page
   await slot.focus();
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('Enter');
-  await expect(page.locator('.pv-live')).toContainText('Moved');
+  await expect(slot).toHaveAttribute('aria-label', 'TI-101 · MHWT'); // annotationName
+  await expect(page.locator('.pv-live')).toHaveText('Moved TI-101 · MHWT.');
   expect((await position(id)).x).toBeCloseTo(moved.x + 1, 5);
 
   await page.getByRole('button', { name: 'Reset cards' }).click();
