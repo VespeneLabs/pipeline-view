@@ -43,7 +43,7 @@ const svg = /* @__PURE__ */ draw(1, 3);
 /**
  * Header / manifold: a slim body with inlets on the left and outlets on the right. The counts come
  * from `data.inlets` / `data.outlets` (1–32, default 1 and 3); the body grows with the larger count.
- * Ports are `in-1..n` and `out-1..n`, labelled with their index.
+ * Ports are `in-1..n` and `out-1..n`, labelled with their index just outside the body, above the pipe.
  */
 export const header: SymbolDef<HeaderData> = {
   type: 'process/header',
@@ -61,6 +61,7 @@ export const header: SymbolDef<HeaderData> = {
         direction: 'left',
         role: 'in',
         label: String(i + 1),
+        labelPlacement: 'outside',
       });
     for (let i = 0; i < outlets; i++)
       ports.push({
@@ -69,6 +70,7 @@ export const header: SymbolDef<HeaderData> = {
         direction: 'right',
         role: 'out',
         label: String(i + 1),
+        labelPlacement: 'outside',
       });
     return ports;
   },

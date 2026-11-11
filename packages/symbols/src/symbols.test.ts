@@ -193,7 +193,10 @@ describe('round-3 process symbols', () => {
       'in-2',
       ...Array.from({ length: 8 }, (_, i) => `out-${i + 1}`),
     ]);
-    expect(ports.find((p) => p.id === 'out-8')!.label).toBe('8');
+    expect(ports.find((p) => p.id === 'out-8')).toMatchObject({
+      label: '8',
+      labelPlacement: 'outside',
+    });
     const size = nodeSize(header, node({ inlets: 2, outlets: 8 }));
     expect(size.height).toBe(9 * 24);
     // Outlets are evenly spaced, top to bottom.
