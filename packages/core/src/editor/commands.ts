@@ -5,7 +5,8 @@
  */
 import type { Diagram } from '../diagram/diagram';
 import { nodePorts, nodeSize, previewNode } from '../symbols/resolve';
-import type { ConnectResult, ItemRef, Transaction } from '../diagram/types';
+import type { AttachProposal, ConnectResult, ItemRef, Transaction } from '../diagram/types';
+import { findPort } from '../symbols/resolve';
 import {
   type ConnectCheck,
   type ConnectIndexes,
@@ -438,6 +439,82 @@ export class EditorCommands {
   connect(from: LinkEnd, to: LinkEnd, kind = 'process'): string | null {
     const r = this.tryConnect(from, to, kind);
     return r.ok ? r.id : null;
+  }
+
+  // ------------------------------------------------------------------ attach to a link
+
+  /**
+   * The link that a connection from port `from` onto link `linkId` at fraction `at` would create, and
+   * whether it is allowed. An inlet starts a link that flows out of the host link (`fromAttach`); any
+   * other port starts one that flows into it (`toAttach`). The attached side takes the host link's own
+   * end, and `resolveAttach` may change the proposal. Null when the host hook declines the link, or
+   * when the link doesn't exist or is a link on that port itself.
+   */
+  attachCheck(
+    from: LinkEnd,
+    linkId: string,
+    at: number,
+    kind = 'process',
+    indexes?: ConnectIndexes,
+  ): { proposal: AttachProposal; check: ConnectCheck } | null {
+    const host = this.store.links.get(linkId);
+    const node = this.store.nodes.get(from.node);
+    if (!host || !node) return null;
+    const samePort = (e: LinkEnd) => e.node === from.node && e.port === from.port;
+    if (samePort(host.from) || samePort(host.to)) return null;
+    const port = findPort(this.diagram.symbols.get(node.type), node, from.port);
+    const attach = { link: linkId, at: Math.round(Math.min(Math.max(at, 0), 1) * 10000) / 10000 };
+    let proposal: AttachProposal =
+      port?.role === 'in'
+        ? { from: { ...host.from }, to: { ...from }, kind, fromAttach: attach }
+        : { from: { ...from }, to: { ...host.to }, kind, toAttach: attach };
+    const resolve = this.diagram.options.resolveAttach;
+    if (resolve) {
+      const r = resolve(structuredClone(proposal));
+      if (r === null) return null;
+      if (r) proposal = r;
+    }
+    const check = validateConnect(
+      this.diagram,
+      proposal.from,
+      proposal.to,
+      proposal.kind,
+      indexes ?? this.connectIndexes(),
+      { fromAttach: proposal.fromAttach, toAttach: proposal.toAttach },
+    );
+    return { proposal, check };
+  }
+
+  /** Creates the proposed attached link if allowed and selects it (see `attachCheck`). */
+  tryAttach(proposal: AttachProposal): ConnectResult {
+    const r = connectLink(this.diagram, proposal.from, proposal.to, proposal.kind, {
+      fromAttach: proposal.fromAttach,
+      toAttach: proposal.toAttach,
+    });
+    if (r.ok) this.diagram.setSelection([{ kind: 'link', id: r.id }]);
+    return r;
+  }
+
+  private attachPatch(linkId: string, end: 'from' | 'to', at: number): Partial<LinkModel> | null {
+    const l = this.store.links.get(linkId);
+    const cur = end === 'from' ? l?.fromAttach : l?.toAttach;
+    if (!l || !cur || this.isLocked('link', linkId)) return null;
+    const next = { link: cur.link, at: Math.round(Math.min(Math.max(at, 0), 1) * 10000) / 10000 };
+    if (next.at === cur.at) return null;
+    return end === 'from' ? { fromAttach: next } : { toAttach: next };
+  }
+
+  /** Moves an attached end along its host link, as one undo step. Returns false when nothing changed. */
+  moveAttach(linkId: string, end: 'from' | 'to', at: number): boolean {
+    const patch = this.attachPatch(linkId, end, at);
+    if (patch) this.diagram.update((tx) => tx.updateLink(linkId, patch));
+    return !!patch;
+  }
+
+  /** Previews an attached end while the user drags it. Finish with `commitLinkPath` or `cancelLinkPath`. */
+  previewAttach(linkId: string, end: 'from' | 'to', at: number): void {
+    const patch = this.attachPatch(linkId, end, at);
+    if (patch) this.diagram.preview((tx) => tx.updateLink(linkId, patch));
   }
 
   // ------------------------------------------------------------------ links

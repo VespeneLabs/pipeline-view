@@ -171,6 +171,8 @@ export function PidEditor() {
     () => ({
       grid: { size: 10, snap: true, visible: true },
       ariaLabel: 'P&ID editor canvas',
+      // Dropping a connection on a pipe attaches the new line to it.
+      linkAttach: true,
       initialViewport: snapshot.viewport,
       directed: rules.directed ? { kinds: ['process'] } : false,
       noCycles: rules.noCycles ? { kinds: ['process'] } : false,
@@ -227,6 +229,11 @@ export function PidEditor() {
           <>
             Drag an item from <b>Your palette</b>, or press <b>Place…</b> and place it with the
             arrow keys and <kbd>Enter</kbd>.
+          </>,
+          <>
+            Drag from a port and drop on a <b>pipe</b>, not on a port: the new line joins the pipe
+            with a junction dot. Select it and drag the round handle at the joint, or use the arrow
+            keys, to slide the joint along the pipe.
           </>,
           <>
             Connect without a mouse: select a node, press <kbd>C</kbd>, pick a port with the arrow

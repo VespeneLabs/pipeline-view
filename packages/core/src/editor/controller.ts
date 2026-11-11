@@ -10,7 +10,8 @@ import { portLinkCounts, refusal } from '../diagram/validate';
 import type { DropCheck } from './commands';
 import { nodePorts, nodeSize, previewNode } from '../symbols/resolve';
 import { nodeBounds, portPoint } from '../diagram/geometry';
-import type { DropSource, ItemRef } from '../diagram/types';
+import { attachCycle, fractionAlong, pointAlong } from '../diagram/attach';
+import type { AttachProposal, DropSource, ItemRef } from '../diagram/types';
 import type { LinkEnd, NodeModel, Point, Rect } from '../model/types';
 import { DRAG_THRESHOLD } from '../viewport/controller';
 import { type Clipboard, EditorCommands, type EditorGeometry } from './commands';
@@ -47,15 +48,30 @@ interface RefusedPort extends LinkEnd {
 
 /** Where a connect drag ended: a port that accepts the link, or one that refuses it (FR-42). */
 type ConnectDrop =
-  | { ok: true; end: LinkEnd }
+  | { ok: true; end: LinkEnd; attach?: AttachDrop }
   | {
       ok: false;
       end: LinkEnd;
+      attach?: AttachDrop;
       code: string;
       reason: string;
       detail?: Record<string, unknown>;
       ends?: RefusedPort['ends'];
     };
+
+/** A connect drag that ended on a link (`DiagramOptions.linkAttach`): the link to create and where it lands. */
+interface AttachDrop {
+  proposal: AttachProposal;
+  point: Point;
+}
+
+/** A target of the keyboard connect flow: a port, or a link to attach to. */
+type KbTarget = LinkEnd | LinkTarget;
+interface LinkTarget {
+  link: string;
+  proposal: AttachProposal;
+}
+const onLink = (t: KbTarget): t is LinkTarget => 'link' in t;
 
 type Gesture =
   | { type: 'move'; start: Point; lead: string; started: boolean; guides: Guide[] }
@@ -82,6 +98,15 @@ type Gesture =
       index: number;
       start: Point;
       started: boolean;
+    }
+  | {
+      /** Dragging an attached end along its host link. */
+      type: 'attach';
+      linkId: string;
+      end: 'from' | 'to';
+      host: Point[];
+      start: Point;
+      started: boolean;
     };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -99,7 +124,7 @@ export class EditorController {
     phase: 'source' | 'target';
     node: string;
     ports: LinkEnd[];
-    targets: LinkEnd[];
+    targets: KbTarget[];
     from?: LinkEnd;
     kind: string;
     index: number;
@@ -295,6 +320,12 @@ export class EditorController {
             start: p,
             started: false,
           };
+      } else if (kind === 'attach') {
+        const linkId = handle.dataset.link!;
+        const end = handle.dataset.end as 'from' | 'to';
+        const l = this.diagram.store.links.get(linkId);
+        const host = this.linkPath((end === 'from' ? l?.fromAttach : l?.toAttach)?.link ?? '');
+        if (host) this.gesture = { type: 'attach', linkId, end, host, start: p, started: false };
       }
       this.prepare(e);
       return;
@@ -414,6 +445,11 @@ export class EditorController {
           moveSegment(g.path, g.index, { x: p.x - g.start.x, y: p.y - g.start.y }),
         );
         break;
+      case 'attach':
+        if (!g.started && !far(g.start)) return;
+        g.started = true;
+        this.commands.previewAttach(g.linkId, g.end, fractionAlong(g.host, p));
+        break;
     }
     this.redraw();
   };
@@ -450,11 +486,12 @@ export class EditorController {
       }
       case 'connect': {
         this.unmarkRefused(g.marked);
-        const drop = this.connectTarget(g, p) ?? this.nodeDrop(g, p);
-        // A drop on empty canvas is a cancel. A drop on a port or node either connects or is refused.
+        const drop = this.connectTarget(g, p) ?? this.nodeDrop(g, p) ?? this.linkDrop(g, p);
+        // A drop on empty canvas is a cancel. A drop on a port, node or link either connects or is refused.
         if (!drop) break;
         if (drop.ok) {
-          this.commands.tryConnect(g.from, drop.end, g.kind);
+          if (drop.attach) this.commands.tryAttach(drop.attach.proposal);
+          else this.commands.tryConnect(g.from, drop.end, g.kind);
         } else {
           // Flow order (outlet → inlet), with the drag order alongside when it differs.
           const e = drop.ends;
@@ -478,6 +515,13 @@ export class EditorController {
           this.suppressClick();
         }
         break;
+      case 'attach':
+        if (g.started) {
+          this.commands.commitLinkPath();
+          this.suppressClick();
+          this.announceAttach(g.linkId, g.end);
+        }
+        break;
     }
     this.redraw();
   };
@@ -496,7 +540,8 @@ export class EditorController {
     const g = this.gesture;
     this.gesture = null;
     if (g?.type === 'move' && g.started) this.commands.cancelMove();
-    if (g?.type === 'segment' && g.started) this.commands.cancelLinkPath();
+    if ((g?.type === 'segment' || g?.type === 'attach') && g.started)
+      this.commands.cancelLinkPath();
     if (g?.type === 'connect') this.unmarkRefused(g.marked);
   }
 
@@ -565,6 +610,105 @@ export class EditorController {
       detail: { node: hit },
     });
     return { ...r, end: { node: hit, port: '' } };
+  }
+
+  /**
+   * A drop on a link (`DiagramOptions.linkAttach`): the link nearest the pointer within half the port
+   * snap radius, as a new link whose end is attached there. Links on the starting port are skipped.
+   */
+  private linkDrop(g: Extract<Gesture, { type: 'connect' }>, p: Point): ConnectDrop | null {
+    if (!this.diagram.options.linkAttach) return null;
+    const radius = (this.opts.portSnapRadius ?? 16) / 2 / this.zoom;
+    let best: { id: string; at: number; d: number } | null = null;
+    for (const l of this.diagram.store.links.values()) {
+      const path = this.linkPath(l.id);
+      if (!path || path.length < 2) continue;
+      const at = fractionAlong(path, p);
+      const on = pointAlong(path, at)!.point;
+      const d = Math.hypot(on.x - p.x, on.y - p.y);
+      if (d <= radius && (!best || d < best.d)) best = { id: l.id, at, d };
+    }
+    if (!best) return null;
+    return this.attachDrop(g.from, best.id, best.at, g.kind);
+  }
+
+  /** The outcome of attaching a connection from `from` to link `linkId` at `at`, as a drop. */
+  private attachDrop(from: LinkEnd, linkId: string, at: number, kind: string): ConnectDrop | null {
+    const r = this.commands.attachCheck(from, linkId, at, kind);
+    const path = r && this.linkPath(linkId);
+    if (!r || !path) return null;
+    const used = (r.proposal.toAttach ?? r.proposal.fromAttach)!;
+    const attach = { proposal: r.proposal, point: pointAlong(path, used.at)!.point };
+    const end = r.proposal.toAttach ? r.proposal.to : r.proposal.from;
+    const c = r.check;
+    if (c.ok) return { ok: true, end, attach };
+    return {
+      ok: false,
+      end,
+      attach,
+      code: c.code,
+      reason: c.reason,
+      detail: c.detail,
+      ends: { from: c.from, to: c.to, dragFrom: c.dragFrom, dragTo: c.dragTo },
+    };
+  }
+
+  /** The attached ends of a link that can be moved: the host link exists and the link isn't locked. */
+  private attachedEnds(linkId: string): { end: 'from' | 'to'; host: string; at: number }[] {
+    const l = this.diagram.store.links.get(linkId);
+    if (!l || l.locked) return [];
+    const out: { end: 'from' | 'to'; host: string; at: number }[] = [];
+    for (const end of ['to', 'from'] as const) {
+      const a = end === 'from' ? l.fromAttach : l.toAttach;
+      if (
+        a &&
+        this.diagram.store.links.has(a.link) &&
+        !attachCycle(this.diagram.store.links, l.id, a.link)
+      )
+        out.push({ end, host: a.link, at: a.at });
+    }
+    return out;
+  }
+
+  private describeLink(id: string): string {
+    const l = this.diagram.store.links.get(id);
+    if (!l) return `link ${id}`;
+    const name = (e: LinkEnd) => this.diagram.store.nodes.get(e.node)?.label ?? e.node;
+    return `link ${l.label ?? ''}${l.label ? ', ' : ''}${name(l.from)} to ${name(l.to)}`;
+  }
+
+  /** Says where an attached end now sits on its host link. */
+  private announceAttach(linkId: string, end: 'from' | 'to'): void {
+    const link = this.diagram.store.links.get(linkId);
+    const a = end === 'from' ? link?.fromAttach : link?.toAttach;
+    const host = a && this.diagram.store.links.get(a.link);
+    if (!link || !a || !host) return;
+    const text =
+      this.diagram.options.attachMessages?.moved?.({ link, host, end, at: a.at }) ??
+      `Connection point at ${Math.round(a.at * 100)}% along ${this.describeLink(host.id)}.`;
+    this.announce(text);
+  }
+
+  /**
+   * Arrow keys on a selected link with an attached end move that end along its host link: the end
+   * steps in the arrow's direction when the host link runs that way there. True when the key was used.
+   */
+  private nudgeAttach(delta: Point): boolean {
+    const sel = this.diagram.getSelection();
+    if (sel.length !== 1 || sel[0]!.kind !== 'link') return false;
+    for (const { end, host, at } of this.attachedEnds(sel[0]!.id)) {
+      const path = this.linkPath(host);
+      const cur = path && pointAlong(path, at);
+      if (!path || !cur) continue;
+      const next = fractionAlong(path, { x: cur.point.x + delta.x, y: cur.point.y + delta.y });
+      const moved = pointAlong(path, next)!.point;
+      if (moved.x === cur.point.x && moved.y === cur.point.y) continue;
+      if (this.commands.moveAttach(sel[0]!.id, end, next)) {
+        this.announceAttach(sel[0]!.id, end);
+        return true;
+      }
+    }
+    return false;
   }
 
   private onDoubleClick = (e: MouseEvent): void => {
@@ -669,16 +813,20 @@ export class EditorController {
         break;
       }
       case 'nudgeLeft':
-        c.moveBy(this.selectedNodes(), { x: -nudge, y: 0 });
+        if (!this.nudgeAttach({ x: -nudge, y: 0 }))
+          c.moveBy(this.selectedNodes(), { x: -nudge, y: 0 });
         break;
       case 'nudgeRight':
-        c.moveBy(this.selectedNodes(), { x: nudge, y: 0 });
+        if (!this.nudgeAttach({ x: nudge, y: 0 }))
+          c.moveBy(this.selectedNodes(), { x: nudge, y: 0 });
         break;
       case 'nudgeUp':
-        c.moveBy(this.selectedNodes(), { x: 0, y: -nudge });
+        if (!this.nudgeAttach({ x: 0, y: -nudge }))
+          c.moveBy(this.selectedNodes(), { x: 0, y: -nudge });
         break;
       case 'nudgeDown':
-        c.moveBy(this.selectedNodes(), { x: 0, y: nudge });
+        if (!this.nudgeAttach({ x: 0, y: nudge }))
+          c.moveBy(this.selectedNodes(), { x: 0, y: nudge });
         break;
     }
     e.preventDefault();
@@ -769,13 +917,14 @@ export class EditorController {
 
   private onConnectKey(e: KeyboardEvent): boolean {
     const kb = this.kb!;
-    const list = kb.phase === 'source' ? kb.ports : kb.targets;
+    const list: KbTarget[] = kb.phase === 'source' ? kb.ports : kb.targets;
     const step = (d: number) => {
       if (!list.length) return;
       kb.index = (kb.index + d + list.length) % list.length;
+      const cur = list[kb.index]!;
       // A culled (off-screen) node has no visible port: show it (FR-55).
-      this.diagram.culling?.reveal(list[kb.index]!.node);
-      this.announce(`${this.describePort(list[kb.index]!)}, ${kb.index + 1} of ${list.length}.`);
+      if (!onLink(cur)) this.diagram.culling?.reveal(cur.node);
+      this.announce(`${this.describeTarget(cur)}, ${kb.index + 1} of ${list.length}.`);
     };
     switch (e.key) {
       case 'Tab':
@@ -820,7 +969,7 @@ export class EditorController {
     kb.kind = !accepts || accepts.includes(this.linkKind) ? this.linkKind : accepts[0]!;
     const origin = this.portLocation(from);
     // Compatible targets, nearest first.
-    kb.targets = this.commands
+    const ports: KbTarget[] = this.commands
       .compatiblePorts(from, kb.kind)
       .map((t) => ({ t, p: this.portLocation(t) }))
       .sort((a, b) =>
@@ -830,6 +979,7 @@ export class EditorController {
           : 0,
       )
       .map((x) => x.t);
+    kb.targets = [...ports, ...this.keyboardLinkTargets(from, kb.kind, origin)];
     if (!kb.targets.length) {
       // Say why when the source itself is the problem (a full port); otherwise nothing fits.
       const full =
@@ -845,18 +995,55 @@ export class EditorController {
     kb.from = from;
     kb.phase = 'target';
     kb.index = 0;
+    const what =
+      kb.targets.length === ports.length ? 'compatible ports' : 'compatible ports and links';
     this.announce(
-      `${kb.targets.length} compatible ports. ${this.describePort(kb.targets[0]!)}, 1 of ${kb.targets.length}. Press Enter to connect.`,
+      `${kb.targets.length} ${what}. ${this.describeTarget(kb.targets[0]!)}, 1 of ${kb.targets.length}. Press Enter to connect.`,
     );
+  }
+
+  private describeTarget(t: KbTarget): string {
+    return onLink(t) ? this.describeLink(t.link) : this.describePort(t);
+  }
+
+  private targetLocation(t: KbTarget): Point | undefined {
+    if (!onLink(t)) return this.portLocation(t);
+    const path = this.linkPath(t.link);
+    const a = t.proposal.toAttach ?? t.proposal.fromAttach;
+    return path && a ? pointAlong(path, a.at)?.point : undefined;
+  }
+
+  /**
+   * Links a keyboard connect from `from` can attach to (`DiagramOptions.linkAttach`), nearest first.
+   * The new end lands on the middle of the link; the arrow keys move it once the link exists.
+   */
+  private keyboardLinkTargets(from: LinkEnd, kind: string, origin: Point | undefined): KbTarget[] {
+    if (!this.diagram.options.linkAttach) return [];
+    const indexes = this.commands.connectIndexes();
+    const out: { t: KbTarget; d: number }[] = [];
+    for (const l of this.diagram.store.links.values()) {
+      const r = this.commands.attachCheck(from, l.id, 0.5, kind, indexes);
+      if (!r?.check.ok) continue;
+      const t: KbTarget = { link: l.id, proposal: r.proposal };
+      const p = this.targetLocation(t);
+      out.push({ t, d: origin && p ? Math.hypot(p.x - origin.x, p.y - origin.y) : 0 });
+    }
+    return out.sort((a, b) => a.d - b.d).map((x) => x.t);
   }
 
   private finishKeyboardConnect(): void {
     const kb = this.kb!;
     const to = kb.targets[kb.index]!;
-    const r = this.commands.tryConnect(kb.from!, to, kb.kind);
+    const r = onLink(to)
+      ? this.commands.tryAttach(to.proposal)
+      : this.commands.tryConnect(kb.from!, to, kb.kind);
     if (r.ok) {
       this.kb = null;
-      this.announce(`Connected ${this.describePort(kb.from!)} to ${this.describePort(to)}.`);
+      this.announce(
+        `Connected ${this.describePort(kb.from!)} to ${this.describeTarget(to)}.${
+          onLink(to) ? ' Use the arrow keys to move the connection point.' : ''
+        }`,
+      );
     } else {
       this.announce(r.reason);
     }
@@ -1070,6 +1257,22 @@ export class EditorController {
             }),
           );
         }
+        // An end drawn on another link can be dragged along it.
+        for (const { end } of this.attachedEnds(id)) {
+          const at = end === 'from' ? path[0]! : path[path.length - 1]!;
+          out.push(
+            el('circle', {
+              class: 'pv-attach-handle',
+              'data-pv-handle': 'attach',
+              'data-link': id,
+              'data-end': end,
+              cx: at.x,
+              cy: at.y,
+              r: 5 * s,
+              'stroke-width': 1.5 * s,
+            }),
+          );
+        }
       }
     }
 
@@ -1118,8 +1321,10 @@ export class EditorController {
           );
         }
       }
-      const drop = this.connectTarget(g, g.current);
-      const target = drop?.ok ? drop.end : null;
+      const onPort = this.connectTarget(g, g.current);
+      // A link is only the target when no port and no node body is under the pointer.
+      const drop = onPort ?? (this.nodeDrop(g, g.current) ? null : this.linkDrop(g, g.current));
+      const target = drop?.ok && !drop.attach ? drop.end : null;
       const idx = target
         ? g.targets.findIndex((t) => t.node === target.node && t.port === target.port)
         : -1;
@@ -1132,9 +1337,25 @@ export class EditorController {
         g.hot = hotEl;
       }
       out.push(g.layer);
+      if (drop?.ok && drop.attach) {
+        // Hovering a link the connection can attach to: mark where the new end would land.
+        out.push(
+          el('circle', {
+            class: 'pv-port-target pv-hot pv-attach-target',
+            'data-target-link': (drop.attach.proposal.toAttach ?? drop.attach.proposal.fromAttach)!
+              .link,
+            cx: drop.attach.point.x,
+            cy: drop.attach.point.y,
+            r: 7 * s,
+            'stroke-width': s,
+          }),
+        );
+      }
       if (drop && !drop.ok) {
-        // Hovering a port that refuses the link: show why, next to the pointer (FR-42).
-        const ref = g.refused.find((r) => r.node === drop.end.node && r.port === drop.end.port)!;
+        // Hovering a port or link that refuses the connection: show why, next to the pointer (FR-42).
+        const ref =
+          drop.attach ??
+          g.refused.find((r) => r.node === drop.end.node && r.port === drop.end.port)!;
         out.push(
           el('circle', {
             class: 'pv-port-target pv-refused',
@@ -1165,8 +1386,8 @@ export class EditorController {
     }
     const kb = this.kb;
     if (kb) {
-      const cur = (kb.phase === 'source' ? kb.ports : kb.targets)[kb.index];
-      const at = cur && this.portLocation(cur);
+      const cur: KbTarget | undefined = (kb.phase === 'source' ? kb.ports : kb.targets)[kb.index];
+      const at = cur && this.targetLocation(cur);
       const origin = kb.from && this.portLocation(kb.from);
       if (origin && at) {
         out.push(

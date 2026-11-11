@@ -49,6 +49,7 @@ import { IssueLayer } from '../render/issues';
 import { exportPng, exportSvgString } from '../render/export';
 import { TransactionImpl, applyOp, diffOf, invertOp, isEmptyDiff, type Op } from './transaction';
 import type {
+  ConnectAttach,
   ConnectResult,
   DiagramApi,
   DiagramEvents,
@@ -946,9 +947,15 @@ export class Diagram implements DiagramApi {
   /**
    * Connects two ports, applying every rule (roles, limits, direction, graph rules, `canConnect`), as
    * one undo step (FR-54). The link is stored in flow order. Returns its id, or the explained refusal.
+   * `attach` draws an end of the new link on another link (`fromAttach` / `toAttach`).
    */
-  connect(from: LinkEnd, to: LinkEnd, kind: LinkKind = 'process'): ConnectResult {
-    return connectLink(this, from, to, kind);
+  connect(
+    from: LinkEnd,
+    to: LinkEnd,
+    kind: LinkKind = 'process',
+    attach: ConnectAttach = {},
+  ): ConnectResult {
+    return connectLink(this, from, to, kind, attach);
   }
 
   suppressNextClick(): void {

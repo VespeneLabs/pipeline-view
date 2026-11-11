@@ -2,11 +2,13 @@
  * Connection validation (FR-41, FR-42): port roles, link limits, direction and the host hook, with
  * explained refusals. DOM-free, so the editor, `connect()` and hosts' own forms share one rule set.
  */
-import type { LinkEnd, LinkKind, NodeModel } from '../model/types';
+import type { LinkAttach, LinkEnd, LinkKind, NodeModel } from '../model/types';
 import type { PortDef } from '../symbols/types';
 import { findPort } from '../symbols/resolve';
 import type { Diagram } from './diagram';
 import type {
+  ConnectAttach,
+  ConnectContext,
   ConnectResult,
   RefusalCode,
   RefusalContext,
@@ -17,7 +19,7 @@ import { type Graph, buildGraph, flowPathIn } from '../graph/graph';
 
 export type ConnectCheck =
   /** Allowed. `from` / `to` are in flow order (outlet → inlet), which may swap the arguments. */
-  | { ok: true; from: LinkEnd; to: LinkEnd }
+  | { ok: true; from: LinkEnd; to: LinkEnd; fromAttach?: LinkAttach; toAttach?: LinkAttach }
   | ({
       ok: false;
       code: RefusalCode;
@@ -39,6 +41,8 @@ const DEFAULT_REASONS: Record<string, (ctx: RefusalContext) => string> = {
   duplicate: () => 'These ports are already connected.',
   'max-links-between-nodes': () => 'These nodes are already connected.',
   cycle: () => 'This link would create a cycle.',
+  'attach-missing-link': () => 'That link does not exist.',
+  'attach-locked': () => 'This link is locked.',
   refused: () => 'This connection is not allowed.',
 };
 
@@ -53,11 +57,21 @@ export function isDirected(diagram: Diagram, kind: LinkKind): boolean {
 const role = (p: PortDef) => p.role ?? 'both';
 const portKey = (e: LinkEnd) => `${e.node}\u0000${e.port}`;
 
-/** Number of links on each port, for `maxLinks` checks. Build it once per gesture. */
+/**
+ * Number of links on each port, for `maxLinks` checks. Build it once per gesture. An end drawn on
+ * another link (`fromAttach` / `toAttach`) doesn't land on its port, so it isn't counted.
+ */
 export function portLinkCounts(diagram: Diagram): Map<string, number> {
   const counts = new Map<string, number>();
-  for (const l of diagram.store.links.values()) {
-    for (const e of [l.from, l.to]) counts.set(portKey(e), (counts.get(portKey(e)) ?? 0) + 1);
+  const links = diagram.store.links;
+  for (const l of links.values()) {
+    for (const [e, attach] of [
+      [l.from, l.fromAttach],
+      [l.to, l.toAttach],
+    ] as const) {
+      if (attach && links.has(attach.link)) continue;
+      counts.set(portKey(e), (counts.get(portKey(e)) ?? 0) + 1);
+    }
   }
   return counts;
 }
@@ -107,6 +121,10 @@ function cycleKinds(diagram: Diagram): LinkKind[] | null {
  * `canConnect`. The first refusal wins.
  * Pass prebuilt `indexes` when checking many candidates during one gesture.
  *
+ * `attach` says which ends of the new link are drawn on another link. Such an end must name an
+ * existing, unlocked link; it is exempt from its port's `maxLinks`, since it doesn't land on the port.
+ * Everything else, including `canConnect` (which gets the attachment as context), applies as usual.
+ *
  * Notes on the order: `maxLinksBetweenNodes` counts links between the two nodes in BOTH directions and
  * runs before the cycle check, so with `maxLinksBetweenNodes: 1` a reverse link B→A next to an existing
  * A→B reports `max-links-between-nodes`, not `cycle`. Refusal contexts (`refusalMessages`,
@@ -119,6 +137,7 @@ export function validateConnect(
   to: LinkEnd,
   kind: LinkKind,
   indexes: ConnectIndexes = {},
+  attach: ConnectAttach = {},
 ): ConnectCheck {
   const opts = diagram.options;
   const a = diagram.store.nodes.get(from.node);
@@ -134,6 +153,10 @@ export function validateConnect(
   const src = swap ? to : from;
   const dst = swap ? from : to;
   const ends = { from: src, to: dst, ...(swap ? { dragFrom: from, dragTo: to } : {}) };
+  // The attachments follow their ends into flow order.
+  const srcAttach = swap ? attach.toAttach : attach.fromAttach;
+  const dstAttach = swap ? attach.fromAttach : attach.toAttach;
+  const hostOf = (a: LinkAttach | undefined) => a && diagram.store.links.get(a.link);
   const refuse = (code: RefusalCode, detail?: Record<string, unknown>, reason?: string) =>
     refusal(diagram, code, { ...ends, kind, ...(detail ? { detail } : {}) }, reason);
   // Read only after the missing-port check below.
@@ -144,7 +167,16 @@ export function validateConnect(
     if (!opts.canConnect || !a || !b) return null;
     const na = swap ? b : a;
     const nb = swap ? a : b;
-    const r = opts.canConnect({ node: na, port: src.port }, { node: nb, port: dst.port }, kind);
+    const end = srcAttach ? 'from' : 'to';
+    const at = srcAttach ?? dstAttach;
+    const host = hostOf(at);
+    const ctx: ConnectContext = at && host ? { attach: { end, link: host, at: at.at } } : {};
+    const r = opts.canConnect(
+      { node: na, port: src.port },
+      { node: nb, port: dst.port },
+      kind,
+      ctx,
+    );
     return fromValidation(diagram, r, { ...ends, kind });
   };
 
@@ -158,6 +190,12 @@ export function validateConnect(
       node: !pa ? from.node : to.node,
       port: !pa ? from.port : to.port,
     });
+  }
+  for (const a of [srcAttach, dstAttach]) {
+    if (!a) continue;
+    const host = hostOf(a);
+    if (!host) return refuse('attach-missing-link', { link: a.link });
+    if (host.locked) return refuse('attach-locked', { link: a.link });
   }
   if (from.node === to.node && from.port === to.port) return refuse('same-port');
   if (opts.noSelfLoops && from.node === to.node) return refuse('self-loop', { node: from.node });
@@ -177,10 +215,11 @@ export function validateConnect(
   }
 
   const counts = indexes.counts ?? portLinkCounts(diagram);
-  for (const [end, p] of [
-    [src, ps],
-    [dst, pd],
+  for (const [end, p, attached] of [
+    [src, ps, srcAttach],
+    [dst, pd, dstAttach],
   ] as const) {
+    if (attached) continue;
     if (p.maxLinks !== undefined && (counts.get(portKey(end)) ?? 0) >= p.maxLinks) {
       return refuse('port-full', { node: end.node, port: end.port, maxLinks: p.maxLinks });
     }
@@ -208,7 +247,13 @@ export function validateConnect(
     const h = runHook();
     if (h && !h.ok) return h;
   }
-  return { ok: true, from: src, to: dst };
+  return {
+    ok: true,
+    from: src,
+    to: dst,
+    ...(srcAttach ? { fromAttach: srcAttach } : {}),
+    ...(dstAttach ? { toAttach: dstAttach } : {}),
+  };
 }
 
 /** Builds a refusal with the final (possibly host-localized) message. */
@@ -277,12 +322,22 @@ export function connectLink(
   from: LinkEnd,
   to: LinkEnd,
   kind: LinkKind = 'process',
+  attach: ConnectAttach = {},
 ): ConnectResult {
-  const check = validateConnect(diagram, from, to, kind);
+  const check = validateConnect(diagram, from, to, kind, {}, attach);
   if (!check.ok) return check;
   let n = 1;
   while (diagram.store.links.has(`${kind}_${n}`)) n++;
   const id = `${kind}_${n}`;
-  diagram.update((tx) => tx.addLink({ id, from: { ...check.from }, to: { ...check.to }, kind }));
+  diagram.update((tx) =>
+    tx.addLink({
+      id,
+      from: { ...check.from },
+      to: { ...check.to },
+      kind,
+      ...(check.fromAttach ? { fromAttach: { ...check.fromAttach } } : {}),
+      ...(check.toAttach ? { toAttach: { ...check.toAttach } } : {}),
+    }),
+  );
   return { ok: true, id };
 }
