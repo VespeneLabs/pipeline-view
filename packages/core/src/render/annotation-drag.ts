@@ -205,7 +205,21 @@ export class AnnotationDrag {
     p.el.removeAttribute('data-dragging');
     // The click that ends a drag must not select or reach nodeClick.
     this.diagram.suppressNextClick();
-    if (emit) this.finish(p, commit);
+    if (emit) this.say(p, this.finish(p, commit), commit);
+  }
+
+  /** Announces how a move ended. A commit that changed nothing (a veto, for example) counts as cancelled. */
+  private say(m: Move, at: Point | undefined, commit: boolean): void {
+    if (!at) return;
+    const d = this.diagram;
+    const msg = d.options.annotationMessages;
+    const name = d.annotationName(m.id);
+    const moved = commit && (at.x !== m.start.x || at.y !== m.start.y);
+    d.announce(
+      moved
+        ? (msg?.moved?.(name, at, true) ?? `Moved ${name}.`)
+        : (msg?.cancelled?.(name) ?? `Move cancelled. ${name}.`),
+    );
   }
 
   // ---- keyboard --------------------------------------------------------------
@@ -225,7 +239,16 @@ export class AnnotationDrag {
       // With grid snap the step is a grid cell; Shift takes a bigger step either way.
       const base = grid?.snap ? grid.size : 1;
       const step = e.shiftKey ? (grid?.snap ? base * 5 : (grid?.size ?? 10)) : base;
+      const before = m.at;
       this.apply(m, this.snap(m.id, { x: m.at.x + dir.x * step, y: m.at.y + dir.y * step }));
+      if (m.at !== before) {
+        // One step: just where it is now. The name was read when the annotation got focus.
+        const d = this.diagram;
+        d.announce(
+          d.options.annotationMessages?.moved?.(d.annotationName(m.id), { ...m.at }, false) ??
+            `${Math.round(m.at.x)}, ${Math.round(m.at.y)}`,
+        );
+      }
     } else if (k && e.target === k.el && (e.key === 'Enter' || e.key === 'Escape')) {
       this.endKeys(e.key === 'Enter');
     } else return;
@@ -241,10 +264,6 @@ export class AnnotationDrag {
     const k = this.keys;
     this.keys = null;
     if (!k) return;
-    const at = this.finish(k, commit);
-    if (!at) return;
-    const name = k.el.getAttribute('aria-label') ?? k.id;
-    const where = `${Math.round(at.x)}, ${Math.round(at.y)}`;
-    this.diagram.announce(commit ? `Moved ${name} to ${where}.` : `Move cancelled. ${name}.`);
+    this.say(k, this.finish(k, commit), commit);
   }
 }

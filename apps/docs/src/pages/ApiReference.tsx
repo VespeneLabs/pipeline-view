@@ -350,6 +350,14 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
         doc: 'Emitted while the user moves an annotation. position is in the space of AnnotationModel.position (relative to the anchor node when anchored). final is true once, when the move ends: save then. Also as onAnnotationMove on <PipelineView>.',
       },
       {
+        sig: 'annotationName(annotation, anchor) => string | undefined',
+        doc: "The accessible name of a draggable annotation: its aria-label and the name in move announcements. Return undefined for the default (a text annotation's text, else the anchor node's label, else the annotation id), for example when the label lives in the node's data. The name follows the annotation and its anchor, live data included; call refreshAnnotationNames() when anything else it reads changes (a locale). Also a <PipelineView> prop that can change at any time.",
+      },
+      {
+        sig: 'annotationMessages: { moved?(name, position, final), cancelled?(name) }',
+        doc: 'Phrases or localizes what a move announces through the live region. moved with final: false is one keyboard step (default: the rounded position, "12, -80"); with final: true it is a finished pointer or keyboard move (default: "Moved {name}."). cancelled covers Escape, a cancelled pointer and a vetoed commit (default: "Move cancelled. {name}."). Return undefined to keep a default, or an empty string to say nothing. Also a <PipelineView> prop.',
+      },
+      {
         sig: 'setAnnotationPositions(Record<id, Point> | null) / getAnnotationPosition(id)',
         doc: 'Display positions that override the model position. Passing a new record replaces the previous one, so leaving an id out (or passing null) puts annotations back on their model position. getAnnotationPosition returns the effective position; placement, leaders, itemBounds() and getBounds() all use it.',
       },

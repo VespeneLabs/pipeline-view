@@ -846,11 +846,30 @@ export class Diagram implements DiagramApi {
     return a.draggable === true || o === 'always' || (o === 'edit' && this.mode === 'edit');
   }
 
+  /** The accessible name of an annotation (`annotationName`, then its text, anchor label or id). */
+  annotationName(id: string): string {
+    const a = this.store.annotations.get(id);
+    if (!a) return id;
+    const anchor = a.anchor && this.store.nodes.get(a.anchor.node);
+    return (
+      this.options.annotationName?.(a, anchor) ?? (a.kind === 'text' ? a.text : anchor?.label) ?? id
+    );
+  }
+
+  /**
+   * Re-reads `annotationName` for every draggable annotation and updates the `aria-label`s in place.
+   * Names already follow the annotation and its anchor; call this when the function itself, or
+   * something else it reads (the locale, a host store), changed.
+   */
+  refreshAnnotationNames(): void {
+    this.overlay?.refreshNames();
+  }
+
   private liveRegion: HTMLElement | undefined;
 
   /** @internal Says `text` through a polite live region (screen readers). */
   announce(text: string): void {
-    if (!this.liveRegion) return;
+    if (!this.liveRegion || !text) return;
     // Clear first, so repeating the same message is announced again.
     this.liveRegion.textContent = '';
     this.liveRegion.textContent = text;

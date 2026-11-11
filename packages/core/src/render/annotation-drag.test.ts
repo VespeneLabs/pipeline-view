@@ -327,7 +327,9 @@ describe('annotation drag: keyboard', () => {
     el.focus();
     const e = key(el, 'ArrowRight');
     expect(e.defaultPrevented).toBe(true);
+    expect(live()).toBe('1, -80'); // a step says where it is now
     key(el, 'ArrowDown', { shiftKey: true });
+    expect(live()).toBe('1, -70');
     expect(d.getAnnotationPosition('reading')).toEqual({ x: 1, y: -70 });
     expect(changes).toHaveLength(0); // nothing committed yet
     expect(moves.every((m) => !m.final)).toBe(true);
@@ -335,7 +337,7 @@ describe('annotation drag: keyboard', () => {
     expect(moves.at(-1)).toEqual({ id: 'reading', position: { x: 1, y: -70 }, final: true });
     expect(modelPos('reading')).toEqual({ x: 1, y: -70 });
     expect(changes).toHaveLength(1);
-    expect(live()).toBe('Moved Tank 1 to 1, -70.');
+    expect(live()).toBe('Moved Tank 1.');
     d.undo();
     expect(modelPos('reading')).toEqual({ x: 0, y: -80 }); // one step for the whole move
   });
@@ -352,7 +354,7 @@ describe('annotation drag: keyboard', () => {
     key(el, 'ArrowLeft');
     el.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
     expect(moves.at(-1)).toEqual({ id: 'reading', position: { x: -1, y: -80 }, final: true });
-    expect(live()).toBe('Moved Tank 1 to -1, -80.');
+    expect(live()).toBe('Moved Tank 1.');
     expect(d.isDirty()).toBe(false);
   });
 
@@ -392,5 +394,120 @@ describe('annotation drag with the editor (edit mode)', () => {
     expect(modelPos('reading')).toEqual({ x: 31, y: -80 });
     expect(d.toJSON().nodes[0]!.position).toEqual({ x: 100, y: 100 });
     detach();
+  });
+});
+
+describe('annotation names and announcements', () => {
+  const live = () => $('.pv-live').textContent;
+  const label = (id: string) =>
+    $(`[data-annotation-id="${id}"]:not(.pv-leader)`).getAttribute('aria-label');
+
+  it('falls back to the text, then the anchor label, then the annotation id', () => {
+    setup({ annotationDrag: 'always' });
+    expect(label('title')).toBe('Area 1');
+    expect(label('reading')).toBe('Tank 1');
+    // No label on the anchor: the annotation's own id, never the node's internal id.
+    d.update((tx) => tx.updateNode('tank', { label: undefined }));
+    flush();
+    expect(label('reading')).toBe('reading');
+    expect(d.annotationName('reading')).toBe('reading');
+  });
+
+  it('uses annotationName, and its undefined result keeps the fallback', () => {
+    const annotationName = vi.fn<NonNullable<DiagramOptions['annotationName']>>((a, anchor) =>
+      a.kind === 'html' ? `Reading ${String(anchor?.data?.tag ?? '?')}` : undefined,
+    );
+    setup({ annotationDrag: 'always', annotationName });
+    expect(label('reading')).toBe('Reading ?');
+    expect(label('title')).toBe('Area 1');
+    expect(annotationName.mock.calls.find(([a]) => a.id === 'reading')![1]!.id).toBe('tank');
+    expect(annotationName.mock.calls.find(([a]) => a.id === 'title')![1]).toBeUndefined();
+  });
+
+  it('updates the name in place when the anchor data, the annotation or the option changes', () => {
+    setup({
+      annotationDrag: 'always',
+      annotationName: (a, anchor) =>
+        a.kind === 'html'
+          ? `${String(a.data?.prefix ?? 'Reading')} ${String(anchor?.data?.tag)}`
+          : undefined,
+    });
+    const el = reading();
+    card.mockClear();
+    // Live data on the anchor (its text lives in data).
+    d.setNodeData('tank', { tag: 'TI-101' });
+    flush();
+    expect(label('reading')).toBe('Reading TI-101');
+    // The annotation itself.
+    d.update((tx) => tx.updateAnnotation('reading', { data: { prefix: 'Temp' } }));
+    flush();
+    expect(label('reading')).toBe('Temp TI-101');
+    // The anchor through a transaction.
+    d.update((tx) => tx.updateNode('tank', { data: { tag: 'TI-9' } }));
+    flush();
+    expect(label('reading')).toBe('Temp TI-9');
+    // The option: names refresh without re-placing or re-rendering anything.
+    card.mockClear();
+    d.options.annotationName = () => 'Karta';
+    d.refreshAnnotationNames();
+    expect(label('reading')).toBe('Karta');
+    expect(label('title')).toBe('Karta');
+    expect(card).not.toHaveBeenCalled();
+    expect(reading()).toBe(el); // same slot throughout: no remount
+    expect(cleanup).not.toHaveBeenCalled();
+  });
+
+  it('announces pointer drags without coordinates, and a vetoed commit as cancelled', () => {
+    setup({ annotationDrag: 'always' });
+    drag(reading(), 30, 0);
+    expect(live()).toBe('Moved Tank 1.');
+    d.options.beforeChange = () => false;
+    drag(reading(), 30, 0);
+    expect(live()).toBe('Move cancelled. Tank 1.');
+    drag(reading(), 30, 0, false);
+    pointer('pointercancel', reading(), 80, 50);
+    expect(live()).toBe('Move cancelled. Tank 1.');
+  });
+
+  it('phrases every announcement through annotationMessages', () => {
+    const moved = vi.fn((name: string, p: { x: number; y: number }, final: boolean) =>
+      final ? `Przeniesiono: ${name}` : `${name} → ${p.x}`,
+    );
+    setup({
+      annotationDrag: 'always',
+      annotationMoves: 'display',
+      annotationName: () => 'Karta',
+      annotationMessages: { moved, cancelled: (name) => `Anulowano: ${name}` },
+    });
+    const el = reading();
+    key(el, 'ArrowRight');
+    expect(live()).toBe('Karta → 1');
+    expect(moved).toHaveBeenLastCalledWith('Karta', { x: 1, y: -80 }, false);
+    key(el, 'Enter');
+    expect(live()).toBe('Przeniesiono: Karta');
+    expect(moved).toHaveBeenLastCalledWith('Karta', { x: 1, y: -80 }, true);
+    key(el, 'ArrowRight');
+    key(el, 'Escape');
+    expect(live()).toBe('Anulowano: Karta');
+    // Pointer frames aren't announced: only the final move.
+    moved.mockClear();
+    drag(el, 30, 0);
+    expect(moved).toHaveBeenCalledTimes(1);
+    expect(live()).toBe('Przeniesiono: Karta');
+  });
+
+  it('keeps a default for a message left out, and says nothing for an empty string', () => {
+    setup({
+      annotationDrag: 'always',
+      annotationMessages: { moved: (_n, _p, final) => (final ? undefined : '') },
+    });
+    const el = reading();
+    key(el, 'ArrowRight');
+    expect(live()).toBe(''); // steps silenced
+    key(el, 'Enter');
+    expect(live()).toBe('Moved Tank 1.');
+    key(el, 'ArrowRight');
+    key(el, 'Escape');
+    expect(live()).toBe('Move cancelled. Tank 1.');
   });
 });

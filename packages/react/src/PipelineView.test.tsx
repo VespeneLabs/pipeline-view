@@ -141,6 +141,46 @@ describe('<PipelineView>', () => {
     expect(el.hasAttribute('data-draggable')).toBe(false);
   });
 
+  it('reads annotationName and annotationMessages from the latest props', async () => {
+    const ref = createRef<Diagram>();
+    const m: DiagramModel = {
+      ...model(),
+      annotations: [{ id: 'note', kind: 'text', text: 'Hi', position: { x: 0, y: -40 } }],
+    };
+    const view = (prefix: string | null, verb?: string) => (
+      <PipelineView
+        ref={ref}
+        model={m}
+        fitOnLoad={false}
+        annotationDrag="always"
+        annotationMoves="display"
+        annotationName={prefix === null ? undefined : (a) => `${prefix} ${a.id}`}
+        annotationMessages={verb ? { moved: (name) => `${verb} ${name}` } : undefined}
+      />
+    );
+    const { container, rerender } = render(view(null));
+    const d = ref.current!;
+    await act(async () => d.overlay!.flush());
+    const el = container.querySelector('[data-annotation-id="note"]')!;
+    const live = () => container.querySelector('.pv-live')!.textContent;
+    const move = () => {
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    };
+    expect(el.getAttribute('aria-label')).toBe('Hi'); // default: the text
+    move();
+    expect(live()).toBe('Moved Hi.'); // default message
+
+    rerender(view('Note', 'Przeniesiono'));
+    expect(el.getAttribute('aria-label')).toBe('Note note'); // updated in place
+    expect(container.querySelector('[data-annotation-id="note"]')).toBe(el);
+    move();
+    expect(live()).toBe('Przeniesiono Note note');
+
+    rerender(view('Uwaga', 'Przeniesiono'));
+    expect(el.getAttribute('aria-label')).toBe('Uwaga note');
+  });
+
   it('applies ariaLabel at creation and when it changes', () => {
     const { container, rerender } = render(<PipelineView model={model()} ariaLabel="Station A" />);
     const root = () => container.querySelector('.pv-root')!;
