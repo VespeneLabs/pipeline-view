@@ -12,6 +12,7 @@
 import type { Diagram } from '../diagram/diagram';
 import type { DiffMark } from '../diagram/types';
 import { nodeBounds, nodeTransform, portPoint } from '../diagram/geometry';
+import { orientationKey, uprightTexts } from './upright';
 import { getDiff, type GetDiffOptions } from '../model/compare';
 import type { DiagramModel, LinkModel, NodeModel, Point } from '../model/types';
 import { nodeSize } from '../symbols/resolve';
@@ -149,6 +150,7 @@ export class DiffLayer {
     body.innerHTML = def
       ? (def.render?.({ data: n.data ?? {}, label: n.label, status: n.status }) ?? def.svg ?? '')
       : `<rect width="${width}" height="${height}" fill="none" stroke="currentColor" stroke-dasharray="4 4"/>`;
+    if (def?.uprightText !== false && orientationKey(n)) uprightTexts(body, n);
     g.append(body);
     if (n.label) {
       const title = this.svg('title', {});
