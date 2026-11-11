@@ -108,11 +108,21 @@ describe('linkLabelPoint', () => {
     expect(linkLabelPoint(path, size, [node])).toEqual({ x: 50, y: 0 });
   });
 
-  it('moves beside a segment when no centred spot is clear', () => {
-    // Nodes hug both sides of the horizontal runs and the vertical run's centre; left of it is free.
+  it('slides along the path when no segment middle is clear', () => {
+    // Boxes sit on the middle of every segment; the vertical run is free from y 210 down.
     const avoid = [
       { x: -20, y: -15, width: 140, height: 30 },
       { x: 98, y: 100, width: 4, height: 100 },
+      { x: 90, y: 285, width: 120, height: 30 },
+    ];
+    expect(linkLabelPoint(path, size, avoid)).toEqual({ x: 100, y: 210 });
+  });
+
+  it('moves beside a segment when no spot on the path is clear', () => {
+    // Nodes hug the horizontal runs and the whole vertical run; left of it is free.
+    const avoid = [
+      { x: -20, y: -15, width: 140, height: 30 },
+      { x: 98, y: 0, width: 4, height: 300 },
       { x: 90, y: 285, width: 120, height: 30 },
     ];
     expect(linkLabelPoint(path, size, avoid)).toEqual({ x: 81, y: 150 });
@@ -128,6 +138,25 @@ describe('linkLabelPoint', () => {
     expect(linkLabelPoint(path, size, [], 0.5)).toEqual({ x: 100, y: 150 });
     expect(linkLabelPoint(path, size, [], 0.1)).toEqual({ x: 50, y: 0 });
     expect(linkLabelPoint(path, size, [], 7)).toEqual({ x: 200, y: 300 });
+  });
+
+  it('treats labelPosition as a preference: slides to the nearest clear spot when it is taken', () => {
+    // Free: exactly the preferred spot, whatever else is around.
+    const far = { x: 300, y: 0, width: 50, height: 50 };
+    expect(linkLabelPoint(path, size, [far], 0.5)).toEqual({ x: 100, y: 150 });
+    // Taken by a box on the middle of the vertical run (y 140..160): the nearest clear spot on the
+    // path is 20 further on (onward wins the tie with 20 back).
+    const taken = { x: 85, y: 140, width: 30, height: 20 };
+    expect(linkLabelPoint(path, size, [taken], 0.5)).toEqual({ x: 100, y: 170 });
+    // With the onward side blocked as well, it goes back instead.
+    const below = { x: 85, y: 160, width: 30, height: 200 };
+    expect(linkLabelPoint(path, size, [taken, below], 0.5)).toEqual({ x: 100, y: 130 });
+    // At 0 the label would sit on the source node (x -40..0): it slides just clear of it.
+    const source = { x: -40, y: -10, width: 40, height: 20 };
+    expect(linkLabelPoint(path, size, [source], 0)).toEqual({ x: 16, y: 0 });
+    // Nothing clear anywhere: the preference stands.
+    const everything = { x: -50, y: -50, width: 400, height: 400 };
+    expect(linkLabelPoint(path, size, [everything], 0.1)).toEqual({ x: 50, y: 0 });
   });
 
   it('returns null without a path', () => {
