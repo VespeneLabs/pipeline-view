@@ -164,7 +164,7 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
       },
       {
         sig: 'LinkModel.label / LinkModel.labelPosition',
-        doc: 'Short text on a link, for example a flowchart answer. It follows the route and sits on the middle of the longest segment that keeps it off nodes (or beside a segment when the route hugs nodes), with a halo so it stays readable over crossings. labelPosition (0..1) places it by fraction of the path length instead. The label is part of the link\'s aria-label ("Yes, Leak test to Report leak"), styled through .pv-link-label and --pv-link-label-ink / --pv-link-label-bg, and hidden below the label zoom threshold.',
+        doc: 'Short text on a link, for example a flowchart answer. It follows the route and sits on the middle of the longest segment that keeps it off nodes and off other link labels, with a halo so it stays readable over crossings. When no segment middle is free it slides along its own path to the nearest free spot (or goes beside a segment when the whole route hugs nodes), so labels of links that converge on one target stay apart. labelPosition (0..1) is the preferred spot by fraction of the path length: it is used when free, otherwise the label slides along the path to the nearest free spot. Placement uses estimated boxes (no layout read), does not depend on the order links were added (labels are placed in link id order), and follows reroutes and node moves. The label is part of the link\'s aria-label ("Yes, Leak test to Report leak"), styled through .pv-link-label and --pv-link-label-ink / --pv-link-label-bg, and hidden below the label zoom threshold.',
       },
       {
         sig: 'NodeModel.locked / LinkModel.locked',

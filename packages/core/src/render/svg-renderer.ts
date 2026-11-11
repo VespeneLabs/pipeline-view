@@ -24,7 +24,8 @@ import {
 } from '../diagram/geometry';
 import { nodePorts, nodeSize } from '../symbols/resolve';
 import type { PortDef } from '../symbols/types';
-import { arrowsPath, linkLabelPoint, linkPath, ticksPath } from './paths';
+import { arrowsPath, linkPath, ticksPath } from './paths';
+import { LinkLabelLayout } from './link-labels';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const LABEL_GAP = 16;
@@ -82,6 +83,10 @@ export class SvgRenderer {
   private crossings = new Map<string, Point[]>();
   private readonly junctionLayer: SVGGElement;
   private readonly router: Router;
+  /** Link labels avoid nodes and each other; re-placed incrementally as routes and nodes change. */
+  private linkLabels = new LinkLabelLayout();
+  /** Node bounds as last seen by the label layout. */
+  private readonly nodeRects = new Map<string, Rect>();
 
   private readonly dirtyNodes = new Set<string>();
   /** Nodes whose size changed outside the model (measured HTML nodes). */
@@ -188,6 +193,8 @@ export class SvgRenderer {
     this.links.clear();
     this.routes.clear();
     this.analyzer = new RouteAnalyzer();
+    this.linkLabels = new LinkLabelLayout();
+    this.nodeRects.clear();
     this.dirtyNodes.clear();
     this.reroute.clear();
     this.removedNodes.clear();
@@ -199,6 +206,7 @@ export class SvgRenderer {
       const g = this.geometrySig(n);
       Object.assign(this.nodes.get(n.id)!, { obstacleSig: g.rectSig, portPointSig: g.pointSig });
       obstacles.set(n.id, g.rect);
+      this.nodeRects.set(n.id, g.rect);
       const label = this.labelObstacle(n);
       this.nodes.get(n.id)!.labelSig = rectKey(label);
       if (label) obstacles.set(labelObstacleId(n.id), label);
@@ -210,6 +218,7 @@ export class SvgRenderer {
     const all = [...store.links.keys()];
     if (this.useWorker(all.length)) this.routeOffThread(obstacles, all);
     else this.routeLinks(all);
+    this.placeLinkLabels();
     this.selectionDirty = true;
   }
 
@@ -307,11 +316,13 @@ export class SvgRenderer {
       this.links.get(id)?.g.remove();
       this.links.delete(id);
       this.routes.delete(id);
+      this.linkLabels.set(id, null);
     }
     if (this.removedLinks.size) this.router.removeRoutes([...this.removedLinks]);
     for (const id of this.removedNodes) {
       this.nodes.get(id)?.g.remove();
       this.nodes.delete(id);
+      this.setNodeRect(id, null);
       for (const l of this.router.updateObstacle(id, null)) this.reroute.add(l);
       for (const l of this.router.updateObstacle(labelObstacleId(id), null)) this.reroute.add(l);
       if (this.pendingWorker.size) this.movedDuringFlight.add(id);
@@ -342,6 +353,7 @@ export class SvgRenderer {
         const { rect, rectSig, pointSig } = this.geometrySig(n);
         const portsMoved = pointSig !== el.portPointSig;
         if (rectSig !== el.obstacleSig) {
+          this.setNodeRect(id, rect);
           // The main router can't see pending (placeholder) links yet; replay this after adoption.
           if (this.pendingWorker.size) this.movedDuringFlight.add(id);
           const own = new Set(store.linksOf(id).map((l) => l.id));
@@ -381,6 +393,8 @@ export class SvgRenderer {
     this.reroute.clear();
     // Removing links alone must still refresh jumps and junction dots.
     if (ids.length || removed.length) this.routeLinks(ids, removed);
+    // Also when nothing was routed: a node may have moved onto a label, or off one.
+    this.placeLinkLabels();
   }
 
   // ---- nodes ---------------------------------------------------------------
@@ -683,6 +697,7 @@ export class SvgRenderer {
     }
     this.drawJunctions(junctions);
     this.updateOccupied();
+    this.placeLinkLabels();
   }
 
   private drawLink(l: LinkModel): void {
@@ -727,40 +742,80 @@ export class SvgRenderer {
     this.drawLinkLabel(el, l, points);
   }
 
-  /** Link label: SVG text with a background halo, placed off nodes along the route. */
+  /**
+   * Link label: SVG text with a background halo. Its place along the route comes from the label
+   * layout (`placeLinkLabels`), which keeps it off nodes and other labels.
+   */
   private drawLinkLabel(el: LinkEl, l: LinkModel, points: Point[]): void {
     if (!l.label) {
       el.label?.remove();
       el.label = undefined;
       el.g.removeAttribute('aria-label');
+      this.linkLabels.set(l.id, null);
       return;
     }
     if (!el.label) {
+      // Hidden until the layout places it.
       el.label = this.svg('text', {
         class: 'pv-link-label',
         'text-anchor': 'middle',
         'dominant-baseline': 'central',
+        visibility: 'hidden',
       }) as SVGTextElement;
       el.g.append(el.label);
     }
     if (el.label.textContent !== l.label) el.label.textContent = l.label;
     // Estimated box (no layout read): wide enough for the halo around ~7 px glyphs.
     const size = { width: l.label.length * 7 + 12, height: 20 };
+    this.linkLabels.set(l.id, { route: points, size, position: l.labelPosition });
     const store = this.diagram.store;
-    const avoid: Rect[] = [];
-    if (l.labelPosition === undefined) {
-      for (const n of store.nodes.values()) avoid.push(nodeBounds(n, this.def(n)));
-    }
-    const at = linkLabelPoint(points, size, avoid, l.labelPosition);
-    el.label.setAttribute('x', String(at?.x ?? 0));
-    el.label.setAttribute('y', String(at?.y ?? 0));
-    if (at) el.label.removeAttribute('visibility');
-    else el.label.setAttribute('visibility', 'hidden');
     const name = (id: string) => {
       const n = store.nodes.get(id);
       return n?.label || id;
     };
     el.g.setAttribute('aria-label', `${l.label}, ${name(l.from.node)} to ${name(l.to.node)}`);
+  }
+
+  /** Records a node's bounds for the label layout: labels near the old and the new rect are re-placed. */
+  private setNodeRect(id: string, rect: Rect | null): void {
+    const prev = this.nodeRects.get(id);
+    if (prev) this.linkLabels.touch(prev);
+    if (rect) {
+      this.linkLabels.touch(rect);
+      this.nodeRects.set(id, rect);
+    } else {
+      this.nodeRects.delete(id);
+    }
+  }
+
+  /** Moves the link labels whose place changed. A no-op when no label, route or node changed. */
+  private placeLinkLabels(): void {
+    const moved = this.linkLabels.update((region) => {
+      const hit: Rect[] = [];
+      for (const r of this.nodeRects.values()) {
+        if (
+          r.x < region.x + region.width &&
+          region.x < r.x + r.width &&
+          r.y < region.y + region.height &&
+          region.y < r.y + r.height
+        ) {
+          hit.push(r);
+        }
+      }
+      return hit;
+    });
+    for (const id of moved) {
+      const label = this.links.get(id)?.label;
+      if (!label) continue;
+      const at = this.linkLabels.point(id);
+      if (at) {
+        label.setAttribute('x', String(at.x));
+        label.setAttribute('y', String(at.y));
+        label.removeAttribute('visibility');
+      } else {
+        label.setAttribute('visibility', 'hidden');
+      }
+    }
   }
 
   private drawJunctions(junctions: Junction[]): void {

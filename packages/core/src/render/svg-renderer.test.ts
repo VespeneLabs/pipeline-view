@@ -128,13 +128,109 @@ describe('SvgRenderer', () => {
     // ab runs straight from (40,10) to (200,10): the label sits on its middle.
     expect([t.getAttribute('x'), t.getAttribute('y')]).toEqual(['120', '10']);
     expect($('[data-link-id="ab"]')!.getAttribute('aria-label')).toBe('Yes, V-1 to b');
+    // labelPosition is honoured where the spot is free...
+    d.update((tx) => tx.updateLink('ab', { labelPosition: 0.75 }));
+    d.renderer!.flush();
+    expect($('[data-link-id="ab"] .pv-link-label')!.getAttribute('x')).toBe('160');
+    // ...and is a preference where it is not: at 0 the label would cover node a (x 0..40), so it
+    // slides along the link until its box (33 wide) is clear of the node.
     d.update((tx) => tx.updateLink('ab', { labelPosition: 0 }));
     d.renderer!.flush();
-    expect($('[data-link-id="ab"] .pv-link-label')!.getAttribute('x')).toBe('40');
+    expect($('[data-link-id="ab"] .pv-link-label')!.getAttribute('x')).toBe('60');
     d.update((tx) => tx.updateLink('ab', { label: undefined }));
     d.renderer!.flush();
     expect($('[data-link-id="ab"] .pv-link-label')).toBeNull();
     expect($('[data-link-id="ab"]')!.hasAttribute('aria-label')).toBe(false);
+  });
+
+  it('keeps the labels of links converging on one target apart, and re-places them as things move', () => {
+    const link = (id: string, from: string, label: string) => ({
+      id,
+      from: { node: from, port: 'out' },
+      to: { node: 't', port: 'in' },
+      kind: 'process' as const,
+      label,
+    });
+    // Three sources stacked left of one target: the links share the corridor into t's in port.
+    const scene = (order: string[]): DiagramModel => ({
+      version: 2,
+      nodes: [
+        { id: 's1', type: 'test/valve', position: { x: 0, y: 0 } },
+        { id: 's2', type: 'test/valve', position: { x: 0, y: 60 } },
+        { id: 's3', type: 'test/valve', position: { x: 0, y: 120 } },
+        { id: 't', type: 'test/valve', position: { x: 500, y: 60 } },
+        { id: 'far', type: 'test/valve', position: { x: 600, y: 600 } },
+      ],
+      links: order.map((id) => link(id, 's' + id.slice(1), 'Option ' + id.slice(1))),
+    });
+    const mountScene = (order: string[]) => {
+      const c = document.createElement('div');
+      document.body.append(c);
+      const dd = new Diagram({ symbols: [valve] });
+      dd.load(scene(order));
+      dd.mount(c);
+      dd.renderer!.flush();
+      return { dd, c };
+    };
+    // The label's estimated box, from its text and position, as the renderer sizes it.
+    const boxes = (c: HTMLElement) =>
+      [...c.querySelectorAll('.pv-link-label')]
+        .map((t) => {
+          const w = t.textContent!.length * 7 + 12;
+          const id = (t.parentNode as SVGElement).dataset.linkId!;
+          expect(t.getAttribute('visibility')).toBeNull();
+          return { id, x: +t.getAttribute('x')! - w / 2, y: +t.getAttribute('y')! - 10, w, h: 20 };
+        })
+        .sort((a, b) => (a.id < b.id ? -1 : 1));
+    const overlapping = (bs: ReturnType<typeof boxes>) =>
+      bs.some((a, i) =>
+        bs.some(
+          (b, j) =>
+            j > i && a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h,
+        ),
+      );
+
+    const one = mountScene(['l1', 'l2', 'l3']);
+    const placed = boxes(one.c);
+    expect(placed).toHaveLength(3);
+    expect(overlapping(placed)).toBe(false);
+
+    // The same links loaded in another order get the same places.
+    const two = mountScene(['l3', 'l1', 'l2']);
+    expect(boxes(two.c)).toEqual(placed);
+    two.dd.destroy();
+    two.c.remove();
+
+    // A node dropped onto a label (no link is attached to it, so nothing reroutes) pushes it away.
+    const l1 = placed[0]!;
+    const texts = () => [...one.c.querySelectorAll('.pv-link-label')];
+    const setAttr = texts().map((t) => vi.spyOn(t, 'setAttribute'));
+    one.dd.update((tx) => tx.updateNode('far', { position: { x: 600, y: 640 } }));
+    one.dd.renderer!.flush();
+    // A move far from every label touches none of them.
+    for (const s of setAttr) expect(s).not.toHaveBeenCalled();
+    const routes = ['l1', 'l2', 'l3'].map((id) => one.dd.getLinkPath(id));
+    one.dd.update((tx) =>
+      tx.updateNode('far', { position: { x: l1.x + l1.w / 2 - 20, y: l1.y + l1.h / 2 - 10 } }),
+    );
+    one.dd.renderer!.flush();
+    const after = boxes(one.c);
+    if (
+      JSON.stringify(routes) ===
+      JSON.stringify(['l1', 'l2', 'l3'].map((id) => one.dd.getLinkPath(id)))
+    ) {
+      // Routes are as they were, so this is the label layout alone reacting to the node.
+      expect(after[0]).not.toEqual(l1);
+    }
+    expect(overlapping(after)).toBe(false);
+    const node = { x: l1.x + l1.w / 2 - 20, y: l1.y, w: 40, h: 20 };
+    for (const b of after) {
+      const hit =
+        b.x < node.x + node.w && node.x < b.x + b.w && b.y < node.y + node.h && node.y < b.y + b.h;
+      expect(hit).toBe(false);
+    }
+    one.dd.destroy();
+    one.c.remove();
   });
 
   it('renders nodes with symbol markup, ports, labels and links by kind', () => {

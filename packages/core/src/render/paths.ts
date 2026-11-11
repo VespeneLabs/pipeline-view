@@ -153,11 +153,20 @@ export function ticksPath(points: readonly Point[], period = 40): string {
   return d;
 }
 
+/** How finely a label slides along its path when looking for a clear spot. */
+const LABEL_SLIDE_STEP = 4;
+
 /**
- * Where a link label goes. With `position` (0..1), at that fraction of the path length. Otherwise at
- * the middle of the longest segment whose label box (`size`, centred) stays clear of every rect in
- * `avoid`; failing that, beside a segment (left/right of vertical runs, above/below horizontal ones);
- * and finally the middle of the longest segment.
+ * Where a link label goes: on the path, with its box (`size`, centred) clear of every rect in `avoid`
+ * (nodes and the labels placed before it).
+ *
+ * With `position` (0..1), that fraction of the path length is the preferred spot. It is used when it
+ * is clear; otherwise the label slides along the path to the nearest clear spot, and stays at the
+ * preferred spot when there is none.
+ *
+ * Without `position`: the middle of the longest segment that is clear; failing that, the clear spot
+ * on the path nearest to the middle of the longest segment; failing that, beside a segment (left/right
+ * of vertical runs, above/below horizontal ones); and finally the middle of the longest segment.
  */
 export function linkLabelPoint(
   points: readonly Point[],
@@ -179,14 +188,16 @@ export function linkLabelPoint(
     x: s.a.x + (s.b.x - s.a.x) * t,
     y: s.a.y + (s.b.y - s.a.y) * t,
   });
-  if (position !== undefined && Number.isFinite(position)) {
-    let rest = Math.min(Math.max(position, 0), 1) * total;
+  /** The point at distance `d` along the path. */
+  const at = (d: number): Point => {
+    let rest = d;
     for (const s of segs) {
       if (rest <= s.len || s === segs[segs.length - 1])
         return along(s, s.len ? Math.min(rest / s.len, 1) : 0);
       rest -= s.len;
     }
-  }
+    return points[points.length - 1]!;
+  };
   const clear = (p: Point) =>
     avoid.every(
       (r) =>
@@ -195,12 +206,36 @@ export function linkLabelPoint(
         p.y + size.height / 2 <= r.y ||
         p.y - size.height / 2 >= r.y + r.height,
     );
+  /** The clear spot on the path nearest to distance `d0` (onward first on a tie), if any. */
+  const slide = (d0: number): Point | null => {
+    for (let off = LABEL_SLIDE_STEP; d0 + off <= total || d0 - off >= 0; off += LABEL_SLIDE_STEP) {
+      for (const d of [d0 + off, d0 - off]) {
+        if (d < 0 || d > total) continue;
+        const p = at(d);
+        if (clear(p)) return p;
+      }
+    }
+    return null;
+  };
+  if (position !== undefined && Number.isFinite(position)) {
+    const d0 = Math.min(Math.max(position, 0), 1) * total;
+    const p = at(d0);
+    return clear(p) ? p : (slide(d0) ?? p);
+  }
   const byLength = [...segs].sort((s, t) => t.len - s.len);
   for (const s of byLength) {
     const p = along(s, 0.5);
     if (clear(p)) return p;
   }
-  // Nothing centred on the line is clear (a route hugging nodes): try beside the line instead.
+  // No segment's middle is clear (labels converging in one corridor): slide along the path.
+  let before = 0;
+  for (const s of segs) {
+    if (s === byLength[0]) break;
+    before += s.len;
+  }
+  const slid = slide(before + byLength[0]!.len / 2);
+  if (slid) return slid;
+  // Nothing on the line is clear (a route hugging nodes): try beside the line instead.
   for (const s of byLength) {
     const p = along(s, 0.5);
     const vertical = s.a.x === s.b.x;
