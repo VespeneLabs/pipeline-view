@@ -163,6 +163,10 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
         doc: 'Veto for every update() (programmatic ones too) and every committed editor gesture, with the same Promise behaviour. Host-driven patch(), applyDiff() and history replays skip it.',
       },
       {
+        sig: 'LinkModel.label / LinkModel.labelPosition',
+        doc: 'Short text on a link, for example a flowchart answer. It follows the route and sits on the middle of the longest segment that keeps it off nodes (or beside a segment when the route hugs nodes), with a halo so it stays readable over crossings. labelPosition (0..1) places it by fraction of the path length instead. The label is part of the link\'s aria-label ("Yes, Leak test to Report leak"), styled through .pv-link-label and --pv-link-label-ink / --pv-link-label-bg, and hidden below the label zoom threshold.',
+      },
+      {
         sig: 'NodeModel.locked / LinkModel.locked',
         doc: 'Saved with the model (v2), and styled through data-locked. In edit mode a locked node cannot be moved or deleted, and a locked link cannot be deleted or reconnected; deleting a selection skips locked items, and nodes whose removal would take a locked link with them. An update() that would remove a locked link (e.g. by removing its port) throws and rolls back.',
       },
