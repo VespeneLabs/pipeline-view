@@ -179,6 +179,11 @@ export interface DiagramOptions {
   minZoom?: number;
   maxZoom?: number;
   routing?: RouterOptions;
+  /**
+   * Route links around node labels too, not only around node bodies (default true). The label's box
+   * is estimated from its text, so it needs no layout read.
+   */
+  routeAroundLabels?: boolean;
   /** Edit-mode validation hooks (FR-29, FR-42). Return a reason to explain a refusal. */
   canConnect?: (
     from: { node: NodeModel; port: string },

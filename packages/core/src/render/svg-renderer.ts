@@ -28,6 +28,14 @@ import { arrowsPath, linkLabelPoint, linkPath, ticksPath } from './paths';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const LABEL_GAP = 16;
+/** Estimated node-label metrics (600 weight, --pv-font-size-label 14px), for the label obstacle. */
+const LABEL_CHAR_WIDTH = 8.5;
+const LABEL_ASCENT = 13;
+const LABEL_HEIGHT = 17;
+/** Space kept between a pipe and a node label. */
+const LABEL_MARGIN = 4;
+const labelObstacleId = (nodeId: string) => `${nodeId}\u0000label`;
+const rectKey = (r: Rect | null) => (r ? `${r.x},${r.y},${r.width},${r.height}` : '');
 const SELECTION_PAD = 4;
 
 interface NodeEl {
@@ -42,6 +50,8 @@ interface NodeEl {
   /** Obstacle rect and resolved port points (diagram coordinates) last given to the router. */
   obstacleSig?: string;
   portPointSig?: string;
+  /** Label obstacle last given to the router ('' when there is none). */
+  labelSig?: string;
 }
 
 interface LinkEl {
@@ -189,6 +199,9 @@ export class SvgRenderer {
       const g = this.geometrySig(n);
       Object.assign(this.nodes.get(n.id)!, { obstacleSig: g.rectSig, portPointSig: g.pointSig });
       obstacles.set(n.id, g.rect);
+      const label = this.labelObstacle(n);
+      this.nodes.get(n.id)!.labelSig = rectKey(label);
+      if (label) obstacles.set(labelObstacleId(n.id), label);
     }
     this.router.setObstacles(obstacles);
     this.crossings = new Map();
@@ -268,6 +281,9 @@ export class SvgRenderer {
           const rect = n ? nodeBounds(n, this.def(n)) : null;
           for (const l of this.router.updateObstacle(id, rect))
             if (store.links.has(l)) reroute.add(l);
+          const label = n ? this.labelObstacle(n) : null;
+          for (const l of this.router.updateObstacle(labelObstacleId(id), label))
+            if (store.links.has(l)) reroute.add(l);
         }
         this.movedDuringFlight.clear();
         if (reroute.size) this.routeLinks([...reroute]);
@@ -297,6 +313,7 @@ export class SvgRenderer {
       this.nodes.get(id)?.g.remove();
       this.nodes.delete(id);
       for (const l of this.router.updateObstacle(id, null)) this.reroute.add(l);
+      for (const l of this.router.updateObstacle(labelObstacleId(id), null)) this.reroute.add(l);
       if (this.pendingWorker.size) this.movedDuringFlight.add(id);
     }
     for (const id of this.dirtyNodes) {
@@ -346,6 +363,15 @@ export class SvgRenderer {
         el.obstacleSig = rectSig;
         el.portPointSig = pointSig;
       }
+      // The label's box moves with the node and changes with its text.
+      const el = this.nodes.get(id)!;
+      const label = this.labelObstacle(n);
+      const labelSig = rectKey(label);
+      if (labelSig !== el.labelSig) {
+        if (this.pendingWorker.size) this.movedDuringFlight.add(id);
+        for (const l of this.router.updateObstacle(labelObstacleId(id), label)) this.reroute.add(l);
+        el.labelSig = labelSig;
+      }
     }
     const ids = [...this.reroute].filter((id) => store.links.has(id));
     this.removedLinks.clear();
@@ -358,6 +384,33 @@ export class SvgRenderer {
   }
 
   // ---- nodes ---------------------------------------------------------------
+
+  /** Where the node's label is drawn (its text baseline centre), or null without a label. */
+  private labelAt(n: NodeModel, def: SymbolDef | undefined): Point | null {
+    if (!n.label) return null;
+    if (def?.labelAnchor) return localToDiagram(n, def, def.labelAnchor);
+    const b = nodeBounds(n, def);
+    return { x: b.x + b.width / 2, y: b.y + b.height + LABEL_GAP };
+  }
+
+  /**
+   * The label as a router obstacle. The router inflates every obstacle by its clearance; a label only
+   * needs a small margin, so the rect is shrunk by the difference (it may end up with a negative size,
+   * which inflates to exactly the label box plus the margin).
+   */
+  private labelObstacle(n: NodeModel): Rect | null {
+    if (this.diagram.options.routeAroundLabels === false) return null;
+    const at = this.labelAt(n, this.def(n));
+    if (!at) return null;
+    const width = n.label!.length * LABEL_CHAR_WIDTH;
+    const inset = this.clearance - LABEL_MARGIN;
+    return {
+      x: at.x - width / 2 + inset,
+      y: at.y - LABEL_ASCENT + inset,
+      width: width - 2 * inset,
+      height: LABEL_HEIGHT - 2 * inset,
+    };
+  }
 
   /** The node's obstacle rect and resolved port points, as comparable signatures. */
   private geometrySig(n: NodeModel) {
@@ -565,12 +618,7 @@ export class SvgRenderer {
       el.label = this.svg('text', { class: 'pv-label', 'text-anchor': 'middle' }) as SVGTextElement;
       el.g.append(el.label);
     }
-    let at: Point;
-    if (def?.labelAnchor) at = localToDiagram(n, def, def.labelAnchor);
-    else {
-      const b = nodeBounds(n, def);
-      at = { x: b.x + b.width / 2, y: b.y + b.height + LABEL_GAP };
-    }
+    const at = this.labelAt(n, def)!;
     el.label.setAttribute('x', String(at.x));
     el.label.setAttribute('y', String(at.y));
     if (el.label.textContent !== n.label) el.label.textContent = n.label;
