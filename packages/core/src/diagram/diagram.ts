@@ -652,6 +652,12 @@ export class Diagram implements DiagramApi {
     this.internal.emit('theme', { theme });
   }
 
+  /** Changes the diagram root's accessible name (`DiagramOptions.ariaLabel`) at any time. */
+  setAriaLabel(label: string): void {
+    this.options.ariaLabel = label;
+    this.view?.root.setAttribute('aria-label', label);
+  }
+
   // ---- viewport ------------------------------------------------------------
 
   getViewport(): Viewport {
