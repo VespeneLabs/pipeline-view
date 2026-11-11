@@ -339,6 +339,87 @@ describe('SvgRenderer', () => {
     d.renderer!.flush();
     expect($$('.pv-junction').length).toBe(before);
   });
+
+  it('skips junction dots where links merge into one port when mergeJunctions is off', () => {
+    const link = (id: string, from: string, to: string) => ({
+      id,
+      from: { node: from, port: 'out' },
+      to: { node: to, port: 'in' },
+      kind: 'process' as const,
+    });
+    // Three sources in a row above one target: their links meet on the way into t's in port.
+    const scene: DiagramModel = {
+      version: 2,
+      nodes: [
+        { id: 's1', type: 'test/valve', position: { x: 0, y: 0 } },
+        { id: 's2', type: 'test/valve', position: { x: 200, y: 0 } },
+        { id: 's3', type: 'test/valve', position: { x: 400, y: 0 } },
+        { id: 't', type: 'test/valve', position: { x: 600, y: 300 } },
+        { id: 'u', type: 'test/valve', position: { x: 600, y: 500 } },
+      ],
+      links: [link('l1', 's1', 't'), link('l2', 's2', 't'), link('l3', 's3', 't')],
+    };
+    const run = (opts: { mergeJunctions?: boolean }) => {
+      const c = document.createElement('div');
+      document.body.append(c);
+      const dd = new Diagram({ symbols: [valve], ...opts });
+      dd.load(scene);
+      dd.mount(c);
+      dd.renderer!.flush();
+      const junctions = () =>
+        analyzeRoutes(
+          [...dd.store.links.keys()].map((id) => ({ linkId: id, points: dd.getLinkPath(id)! })),
+        ).junctions;
+      const dots = () => c.querySelectorAll('.pv-junction').length;
+      const done = () => {
+        dd.destroy();
+        c.remove();
+      };
+      return { dd, junctions, dots, done };
+    };
+
+    const on = run({});
+    const merges = on.junctions();
+    expect(merges.length).toBeGreaterThan(0);
+    expect(on.dots()).toBe(merges.length);
+    on.done();
+
+    // The analysis is unchanged; only the dots are skipped.
+    const off = run({ mergeJunctions: false });
+    expect(off.junctions()).toEqual(merges);
+    expect(off.dots()).toBe(0);
+
+    // A real branch: a link to another target runs through one of the merge points, so the links
+    // meeting there no longer share an end. That point keeps its dot; the pure merges still have none.
+    const at = merges[0]!.point;
+    off.dd.update((tx) =>
+      tx.addLink({
+        ...link('l4', 's1', 'u'),
+        routing: 'manual',
+        waypoints: [
+          { x: 100, y: 10 },
+          { x: 100, y: at.y - 110 },
+          { x: at.x, y: at.y - 110 },
+          { ...at },
+          { x: at.x, y: 510 },
+        ],
+      }),
+    );
+    off.dd.renderer!.flush();
+    const ends = (ids: string[], side: 'from' | 'to') =>
+      new Set(
+        ids.map((id) => {
+          const l = off.dd.store.links.get(id)!;
+          return l[side].node + '/' + l[side].port;
+        }),
+      ).size;
+    const real = off
+      .junctions()
+      .filter((j) => ends(j.linkIds, 'from') > 1 && ends(j.linkIds, 'to') > 1);
+    expect(real.some((j) => j.point.x === at.x && j.point.y === at.y)).toBe(true);
+    expect(off.dots()).toBe(real.length);
+    off.done();
+  });
 });
 
 describe('NFR-1 data tick budget', () => {
