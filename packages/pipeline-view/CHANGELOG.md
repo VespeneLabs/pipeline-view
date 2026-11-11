@@ -1,5 +1,25 @@
 # @vespenelabs/pipeline-view
 
+## 1.10.0
+
+### Model
+
+- `AnnotationModel.draggable` is new (optional): `true` makes one annotation draggable in every mode, `false` never. The model version stays 2.
+
+### Minor Changes
+
+- fa4f83a: Draggable annotations: `annotationDrag: 'edit' | 'always'` (default off) lets users move reading cards and text annotations with the pointer (mouse, pen, touch) or the arrow keys, in view mode as well as edit mode. Leaders follow live, anchored annotations stay relative to their node, and a drag never pans, selects or emits clicks.
+  
+  The host decides where positions live with `annotationMoves`. `'model'` (the default) commits a finished move as one undoable `update()`. `'display'` keeps it as display state, like hidden annotations: no model change, undo step or dirty flag, and nothing in `toJSON()`. The new `annotationMove { id, position, final }` event (`onAnnotationMove` on `<PipelineView>`) reports every move; save the position when `final` is true and restore it with `diagram.setAnnotationPositions(record | null)`. `diagram.getAnnotationPosition(id)` returns the effective position, which placement, leaders, `itemBounds()` and `getBounds()` now use.
+  
+  Draggable annotations are focusable and named, a keyboard move is announced through the live region, and `<PipelineView>` gets `annotationDrag`, `annotationMoves` and `onAnnotationMove` props (changeable at any time; `diagram.setAnnotationDrag()` in vanilla). React cards stay mounted during and after a drag. Draggable slots carry `data-draggable` (and `data-dragging` while dragged) for styling; content under `[data-pv-no-drag]` doesn't start a drag.
+  
+- 1ee15e9: Hide annotations as display state: `diagram.setHiddenAnnotations(ids | predicate | null)`, or `<PipelineView hiddenAnnotations>`. Hidden cards, text annotations and their leaders disappear, but the model, undo history, dirty state and routing are untouched, and hidden annotations are left out of fitting. Renderers stay mounted while hidden, so React state survives a toggle. `diagram.isAnnotationHidden(id)` reports the state, and hidden slots get `data-hidden`.
+- 4162033: Link labels now avoid each other as well as nodes. Where several labelled links converge in one corridor (for example just above a shared target in a flowchart), each label slides along its own path to the nearest free spot instead of stacking on the others. Placement uses the estimated boxes (no layout read), is deterministic and independent of the order links were added (labels are placed in link id order), and is incremental: a reroute or a node move re-places only the labels near it.
+  
+  `labelPosition` is now a preference. The label sits exactly there when the spot is free, as before. When the spot is covered by a node or by another label, it slides along the path to the nearest free spot; before, it stayed put and overlapped. For example `labelPosition: 0` now puts the label just clear of the source node instead of on top of its port.
+- f4e95de: New `DiagramOptions.mergeJunctions` (default `true`, so nothing changes). With `false`, no junction dot is drawn where every link meeting at a point ends on the same node and port, or every one starts from the same node and port. Several arrows into one flowchart step then no longer read as a tee. Links with different ends that share a trunk keep their dot, and line jumps are unaffected.
+
 ## 1.9.0
 
 ### Minor Changes
