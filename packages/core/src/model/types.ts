@@ -105,7 +105,13 @@ export interface TextAnnotation<D extends DataRecord = DataRecord> extends Annot
 export interface HtmlAnnotation<D extends DataRecord = DataRecord> extends AnnotationBase<D> {
   kind: 'html';
   renderer: string;
+  /** The box size. With `sizing: 'content'`, it's the minimum size instead. */
   size?: Size;
+  /**
+   * 'fixed' (the default) gives the box exactly `size`. 'content' lets it grow to fit what the renderer
+   * draws (with `size` as the minimum), and keeps the leader and bounds in step as the content resizes.
+   */
+  sizing?: 'fixed' | 'content';
 }
 
 export interface DiagramModel<
