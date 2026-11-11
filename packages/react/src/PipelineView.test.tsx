@@ -31,6 +31,19 @@ describe('<PipelineView>', () => {
     expect(ref.current!.toJSON().nodes).toHaveLength(2);
   });
 
+  it('applies hiddenAnnotations as display state', () => {
+    const ref = createRef<Diagram>();
+    const m: DiagramModel = {
+      ...model(),
+      annotations: [{ id: 'note', kind: 'text', text: 'Hi', position: { x: 0, y: -40 } }],
+    };
+    const hidden = ['note'];
+    const { rerender } = render(<PipelineView ref={ref} model={m} hiddenAnnotations={hidden} />);
+    expect(ref.current!.isAnnotationHidden('note')).toBe(true);
+    rerender(<PipelineView ref={ref} model={m} hiddenAnnotations={null} />);
+    expect(ref.current!.isAnnotationHidden('note')).toBe(false);
+  });
+
   it('applies ariaLabel at creation and when it changes', () => {
     const { container, rerender } = render(<PipelineView model={model()} ariaLabel="Station A" />);
     const root = () => container.querySelector('.pv-root')!;

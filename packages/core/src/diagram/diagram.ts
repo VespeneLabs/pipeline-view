@@ -1,4 +1,5 @@
 import type {
+  AnnotationModel,
   DataRecord,
   DiagramModel,
   ModelPatch,
@@ -79,6 +80,8 @@ export interface InternalEvents {
   geometry: { ids: string[] };
   /** startPlacement() was called (FR-50); the editor controller shows the preview. */
   placement: { type: string; init: Partial<NodeModel> };
+  /** Annotation display state changed (hidden, display positions) for these annotations. */
+  annotationView: { ids: string[] };
 }
 
 const MAX_UNDO = 200;
@@ -747,6 +750,32 @@ export class Diagram implements DiagramApi {
     return diagramToScreen(this.viewport, p);
   }
 
+  // ---- annotation display state ---------------------------------------------
+
+  private hiddenAnnotations: ((a: AnnotationModel) => boolean) | null = null;
+
+  /**
+   * Hides annotations and their leaders as display state: the model, undo history, dirty state and
+   * routing don't change, and hidden annotations are left out of fitting. Pass ids, a predicate (for
+   * example `(a) => a.kind === 'html' && a.renderer === 'card'`), or null to show all again. Renderers
+   * stay mounted while hidden, so React state survives a toggle.
+   */
+  setHiddenAnnotations(hidden: Iterable<string> | ((a: AnnotationModel) => boolean) | null): void {
+    if (hidden === null) this.hiddenAnnotations = null;
+    else if (typeof hidden === 'function') this.hiddenAnnotations = hidden;
+    else {
+      const ids = new Set(hidden);
+      this.hiddenAnnotations = (a) => ids.has(a.id);
+    }
+    this.internal.emit('annotationView', { ids: [...this.store.annotations.keys()] });
+  }
+
+  /** Whether an annotation is hidden by setHiddenAnnotations(). */
+  isAnnotationHidden(id: string): boolean {
+    const a = this.store.annotations.get(id);
+    return !!a && !!this.hiddenAnnotations?.(a);
+  }
+
   /** Diagram-space bounds of every node, link waypoint and annotation. An empty diagram returns a zero rect. */
   getBounds(): Rect {
     const rects: Rect[] = [];
@@ -754,6 +783,7 @@ export class Diagram implements DiagramApi {
     for (const l of this.store.links.values())
       for (const p of l.waypoints ?? []) rects.push({ ...p, width: 0, height: 0 });
     for (const a of this.store.annotations.values()) {
+      if (this.hiddenAnnotations?.(a)) continue;
       const b = this.itemBounds({ kind: 'annotation', id: a.id });
       if (b) rects.push(b);
     }

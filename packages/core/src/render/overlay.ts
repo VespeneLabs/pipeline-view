@@ -76,6 +76,13 @@ export class OverlayRenderer {
         for (const id of ids) this.markNode(id, true);
         this.schedule();
       }),
+      i.on('annotationView', ({ ids }) => {
+        for (const id of ids) {
+          this.dirty.add(aKey(id));
+          this.structural.add(aKey(id));
+        }
+        this.schedule();
+      }),
       i.on('geometry', ({ ids }) => {
         for (const id of ids) this.markNode(id, false);
         this.schedule();
@@ -342,6 +349,16 @@ export class OverlayRenderer {
     }
     item.anchorPos = anchor?.position;
     item.anchorStatus = anchor?.status;
+    // Hidden by the host (display state): keep the element and its renderer, show nothing.
+    const hidden = this.diagram.isAnnotationHidden(id);
+    const style = (item.el as HTMLElement | SVGElement).style;
+    if (style.display !== (hidden ? 'none' : '')) style.display = hidden ? 'none' : '';
+    item.el.toggleAttribute('data-hidden', hidden);
+    if (hidden) {
+      item.leader?.remove();
+      item.leader = undefined;
+      return;
+    }
     this.drawLeader(item, a, anchor, box);
   }
 

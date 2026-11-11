@@ -334,6 +334,8 @@ export interface DiagramApi {
   setViewport(v: Partial<Viewport>, opts?: { animate?: boolean }): void;
   zoomToFit(opts?: { padding?: number; animate?: boolean; minZoom?: number }): void;
   zoomToItem(item: ItemRef, opts?: { animate?: boolean }): void;
+  setHiddenAnnotations(hidden: Iterable<string> | ((a: AnnotationModel) => boolean) | null): void;
+  isAnnotationHidden(id: string): boolean;
   screenToDiagram(p: Point): Point;
   diagramToScreen(p: Point): Point;
   getBounds(): Rect;

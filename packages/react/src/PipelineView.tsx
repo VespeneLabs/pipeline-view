@@ -1,6 +1,7 @@
 import {
   Diagram,
   attachEditor,
+  type AnnotationModel,
   type DiagramEvents,
   type DiagramMode,
   type DiagramModel,
@@ -84,6 +85,11 @@ export interface PipelineViewProps {
    * once, at creation; the components may change.
    */
   nodeRenderers?: Record<string, AnyNodeRendererEntry>;
+  /**
+   * Annotations to hide as display state (ids or a predicate): the model, history and routing don't
+   * change. Applied whenever the value's identity changes, so memoize it.
+   */
+  hiddenAnnotations?: Iterable<string> | ((a: AnnotationModel) => boolean) | null;
   /** Accessible name for the diagram root. Unlike `options.ariaLabel`, it can change at any time. */
   ariaLabel?: string;
   /** Other DiagramOptions. Read once, when the diagram is created. */
@@ -245,6 +251,11 @@ export const PipelineView = forwardRef<Diagram | null, PipelineViewProps>(
     useEffect(() => {
       if (diagram && ariaLabel !== undefined) diagram.setAriaLabel(ariaLabel);
     }, [diagram, ariaLabel]);
+
+    const { hiddenAnnotations } = props;
+    useEffect(() => {
+      diagram?.setHiddenAnnotations(hiddenAnnotations ?? null);
+    }, [diagram, hiddenAnnotations]);
 
     useEffect(() => {
       diagram?.showDiff(compareWith ?? null);
