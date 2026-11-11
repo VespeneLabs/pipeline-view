@@ -1,5 +1,30 @@
 # @vespenelabs/pipeline-view
 
+## 1.12.0
+
+### Minor Changes
+
+- f08e813: `getBounds()` now includes node labels and routed link paths, so `zoomToFit()`, the fit on load and the export frame no longer cut off a label that is wider than its symbol at the edge of a drawing, or a pipe that runs around the outside. Label boxes are estimated from the text (the same estimate that routing around labels uses); `nodeLabelBox(node, def)` and `nodeLabelAnchor(node, def)` are exported. Links count with their routed paths once the diagram is mounted and with their manual waypoints before that. Fits of drawings with wide edge labels come out slightly smaller than before.
+- 4488c02: Editing for link ends attached to another link.
+  
+  `linkAttach: true` lets the user draw a connection onto a link in edit mode. Dropping a connection on a link creates a link whose end is attached where it was dropped; the landing point is marked while dragging, and a port or node body under the pointer still wins. Keyboard connect (`C`) lists links after ports and attaches at the middle of the chosen link. A drag from an inlet gives a link that flows out of the host link (`fromAttach`, with `from` taken from the host link); any other port gives one that flows into it (`toAttach`, with `to` taken from the host link).
+  
+  `resolveAttach(proposal)` sees the link before it is validated and may return a changed proposal (other ends, such as a dedicated side port on the same node, or another `at`), `null` to not offer an attachment on that link, or nothing to keep it. The usual connection rules then run on the result, and `canConnect` gets a fourth argument, `ctx.attach = { end, link, at }`. An attached end doesn't land on its port, so it is exempt from the port's `maxLinks` and is not counted against it later; a locked or missing host link refuses with `attach-locked` / `attach-missing-link`.
+  
+  A selected link with an attached end shows a round handle on it (`.pv-attach-handle`). Dragging the handle, or pressing the arrow keys (Shift for a grid step), slides the end along the host link. Each move is one undo step, arrives in `modelChange.patch` as a changed link and is announced to screen readers; `attachMessages.moved` phrases or localizes the announcement.
+  
+  `diagram.connect(from, to, kind, { fromAttach?, toAttach? })` creates an attached link from code, and `validateConnect` takes the same attachments as a sixth argument.
+- 6036f80: A link end can be drawn on another link: `LinkModel.fromAttach` / `toAttach: { link, at }`, where `link` is the host link's id and `at` is the place along its route as a fraction of its length (0 = start, 1 = end). This lets a side connection join a pipe at a point, or lines branch without a header symbol.
+  
+  The attachment only changes the drawing. `from` / `to` still name the node and port the link logically runs to, so graph helpers, connection rules and the topology part of `getDiff` are unaffected. The end follows the host link when it re-routes, leaves it at a right angle and gets a junction dot (also with `mergeJunctions: false`), and the link gets `data-attached`. A link can be attached to an attached link. Deleting the host link removes the attachment from the links on it in the same undo step; an attachment to a missing link, or one that closes a loop, is ignored and the end is drawn on its port. `getDiff` counts attaching, detaching and moving along the host as `moved`.
+  
+  `pointAlong(route, at)` and `fractionAlong(route, point)` convert between fractions and points of a route, and `attachCycle(links, id, host)` tells whether an attachment would close a loop. The model stays at version 2.
+- f08e813: The off-page connectors (`process/off-page-inlet`, `process/off-page-outlet`) grow with their tag: `data.text` longer than about 7 characters widens the symbol instead of overflowing it. Short tags keep the 96 px shape. On the inlet the port sits on the tip, so it moves right with the extra width; the node's top-left corner stays where it is.
+- 371d23b: Text drawn inside a symbol now stays upright and unmirrored when the node is rotated or flipped, the way node labels already do. This covers every `<text>` in a symbol's `svg` or `render` output, in the built-in packs and in host symbols: each text turns back around its own centre, and stacked lines (the tag letters and loop number of an instrument bubble) turn as one block, so they keep their place in the shape and their order. A bubble flipped to put its stem on top reads "PT", not its mirror image. Exports and the ghosts of removed nodes in a comparison follow.
+  
+  Set `uprightText: false` on a `SymbolDef` when the text is part of the drawing and must turn with it. Note that under a quarter turn the text keeps its horizontal reading direction, so a long string in a narrow symbol can reach outside the shape.
+- f08e813: `withPorts(def, extra)` returns a copy of a symbol with extra ports, so a host can add a side port to an existing symbol without restating its ports: `registerSymbol(withPorts(gateValve, [{ id: 'side', position: { x: 20, y: 0 }, direction: 'top' }]))`. It works whether the symbol's ports are a list or a function of the node, `extra` may be a function of the node too, and an extra port with an existing id replaces that port.
+
 ## 1.11.0
 
 ### Minor Changes
