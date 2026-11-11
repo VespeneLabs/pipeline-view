@@ -15,8 +15,9 @@ import { createRouter } from '../routing/router';
 import { createRoutingWorker, type RoutingWorker } from '../routing/worker-client';
 import { DEFAULT_CULL_THRESHOLD } from './culling';
 import {
-  localToDiagram,
   nodeBounds,
+  nodeLabelAnchor,
+  nodeLabelBox,
   nodeTransform,
   portPoint,
   resolvePorts,
@@ -28,11 +29,6 @@ import { arrowsPath, linkPath, ticksPath } from './paths';
 import { LinkLabelLayout } from './link-labels';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const LABEL_GAP = 16;
-/** Estimated node-label metrics (600 weight, --pv-font-size-label 14px), for the label obstacle. */
-const LABEL_CHAR_WIDTH = 8.5;
-const LABEL_ASCENT = 13;
-const LABEL_HEIGHT = 17;
 /** Space kept between a pipe and a node label. */
 const LABEL_MARGIN = 4;
 const labelObstacleId = (nodeId: string) => `${nodeId}\u0000label`;
@@ -399,14 +395,6 @@ export class SvgRenderer {
 
   // ---- nodes ---------------------------------------------------------------
 
-  /** Where the node's label is drawn (its text baseline centre), or null without a label. */
-  private labelAt(n: NodeModel, def: SymbolDef | undefined): Point | null {
-    if (!n.label) return null;
-    if (def?.labelAnchor) return localToDiagram(n, def, def.labelAnchor);
-    const b = nodeBounds(n, def);
-    return { x: b.x + b.width / 2, y: b.y + b.height + LABEL_GAP };
-  }
-
   /**
    * The label as a router obstacle. The router inflates every obstacle by its clearance; a label only
    * needs a small margin, so the rect is shrunk by the difference (it may end up with a negative size,
@@ -414,15 +402,14 @@ export class SvgRenderer {
    */
   private labelObstacle(n: NodeModel): Rect | null {
     if (this.diagram.options.routeAroundLabels === false) return null;
-    const at = this.labelAt(n, this.def(n));
-    if (!at) return null;
-    const width = n.label!.length * LABEL_CHAR_WIDTH;
+    const box = nodeLabelBox(n, this.def(n));
+    if (!box) return null;
     const inset = this.clearance - LABEL_MARGIN;
     return {
-      x: at.x - width / 2 + inset,
-      y: at.y - LABEL_ASCENT + inset,
-      width: width - 2 * inset,
-      height: LABEL_HEIGHT - 2 * inset,
+      x: box.x + inset,
+      y: box.y + inset,
+      width: box.width - 2 * inset,
+      height: box.height - 2 * inset,
     };
   }
 
@@ -632,7 +619,7 @@ export class SvgRenderer {
       el.label = this.svg('text', { class: 'pv-label', 'text-anchor': 'middle' }) as SVGTextElement;
       el.g.append(el.label);
     }
-    const at = this.labelAt(n, def)!;
+    const at = nodeLabelAnchor(n, def)!;
     el.label.setAttribute('x', String(at.x));
     el.label.setAttribute('y', String(at.y));
     if (el.label.textContent !== n.label) el.label.textContent = n.label;
@@ -945,6 +932,22 @@ export class SvgRenderer {
     const el = this.view.root.ownerDocument.createElementNS(SVG_NS, tag) as SVGElement;
     for (const k in attrs) el.setAttribute(k, String(attrs[k]));
     return el;
+  }
+
+  /** @internal Bounding box of every routed link path, or undefined when nothing is routed. */
+  routeBounds(): Rect | undefined {
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    for (const pts of this.routes.values())
+      for (const p of pts) {
+        if (p.x < x0) x0 = p.x;
+        if (p.x > x1) x1 = p.x;
+        if (p.y < y0) y0 = p.y;
+        if (p.y > y1) y1 = p.y;
+      }
+    return x0 <= x1 ? { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } : undefined;
   }
 
   /** Rendered polyline of a link in diagram coordinates, port points included. Undefined until routed. */

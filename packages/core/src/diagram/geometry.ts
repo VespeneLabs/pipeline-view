@@ -103,6 +103,31 @@ export function nodeTransform(node: NodeModel, def: SymbolDef | undefined): stri
   return t;
 }
 
+const LABEL_GAP = 16;
+/** Estimated node-label metrics (600 weight, --pv-font-size-label 14px). */
+const LABEL_CHAR_WIDTH = 8.5;
+const LABEL_ASCENT = 13;
+const LABEL_HEIGHT = 17;
+
+/** Where a node's label is drawn (its text baseline centre), or null without a label. */
+export function nodeLabelAnchor(node: NodeModel, def: SymbolDef | undefined): Point | null {
+  if (!node.label) return null;
+  if (def?.labelAnchor) return localToDiagram(node, def, def.labelAnchor);
+  const b = nodeBounds(node, def);
+  return { x: b.x + b.width / 2, y: b.y + b.height + LABEL_GAP };
+}
+
+/**
+ * The box a node's label takes, or null without a label. It's estimated from the text length, so it
+ * needs no layout read and works without a DOM. Routing around labels and `getBounds()` both use it.
+ */
+export function nodeLabelBox(node: NodeModel, def: SymbolDef | undefined): Rect | null {
+  const at = nodeLabelAnchor(node, def);
+  if (!at) return null;
+  const width = node.label!.length * LABEL_CHAR_WIDTH;
+  return { x: at.x - width / 2, y: at.y - LABEL_ASCENT, width, height: LABEL_HEIGHT };
+}
+
 export function unionRects(rects: Iterable<Rect>): Rect | undefined {
   let x1 = Infinity;
   let y1 = Infinity;

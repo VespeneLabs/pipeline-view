@@ -70,7 +70,10 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
         doc: 'Frames the whole diagram or one item.',
       },
       { sig: 'screenToDiagram(p) / diagramToScreen(p)', doc: 'Coordinate conversion.' },
-      { sig: 'getBounds(): Rect', doc: 'Bounding box of all content in diagram coordinates.' },
+      {
+        sig: 'getBounds(): Rect',
+        doc: 'Bounding box of all content in diagram coordinates: nodes with their labels (the label box is estimated from its text), annotations, and links by their routed paths once mounted (by their manual waypoints before that). Every fit and the export frame use it, so a label wider than its symbol is never cut off. nodeLabelBox(node, def) returns the estimated label box.',
+      },
       {
         sig: 'getSelection() / setSelection(items: ItemRef[])',
         doc: 'Current selection; emits selectionChange. In view mode a click selects.',
@@ -81,7 +84,7 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
       },
       {
         sig: 'exportSVG(opts?) / exportPNG(opts?)',
-        doc: 'Whole diagram or current viewport: exportSVG returns a standalone SVG string, exportPNG a Blob.',
+        doc: 'Whole diagram or current viewport: exportSVG returns a standalone SVG string, exportPNG a Blob. Computed styles are copied onto each shape, so host CSS for a custom link kind (.pv-link[data-kind="steam"] .pv-link-line { stroke-dasharray: … }) is kept as long as that stylesheet applies when you export.',
       },
     ],
   },
@@ -241,6 +244,10 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
       {
         sig: 'sidePorts(size, side, count, { idPrefix?, start?, labels?, spacing?, role?, maxLinks?, accepts? })',
         doc: 'Evenly spaced ports along one side, with optional index labels.',
+      },
+      {
+        sig: 'withPorts(def, extra): SymbolDef',
+        doc: 'A copy of a symbol with extra ports, without restating its own: registerSymbol(withPorts(gateValve, [{ id: "side", position: { x: 20, y: 0 }, direction: "top" }])). Works whether the symbol\'s ports are a list or a function of the node; extra may be a function of the node too. An extra port with an existing id replaces that port.',
       },
       {
         sig: 'PortDef.role: "in" | "out" | "both" · maxLinks · label · accepts',

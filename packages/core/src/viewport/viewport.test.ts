@@ -145,11 +145,47 @@ describe('viewport API', () => {
   });
 
   it('zoomToFit centers the content bounds', () => {
+    // Nodes span 400x200 at (0,0); the link leaves a's left port and runs down at x = -12, so the
+    // content is 412x200 at (-12,0).
+    expect(d.getBounds()).toEqual({ x: -12, y: 0, width: 412, height: 200 });
     d.zoomToFit({ padding: 0 });
-    // Content is 400x200 at (0,0) in an 800x600 box: zoom 2, centered.
-    expect(d.getViewport()).toEqual({ x: 0, y: 100, zoom: 2 });
-    expect(d.diagramToScreen({ x: 200, y: 100 })).toEqual({ x: 400, y: 300 });
-    expect(d.screenToDiagram({ x: 400, y: 300 })).toEqual({ x: 200, y: 100 });
+    const zoom = 800 / 412;
+    const v = d.getViewport();
+    expect(v.zoom).toBeCloseTo(zoom, 10);
+    expect(v.x).toBeCloseTo(12 * zoom, 10);
+    expect(v.y).toBeCloseTo((600 - 200 * zoom) / 2, 10);
+    // The centre of the content lands on the centre of the box.
+    const centre = d.diagramToScreen({ x: 194, y: 100 });
+    expect(centre.x).toBeCloseTo(400, 8);
+    expect(centre.y).toBeCloseTo(300, 8);
+  });
+
+  it('getBounds counts node labels, and only waypoints of links before mount', () => {
+    const fresh = new Diagram({ symbols: [box] });
+    fresh.load({
+      version: 2,
+      nodes: [
+        {
+          id: 'a',
+          type: 'test/box',
+          position: { x: 0, y: 0 },
+          label: 'A label wider than its box',
+        },
+        { id: 'b', type: 'test/box', position: { x: 300, y: 150 } },
+      ],
+      links: [
+        {
+          id: 'l',
+          from: { node: 'a', port: 'in' },
+          to: { node: 'b', port: 'in' },
+          kind: 'process',
+        },
+      ],
+    });
+    // 26 characters at 8.5 px, centred under the 100 px box; the baseline is 16 px below it.
+    const half = (26 * 8.5) / 2;
+    expect(fresh.getBounds()).toEqual({ x: 50 - half, y: 0, width: 300 + 50 + half, height: 200 });
+    fresh.destroy();
   });
 
   it('zoomToFit keeps a minimum zoom without limiting manual zoom-out', () => {
@@ -186,7 +222,8 @@ describe('viewport API', () => {
 
   it('getBounds covers rotated nodes', () => {
     d.update((tx) => tx.updateNode('a', { rotation: 90 }));
-    expect(d.getBounds()).toEqual({ x: 25, y: -25, width: 375, height: 225 });
+    // The rotated a spans 25..75 x -25..75; the link leaves its port (now on top) with 12 px clearance.
+    expect(d.getBounds()).toEqual({ x: 25, y: -37, width: 375, height: 237 });
   });
 });
 
