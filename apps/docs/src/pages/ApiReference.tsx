@@ -119,8 +119,8 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
       { sig: 'minZoom, maxZoom', doc: 'Zoom limits.' },
       { sig: 'routing: { clearance?, spacing?, bendPenalty? }', doc: 'Orthogonal router tuning.' },
       {
-        sig: 'canConnect(from, to, kind) / canDrop(type, position)',
-        doc: 'Editor validation hooks. Return true, false, or { ok: false, reason, code?, detail? } to explain a refusal. canConnect gets the ends in flow order (outlet → inlet). See Ports and connection rules.',
+        sig: 'canConnect(from, to, kind, ctx) / canDrop(type, position)',
+        doc: 'Editor validation hooks. Return true, false, or { ok: false, reason, code?, detail? } to explain a refusal. canConnect gets the ends in flow order (outlet → inlet). ctx.attach = { end, link, at } is set when an end of the new link is drawn on another link. See Ports and connection rules.',
       },
     ],
   },
@@ -257,6 +257,14 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
       {
         sig: 'DiagramOptions.directed: boolean | { kinds }',
         doc: 'Links of these kinds must run from an out port to an in port; arrows follow.',
+      },
+      {
+        sig: 'DiagramOptions.linkAttach: boolean · resolveAttach(proposal) · attachMessages',
+        doc: "linkAttach (default false) lets the user draw a connection onto a link in edit mode: dropping a connection on a link (within half the port snap radius, when no port or node body is under the pointer) creates a link whose end is attached there, and keyboard connect (C) lists links after ports and attaches at the middle. A drag from an inlet gives a link that flows out of the host link (fromAttach, from = the host link's from); any other port gives one that flows into it (toAttach, to = the host link's to). resolveAttach gets that proposal { from, to, kind, fromAttach?, toAttach? } first and may return a changed one (for example a dedicated side port on the same node, or another at), null to not offer the link, or nothing to keep it. The usual rules and canConnect then run on the result; an attached end is exempt from its port's maxLinks because it doesn't land on the port, and a locked or missing host link refuses with attach-locked / attach-missing-link. A selected link with an attached end shows a round handle there (.pv-attach-handle): drag it, or press the arrow keys (Shift for a grid step), to slide the end along the host link. Each move is one undo step, arrives in modelChange.patch as a changed link, and is announced (\"Connection point at 75% along …\"); attachMessages.moved({ link, host, end, at }) phrases or localizes that. Loops of attachments are not created by the editor and are ignored if they come in through the model.",
+      },
+      {
+        sig: 'connect(from, to, kind?, { fromAttach?, toAttach? })',
+        doc: "The programmatic connect takes the attachments of the new link as a fourth argument and applies the same rules as a drop on a link (resolveAttach is the editor's hook and is not called). When the ends are swapped into flow order, each attachment moves with its end.",
       },
       {
         sig: 'refusalMessages(code, ctx) / canConnectOrder: "after-builtins" | "before-builtins"',

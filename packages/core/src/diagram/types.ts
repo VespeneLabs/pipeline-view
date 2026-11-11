@@ -5,6 +5,7 @@ import type {
   AnnotationModel,
   DataRecord,
   DiagramModel,
+  LinkAttach,
   LinkEnd,
   LinkKind,
   LinkModel,
@@ -59,6 +60,8 @@ export type RefusalCode =
   | 'self-loop'
   | 'max-links-between-nodes'
   | 'missing-port'
+  | 'attach-missing-link'
+  | 'attach-locked'
   | (string & {});
 
 /**
@@ -202,7 +205,27 @@ export interface DiagramOptions {
     from: { node: NodeModel; port: string },
     to: { node: NodeModel; port: string },
     kind: string,
+    /** Present when an end of the new link is drawn on another link (`LinkModel.fromAttach` / `toAttach`). */
+    ctx: ConnectContext,
   ) => ValidationResult;
+  /**
+   * Lets the user draw a connection onto a link in edit mode (default false): dropping a connection on
+   * a link, or choosing a link as the target of a keyboard connect, creates a link whose end is
+   * attached to it (`LinkModel.toAttach` / `fromAttach`). The attach point of a selected link can
+   * always be moved along its host link, by dragging its handle or with the arrow keys.
+   */
+  linkAttach?: boolean;
+  /**
+   * Adjusts or refuses a connection onto a link before it is validated (`linkAttach`). It gets the
+   * link the library would create: the dragged port on one side and, on the attached side, the host
+   * link's own end (`to` of the host for `toAttach`, `from` of the host for `fromAttach`), so flow order
+   * holds. Return a changed proposal (other ends, for example a dedicated side port, or another `at`),
+   * `null` to not offer an attachment on that link, or nothing to keep the proposal. The usual
+   * connection rules and `canConnect` then run on the result.
+   */
+  resolveAttach?: (proposal: AttachProposal) => AttachProposal | null | undefined | void;
+  /** Phrases (or localizes) what moving an attach point along its host link announces to screen readers. */
+  attachMessages?: AttachMessages;
   canDrop?: (type: string, position: Point) => ValidationResult;
   /**
    * Links always run from an 'out' port to an 'in' port, and arrows follow (FR-41). With `kinds`, only
@@ -276,6 +299,46 @@ export interface DiagramOptions {
   annotationMessages?: AnnotationMessages;
   /** Accessible name for the diagram root. */
   ariaLabel?: string;
+}
+
+/** What `canConnect` learns about an end of the new link that is drawn on another link. */
+export interface ConnectContext {
+  attach?: {
+    /** Which end of the new link is attached, in flow order. */
+    end: 'from' | 'to';
+    /** The host link. */
+    link: LinkModel;
+    /** Where on the host link's route, as a fraction of its length. */
+    at: number;
+  };
+}
+
+/** A link about to be created with an end on another link (`DiagramOptions.resolveAttach`). */
+export interface AttachProposal {
+  from: LinkEnd;
+  to: LinkEnd;
+  kind: LinkKind;
+  fromAttach?: LinkAttach;
+  toAttach?: LinkAttach;
+}
+
+/** The ends of a new link that are drawn on another link, for `connect()`. */
+export interface ConnectAttach {
+  fromAttach?: LinkAttach;
+  toAttach?: LinkAttach;
+}
+
+/**
+ * The announcement of an attach point moved along its host link, spoken through the polite live
+ * region. Return undefined to keep the English default, or an empty string to say nothing.
+ */
+export interface AttachMessages {
+  moved?: (ctx: {
+    link: LinkModel;
+    host: LinkModel;
+    end: 'from' | 'to';
+    at: number;
+  }) => string | undefined;
 }
 
 /**
@@ -415,7 +478,7 @@ export interface DiagramApi {
   /** Replaces all problem markers (FR-48). */
   setIssues?(issues: IssueMap): void;
   /** Connects two ports, applying every validation rule (FR-54). */
-  connect?(from: LinkEnd, to: LinkEnd, kind?: LinkKind): ConnectResult;
+  connect?(from: LinkEnd, to: LinkEnd, kind?: LinkKind, attach?: ConnectAttach): ConnectResult;
   /** Accepts HTML5 drag-and-drop from host elements (FR-50). Returns an unsubscribe function. */
   acceptDrop?(source: DropSource): () => void;
   /** Starts placement mode: a preview follows the pointer, a click places it, Esc cancels (FR-50). */
