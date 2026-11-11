@@ -41,6 +41,8 @@
   --pv-junction-radius: 4.8;
   --pv-jump-radius: 8;
   --pv-leader-line: var(--pv-line-signal);
+  --pv-link-label-ink: var(--pv-ink);
+  --pv-link-label-bg: var(--pv-bg);
   --pv-focus-ring: #185ac7;
   /* Comparison marks (FR-51). */
   --pv-diff-added: #1b873f;
@@ -115,6 +117,8 @@
   --pv-level-fill: var(--pv-line);
   --pv-flow-color: var(--pv-line);
   --pv-leader-line: var(--pv-line-signal);
+  --pv-link-label-ink: var(--pv-ink);
+  --pv-link-label-bg: var(--pv-bg);
 }
 
 /* ---- root ---------------------------------------------------------------- */
@@ -229,6 +233,17 @@
   stroke: transparent;
   stroke-width: 12px;
   pointer-events: stroke;
+}
+.pv-link-label {
+  fill: var(--pv-link-label-ink);
+  font: 500 var(--pv-font-size-small) var(--pv-font);
+  paint-order: stroke;
+  stroke: var(--pv-link-label-bg);
+  stroke-width: 6px;
+  stroke-linejoin: round;
+}
+.pv-link.pv-selected .pv-link-label {
+  fill: var(--pv-selection);
 }
 .pv-link[data-flowing] .pv-link-line {
   stroke-opacity: 0.35;
@@ -585,7 +600,7 @@
 
 /* ---- level of detail (FR-55): set on .pv-root below per-layer zoom thresholds ---- */
 
-.pv-lod-labels :is(.pv-label, .pv-port-label, .pv-annotation) {
+.pv-lod-labels :is(.pv-label, .pv-port-label, .pv-link-label, .pv-annotation) {
   display: none;
 }
 .pv-lod-overlays .pv-overlay {

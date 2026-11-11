@@ -152,3 +152,63 @@ export function ticksPath(points: readonly Point[], period = 40): string {
   }
   return d;
 }
+
+/**
+ * Where a link label goes. With `position` (0..1), at that fraction of the path length. Otherwise at
+ * the middle of the longest segment whose label box (`size`, centred) stays clear of every rect in
+ * `avoid`; failing that, beside a segment (left/right of vertical runs, above/below horizontal ones);
+ * and finally the middle of the longest segment.
+ */
+export function linkLabelPoint(
+  points: readonly Point[],
+  size: { width: number; height: number },
+  avoid: readonly Rect[] = [],
+  position?: number,
+): Point | null {
+  if (points.length < 2) return null;
+  const segs: { a: Point; b: Point; len: number }[] = [];
+  let total = 0;
+  for (let i = 0; i + 1 < points.length; i++) {
+    const a = points[i]!;
+    const b = points[i + 1]!;
+    const len = Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
+    segs.push({ a, b, len });
+    total += len;
+  }
+  const along = (s: { a: Point; b: Point; len: number }, t: number): Point => ({
+    x: s.a.x + (s.b.x - s.a.x) * t,
+    y: s.a.y + (s.b.y - s.a.y) * t,
+  });
+  if (position !== undefined && Number.isFinite(position)) {
+    let rest = Math.min(Math.max(position, 0), 1) * total;
+    for (const s of segs) {
+      if (rest <= s.len || s === segs[segs.length - 1])
+        return along(s, s.len ? Math.min(rest / s.len, 1) : 0);
+      rest -= s.len;
+    }
+  }
+  const clear = (p: Point) =>
+    avoid.every(
+      (r) =>
+        p.x + size.width / 2 <= r.x ||
+        p.x - size.width / 2 >= r.x + r.width ||
+        p.y + size.height / 2 <= r.y ||
+        p.y - size.height / 2 >= r.y + r.height,
+    );
+  const byLength = [...segs].sort((s, t) => t.len - s.len);
+  for (const s of byLength) {
+    const p = along(s, 0.5);
+    if (clear(p)) return p;
+  }
+  // Nothing centred on the line is clear (a route hugging nodes): try beside the line instead.
+  for (const s of byLength) {
+    const p = along(s, 0.5);
+    const vertical = s.a.x === s.b.x;
+    const off = (vertical ? size.width : size.height) / 2 + 4;
+    for (const sign of [-1, 1]) {
+      const q = vertical ? { x: p.x + sign * off, y: p.y } : { x: p.x, y: p.y + sign * off };
+      if (clear(q)) return q;
+    }
+  }
+  return along(byLength[0]!, 0.5);
+}

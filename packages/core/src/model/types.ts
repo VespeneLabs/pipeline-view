@@ -70,6 +70,14 @@ export interface LinkModel<D extends DataRecord = DataRecord> {
   waypoints?: Point[];
   /** Show direction arrows along the link. The default is true for 'process'. */
   arrows?: boolean;
+  /**
+   * Short text drawn on the link, for example a flowchart answer ("Yes", "Leak found"). It sits on
+   * the middle of the longest segment that keeps it off nodes, with a background halo, and follows
+   * the route. It's also part of the link's accessible name.
+   */
+  label?: string;
+  /** Where `label` sits along the path, as a fraction of its length (0 = start, 1 = end). */
+  labelPosition?: number;
   status?: string;
   /** Locked links can't be deleted or reconnected in edit mode, and get `data-locked` (v2, FR-43). */
   locked?: boolean;

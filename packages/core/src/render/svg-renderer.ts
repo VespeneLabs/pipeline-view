@@ -24,7 +24,7 @@ import {
 } from '../diagram/geometry';
 import { nodePorts, nodeSize } from '../symbols/resolve';
 import type { PortDef } from '../symbols/types';
-import { arrowsPath, linkPath, ticksPath } from './paths';
+import { arrowsPath, linkLabelPoint, linkPath, ticksPath } from './paths';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const LABEL_GAP = 16;
@@ -51,6 +51,7 @@ interface LinkEl {
   flow: SVGPathElement | null;
   arrows: SVGPathElement;
   d: string;
+  label?: SVGTextElement;
 }
 
 export interface RenderMetrics {
@@ -675,6 +676,43 @@ export class SvgRenderer {
       el.flow = null;
     }
     el.g.toggleAttribute('data-flowing', flowing);
+    this.drawLinkLabel(el, l, points);
+  }
+
+  /** Link label: SVG text with a background halo, placed off nodes along the route. */
+  private drawLinkLabel(el: LinkEl, l: LinkModel, points: Point[]): void {
+    if (!l.label) {
+      el.label?.remove();
+      el.label = undefined;
+      el.g.removeAttribute('aria-label');
+      return;
+    }
+    if (!el.label) {
+      el.label = this.svg('text', {
+        class: 'pv-link-label',
+        'text-anchor': 'middle',
+        'dominant-baseline': 'central',
+      }) as SVGTextElement;
+      el.g.append(el.label);
+    }
+    if (el.label.textContent !== l.label) el.label.textContent = l.label;
+    // Estimated box (no layout read): wide enough for the halo around ~7 px glyphs.
+    const size = { width: l.label.length * 7 + 12, height: 20 };
+    const store = this.diagram.store;
+    const avoid: Rect[] = [];
+    if (l.labelPosition === undefined) {
+      for (const n of store.nodes.values()) avoid.push(nodeBounds(n, this.def(n)));
+    }
+    const at = linkLabelPoint(points, size, avoid, l.labelPosition);
+    el.label.setAttribute('x', String(at?.x ?? 0));
+    el.label.setAttribute('y', String(at?.y ?? 0));
+    if (at) el.label.removeAttribute('visibility');
+    else el.label.setAttribute('visibility', 'hidden');
+    const name = (id: string) => {
+      const n = store.nodes.get(id);
+      return n?.label || id;
+    };
+    el.g.setAttribute('aria-label', `${l.label}, ${name(l.from.node)} to ${name(l.to.node)}`);
   }
 
   private drawJunctions(junctions: Junction[]): void {

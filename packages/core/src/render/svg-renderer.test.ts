@@ -51,6 +51,23 @@ afterEach(() => {
 });
 
 describe('SvgRenderer', () => {
+  it('draws link labels on the route, names the link for assistive tech, and removes them', () => {
+    d.update((tx) => tx.updateLink('ab', { label: 'Yes' }));
+    d.renderer!.flush();
+    const t = $('[data-link-id="ab"] .pv-link-label')!;
+    expect(t.textContent).toBe('Yes');
+    // ab runs straight from (40,10) to (200,10): the label sits on its middle.
+    expect([t.getAttribute('x'), t.getAttribute('y')]).toEqual(['120', '10']);
+    expect($('[data-link-id="ab"]')!.getAttribute('aria-label')).toBe('Yes, V-1 to b');
+    d.update((tx) => tx.updateLink('ab', { labelPosition: 0 }));
+    d.renderer!.flush();
+    expect($('[data-link-id="ab"] .pv-link-label')!.getAttribute('x')).toBe('40');
+    d.update((tx) => tx.updateLink('ab', { label: undefined }));
+    d.renderer!.flush();
+    expect($('[data-link-id="ab"] .pv-link-label')).toBeNull();
+    expect($('[data-link-id="ab"]')!.hasAttribute('aria-label')).toBe(false);
+  });
+
   it('renders nodes with symbol markup, ports, labels and links by kind', () => {
     expect($$('.pv-node').map((n) => (n as SVGElement).dataset.nodeId)).toEqual(['a', 'b', 'c']);
     expect($('[data-node-id="a"] .pv-symbol')!.innerHTML).toContain('M0 10H40');

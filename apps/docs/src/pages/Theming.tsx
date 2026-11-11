@@ -64,6 +64,18 @@ const TOKENS: Token[] = [
     use: 'Card leader lines',
   },
   {
+    name: '--pv-link-label-ink',
+    light: 'var(--pv-ink)',
+    dark: 'var(--pv-ink)',
+    use: 'Link label text',
+  },
+  {
+    name: '--pv-link-label-bg',
+    light: 'var(--pv-bg)',
+    dark: 'var(--pv-bg)',
+    use: 'Halo behind link labels (keeps them readable over lines)',
+  },
+  {
     name: '--pv-symbol-stroke',
     light: '#334d5b',
     dark: '#b9c8d0',
