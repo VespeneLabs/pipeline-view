@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Point, Rect } from '../model/types';
 import { analyzeRoutes } from './analyze';
+import { headerFan } from './header-fan.fixture';
 import { createRouter } from './router';
 import type { RouteEndpoint, RouteRequest, RouteResult } from './types';
 
@@ -86,5 +87,17 @@ describe('lane order in shared corridors', () => {
     expect(analyzeRoutes(results).crossings).toHaveLength(0);
     // Turning down: the bottommost port takes the lane closest to the source.
     expect(laneX(results[1]!.points)!).toBeLessThan(laneX(results[0]!.points)!);
+  });
+
+  it('separates and nests a header fan turning both ways (host drawing, 8 outlets)', () => {
+    const router = createRouter();
+    router.setObstacles(new Map(headerFan.obstacles));
+    const results = router.route(headerFan.requests);
+    const fan = results.filter((r) => r.linkId.startsWith('H8.'));
+    expect(fan).toHaveLength(8);
+    const { crossings, junctions } = analyzeRoutes(fan);
+    // Separate links never share a run (that would draw junction dots) and never cross.
+    expect(junctions).toHaveLength(0);
+    expect(crossings).toHaveLength(0);
   });
 });
