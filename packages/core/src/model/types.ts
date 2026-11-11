@@ -46,6 +46,14 @@ export interface NodeModel<D extends DataRecord = DataRecord> {
    * manifold with a variable number of outlets (PRD FR-40).
    */
   ports?: PortDef[];
+  /**
+   * Where the links that share one port part, per port id, relative to the node's `position` (its
+   * top-left corner), so the point travels with the node. The links run one shared trunk from the port
+   * to the point and part there. Without an entry the router decides. An entry is ignored while fewer
+   * than two auto-routed links are drawn on the port, or while the trunk would run through a node.
+   * The value may later also be a list of points, for a trunk with successive branches.
+   */
+  branchPoints?: Record<string, Point>;
   /** Locked nodes can't be moved, deleted or reconnected in edit mode, and get `data-locked` (v2, FR-43). */
   locked?: boolean;
   data?: D;

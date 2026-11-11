@@ -236,6 +236,11 @@ export function PidEditor() {
             keys, to slide the joint along the pipe.
           </>,
           <>
+            Select manifold <b>M1</b>: each port where two or more lines part shows a diamond. Drag
+            it to decide where they part, or <kbd>Tab</kbd> to it and use the arrow keys;{' '}
+            <kbd>Delete</kbd> gives the choice back to the router.
+          </>,
+          <>
             Connect without a mouse: select a node, press <kbd>C</kbd>, pick a port with the arrow
             keys and <kbd>Enter</kbd>, then pick a target the same way (nearest first).{' '}
             <kbd>Esc</kbd> steps back; a screen reader hears every step.

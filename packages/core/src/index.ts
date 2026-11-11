@@ -9,6 +9,7 @@ export { ModelStore, validateModel } from './model/store';
 export { getDiff, type GetDiffOptions } from './model/compare';
 export * from './diagram/geometry';
 export { pointAlong, fractionAlong, attachCycle, type RoutePoint } from './diagram/attach';
+export { trunkPath, partingPoint, branchDirections } from './diagram/branch';
 export * from './viewport/math';
 export type { View, ViewLayers } from './viewport/view';
 export { DRAG_THRESHOLD } from './viewport/controller';

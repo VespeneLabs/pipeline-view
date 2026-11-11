@@ -317,7 +317,14 @@
 
 /* ---- editor adornments (EditorController) --------------------------------- */
 
-.pv-editor :is(.pv-rotate-handle, .pv-segment-handle, .pv-bend-handle, .pv-attach-handle) {
+.pv-editor
+  :is(
+    .pv-rotate-handle,
+    .pv-segment-handle,
+    .pv-bend-handle,
+    .pv-attach-handle,
+    .pv-branch-handle
+  ) {
   fill: var(--pv-bg);
   stroke: var(--pv-selection);
   cursor: pointer;
@@ -330,6 +337,16 @@
 }
 .pv-editor .pv-attach-handle {
   cursor: move;
+}
+.pv-editor .pv-branch-handle {
+  cursor: move;
+}
+.pv-editor .pv-branch-handle.pv-fixed {
+  fill: var(--pv-selection);
+}
+.pv-editor .pv-branch-handle:focus-visible {
+  outline: none;
+  stroke-width: 3px;
 }
 .pv-editor .pv-segment-handle.pv-h {
   cursor: ns-resize;

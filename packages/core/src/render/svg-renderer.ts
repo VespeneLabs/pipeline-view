@@ -3,7 +3,7 @@
  * - Data ticks (setNodeData) re-render only the symbol markup and data-status of the touched nodes. No routing.
  * - Structural changes reroute only the links attached to changed nodes, plus those the router reports as affected.
  */
-import type { LinkAttach, LinkModel, NodeModel, Point, Rect } from '../model/types';
+import type { LinkAttach, LinkEnd, LinkModel, NodeModel, Point, Rect } from '../model/types';
 import type { Crossing, Junction, RouteEndpoint, RouteRequest, Router } from '../routing/types';
 import type { SymbolDef } from '../symbols/types';
 import type { ItemRef, ModelDiff } from '../diagram/types';
@@ -24,10 +24,11 @@ import {
   symbolSize,
 } from '../diagram/geometry';
 import { nodePorts, nodeSize } from '../symbols/resolve';
-import type { PortDef } from '../symbols/types';
+import type { PortDef, PortDirection } from '../symbols/types';
 import { arrowsPath, linkPath, ticksPath } from './paths';
 import { LinkLabelLayout } from './link-labels';
 import { attachCycle, attachHosts, pointAlong } from '../diagram/attach';
+import { arrival, branchDirections, partingPoint, pathCrosses, trunkPath } from '../diagram/branch';
 import { orientationKey, uprightTexts } from './upright';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -53,6 +54,17 @@ interface NodeEl {
   orient?: string;
   /** Label obstacle last given to the router ('' when there is none). */
   labelSig?: string;
+}
+
+/** A port's links with a host-given branch point in effect (`NodeModel.branchPoints`). */
+interface Fan {
+  key: string;
+  /** The branch point, in diagram coordinates. */
+  at: Point;
+  /** From the port to the branch point. */
+  trunk: Point[];
+  links: string[];
+  directions?: Map<string, PortDirection>;
 }
 
 interface LinkEl {
@@ -157,7 +169,7 @@ export class SvgRenderer {
 
   private onModel(diff: ModelDiff): void {
     if (diff.added.links.length + diff.changed.links.length + diff.removed.links.length)
-      this.attachIndex = null;
+      this.attachIndex = this.fanIndex = null;
     for (const id of diff.removed.nodes) this.removedNodes.add(id);
     for (const id of diff.removed.links) this.removedLinks.add(id);
     for (const id of [...diff.added.nodes, ...diff.changed.nodes]) this.dirtyNodes.add(id);
@@ -194,7 +206,8 @@ export class SvgRenderer {
     this.nodes.clear();
     this.links.clear();
     this.routes.clear();
-    this.attachIndex = null;
+    this.attachIndex = this.fanIndex = null;
+    this.fanSeen.clear();
     this.analyzer = new RouteAnalyzer();
     this.linkLabels = new LinkLabelLayout();
     this.nodeRects.clear();
@@ -221,6 +234,7 @@ export class SvgRenderer {
     const all = [...store.links.keys()];
     if (this.useWorker(all.length)) this.routeOffThread(obstacles, all);
     else this.routeLinks(all);
+    this.fanChanges();
     this.placeLinkLabels();
     this.selectionDirty = true;
   }
@@ -256,13 +270,16 @@ export class SvgRenderer {
     const requests: RouteRequest[] = [];
     // Links with an end on another link need that link's route first: they wait as placeholders and
     // are routed here once the Worker's routes are in.
+    // The same goes for links that share a trunk to a host-given branch point.
     const { depth } = this.attachments();
-    const attached = ids.filter((id) => depth.get(id));
+    this.fanCache.clear();
+    const attached = ids.filter((id) => depth.get(id) || this.inFan(store.links.get(id)!));
+    const waits = new Set(attached);
     for (const id of ids) {
       const l = store.links.get(id)!;
       const from = this.endpoint(l.from);
       const to = this.endpoint(l.to);
-      if (depth.get(id)) {
+      if (waits.has(id)) {
         this.routes.set(id, [from.point, to.point]);
         this.pendingWorker.add(id);
       } else if (l.routing === 'manual') {
@@ -310,7 +327,7 @@ export class SvgRenderer {
         if (reroute.size) this.routeLinks([...reroute]);
         // Manual links were drawn already; analyze them together with the adopted routes.
         const manual = ids.filter(
-          (id) => store.links.get(id)?.routing === 'manual' && !depth.get(id),
+          (id) => store.links.get(id)?.routing === 'manual' && !waits.has(id),
         );
         this.finishRoutes([...keep, ...manual].filter((id) => !reroute.has(id)));
       },
@@ -405,6 +422,8 @@ export class SvgRenderer {
         el.labelSig = labelSig;
       }
     }
+    // A branch point that moved, became reachable or blocked, or whose port gained or lost a link.
+    for (const id of this.fanChanges()) this.reroute.add(id);
     const ids = [...this.reroute].filter((id) => store.links.has(id));
     this.removedLinks.clear();
     this.removedNodes.clear();
@@ -726,15 +745,154 @@ export class SvgRenderer {
     return (route && pointAlong(route, attach.at)) || null;
   }
 
+  // ---- branch points (NodeModel.branchPoints) ---------------------------------
+
+  /** Ports with two or more auto-routed link ends drawn on them: port key -> link ids. */
+  private fanIndex: Map<string, string[]> | null = null;
+  /** Fans worked out since the last change, by port key (null: no branch point in effect). */
+  private readonly fanCache = new Map<string, Fan | null>();
+  /** Signature and links of each fan as last routed, to notice changes. */
+  private readonly fanSeen = new Map<string, { sig: string; links: string[] }>();
+
+  private fans(): Map<string, string[]> {
+    if (this.fanIndex) return this.fanIndex;
+    const all = new Map<string, string[]>();
+    for (const l of this.diagram.store.links.values()) {
+      if (l.routing === 'manual') continue;
+      if (l.from.node === l.to.node && l.from.port === l.to.port) continue;
+      for (const end of ['from', 'to'] as const) {
+        if (this.attachOf(l, end)) continue;
+        const k = `${l[end].node}\u0000${l[end].port}`;
+        const list = all.get(k);
+        if (list) list.push(l.id);
+        else all.set(k, [l.id]);
+      }
+    }
+    for (const [k, list] of all) if (list.length < 2) all.delete(k);
+    return (this.fanIndex = all);
+  }
+
+  /**
+   * The host-given branch point of a port, when it is in effect: the node has an entry for the port,
+   * two or more auto-routed links are drawn on it, and the trunk from the port to the point doesn't run
+   * through a node. Otherwise null, and the router decides where the links part.
+   */
+  private fan(end: LinkEnd): Fan | null {
+    const key = `${end.node}\u0000${end.port}`;
+    const cached = this.fanCache.get(key);
+    if (cached !== undefined) return cached;
+    let fan: Fan | null = null;
+    const n = this.diagram.store.nodes.get(end.node);
+    const off = n?.branchPoints?.[end.port];
+    const links = off && this.fans().get(key);
+    const port = links && portPoint(n!, this.def(n!), end.port);
+    if (port) {
+      const at = { x: Math.round(n!.position.x + off!.x), y: Math.round(n!.position.y + off!.y) };
+      const trunk = trunkPath(port.point, port.direction, at, this.clearance);
+      if (trunk.length > 1 && !pathCrosses(trunk, this.nodeRects.values()))
+        fan = { key, at, trunk, links: links! };
+    }
+    this.fanCache.set(key, fan);
+    return fan;
+  }
+
+  /** The fan a link end belongs to, if any. */
+  private fanOf(l: LinkModel, end: 'from' | 'to'): Fan | null {
+    if (l.routing === 'manual' || this.attachOf(l, end)) return null;
+    const fan = this.fan(l[end]);
+    return fan?.links.includes(l.id) ? fan : null;
+  }
+
+  private inFan(l: LinkModel): boolean {
+    return !!(this.fanOf(l, 'from') || this.fanOf(l, 'to'));
+  }
+
+  /** The point a link's end is drawn at, before routing: its attach point, branch point or port. */
+  private endPoint(l: LinkModel, end: 'from' | 'to'): Point {
+    return this.attachPoint(l, end)?.point ?? this.fanOf(l, end)?.at ?? this.endpoint(l[end]).point;
+  }
+
+  /** How each link of a fan leaves the branch point (see `branchDirections`). */
+  private fanDirections(fan: Fan): Map<string, PortDirection> {
+    if (fan.directions) return fan.directions;
+    const [node, port] = fan.key.split('\u0000') as [string, string];
+    const targets = new Map<string, Point>();
+    for (const id of [...fan.links].sort()) {
+      const l = this.diagram.store.links.get(id)!;
+      const here = l.from.node === node && l.from.port === port ? 'from' : 'to';
+      targets.set(id, this.endPoint(l, here === 'from' ? 'to' : 'from'));
+    }
+    return (fan.directions = branchDirections(fan.at, arrival(fan.trunk), targets));
+  }
+
+  /**
+   * Compares every host-given branch point with what was last routed and returns the links to route
+   * again: those of fans whose trunk or set of links changed, appeared or went away.
+   */
+  private fanChanges(): string[] {
+    this.fanCache.clear();
+    const out: string[] = [];
+    const now = new Map<string, { sig: string; links: string[] }>();
+    for (const n of this.diagram.store.nodes.values()) {
+      if (!n.branchPoints) continue;
+      for (const port of Object.keys(n.branchPoints)) {
+        const fan = this.fan({ node: n.id, port });
+        if (!fan) continue;
+        const sig = `${fan.trunk.map((p) => `${p.x},${p.y}`).join(' ')}|${fan.links.join(' ')}`;
+        now.set(fan.key, { sig, links: fan.links });
+      }
+    }
+    for (const [k, was] of this.fanSeen) if (now.get(k)?.sig !== was.sig) out.push(...was.links);
+    for (const [k, is] of now) if (this.fanSeen.get(k)?.sig !== is.sig) out.push(...is.links);
+    this.fanSeen.clear();
+    for (const [k, v] of now) this.fanSeen.set(k, v);
+    return out;
+  }
+
+  /**
+   * @internal Where the links on a port part: the host-given branch point when one is in effect
+   * (`fixed`), else the point the routes last have in common. Undefined for a port with fewer than two
+   * auto-routed links.
+   */
+  branchPoint(node: string, port: string): { point: Point; fixed: boolean } | undefined {
+    this.fanCache.clear();
+    const fan = this.fan({ node, port });
+    if (fan) return { point: { ...fan.at }, fixed: true };
+    const links = this.fans().get(`${node}\u0000${port}`);
+    if (!links) return undefined;
+    const paths: Point[][] = [];
+    for (const id of links) {
+      const l = this.diagram.store.links.get(id)!;
+      const route = this.routes.get(id);
+      if (!route) return undefined;
+      paths.push(l.from.node === node && l.from.port === port ? route : [...route].reverse());
+    }
+    const point = partingPoint(paths);
+    return point && { point, fixed: false };
+  }
+
   /**
    * Both route endpoints of a link. An end attached to another link starts on that link's route and
-   * leaves it at a right angle, towards the link's other end.
+   * leaves it at a right angle, towards the link's other end. An end in a fan with a host-given branch
+   * point starts at that point: `lead` / `tail` are the shared trunk to add before / after the route.
    */
-  private ends(l: LinkModel): { from: RouteEndpoint; to: RouteEndpoint } {
+  private ends(l: LinkModel): {
+    from: RouteEndpoint;
+    to: RouteEndpoint;
+    lead?: Point[];
+    tail?: Point[];
+  } {
     const a = this.attachPoint(l, 'from');
     const b = this.attachPoint(l, 'to');
-    const from: RouteEndpoint | null = a ? null : this.endpoint(l.from);
-    const to: RouteEndpoint | null = b ? null : this.endpoint(l.to);
+    const fa = this.fanOf(l, 'from');
+    const fb = this.fanOf(l, 'to');
+    const part = (fan: Fan, end: 'from' | 'to'): RouteEndpoint => ({
+      point: fan.at,
+      direction: this.fanDirections(fan).get(l.id)!,
+      nodeId: `${l.id}\u0000${end}`,
+    });
+    const from: RouteEndpoint | null = a ? null : fa ? part(fa, 'from') : this.endpoint(l.from);
+    const to: RouteEndpoint | null = b ? null : fb ? part(fb, 'to') : this.endpoint(l.to);
     const leave = (
       own: NonNullable<typeof a>,
       other: Point,
@@ -754,26 +912,34 @@ export class SvgRenderer {
     return {
       from: from ?? leave(a!, (to ?? b!).point, 'from'),
       to: to ?? leave(b!, (from ?? a!).point, 'to'),
+      ...(fa ? { lead: fa.trunk } : {}),
+      ...(fb ? { tail: [...fb.trunk].reverse() } : {}),
     };
   }
 
   /**
-   * `ids` plus every link attached to one of them (directly or through other links), in rounds: a
-   * link comes after the links its ends sit on, so their new routes are known when it is routed.
+   * `ids` plus every link attached to one of them (directly or through other links) and every link
+   * that shares a host-given branch point with one of them, in rounds: a link comes after the links
+   * its ends sit on, so their new routes are known when it is routed.
    */
   private routeRounds(ids: string[]): string[][] {
     const { dependents, depth } = this.attachments();
-    if (!dependents.size) return [ids];
     const store = this.diagram.store;
     const all = new Set(ids);
     const queue = [...ids];
     for (const id of queue) {
-      for (const d of dependents.get(id) ?? []) {
+      const more = [...(dependents.get(id) ?? [])];
+      const l = store.links.get(id);
+      // Links of one fan choose their directions together.
+      if (l)
+        for (const end of ['from', 'to'] as const) more.push(...(this.fanOf(l, end)?.links ?? []));
+      for (const d of more) {
         if (all.has(d) || !store.links.has(d)) continue;
         all.add(d);
         queue.push(d);
       }
     }
+    if (!dependents.size) return [queue];
     const rounds: string[][] = [];
     for (const id of queue) (rounds[depth.get(id) ?? 0] ??= []).push(id);
     return rounds.filter(Boolean);
@@ -786,24 +952,34 @@ export class SvgRenderer {
   private routeLinks(ids: string[], removed: string[] = []): void {
     const store = this.diagram.store;
     const routed: string[] = [];
+    this.fanCache.clear();
     for (const round of this.routeRounds(ids)) {
       const requests: RouteRequest[] = [];
       const manual: string[] = [];
+      const trunks = new Map<string, { lead?: Point[]; tail?: Point[] }>();
       for (const id of round) {
         this.pendingWorker.delete(id); // routed here: no longer waiting for the Worker
         routed.push(id);
         const l = store.links.get(id)!;
-        const { from, to } = this.ends(l);
+        const { from, to, lead, tail } = this.ends(l);
         if (l.routing === 'manual') {
           manual.push(id);
           this.routes.set(id, [from.point, ...(l.waypoints ?? []), to.point]);
         } else {
           requests.push({ linkId: id, from, to, waypoints: l.waypoints });
+          if (lead || tail) trunks.set(id, { lead, tail });
         }
       }
       // A link that switched auto -> manual must not keep its stale auto route in the router's lanes.
       if (manual.length) this.router.removeRoutes(manual);
-      for (const r of this.router.route(requests)) this.routes.set(r.linkId, r.points);
+      for (const r of this.router.route(requests)) {
+        const t = trunks.get(r.linkId);
+        // The shared trunk joins the routed part at the branch point, which stays a vertex of the path.
+        this.routes.set(
+          r.linkId,
+          t ? [...(t.lead ?? []).slice(0, -1), ...r.points, ...(t.tail ?? []).slice(1)] : r.points,
+        );
+      }
     }
     this.finishRoutes(routed, removed);
   }

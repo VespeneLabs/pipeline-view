@@ -905,6 +905,16 @@ export class Diagram implements DiagramApi {
     return unionRects(rects) ?? { x: 0, y: 0, width: 0, height: 0 };
   }
 
+  /**
+   * Where the links on a port part, in diagram coordinates: the host-given branch point when one is in
+   * effect (`fixed: true`, see `NodeModel.branchPoints`), else the point the router's routes last have
+   * in common. Undefined before mount, or for a port with fewer than two auto-routed links.
+   */
+  getBranchPoint(node: string, port: string): { point: Point; fixed: boolean } | undefined {
+    this.renderer?.flush();
+    return this.renderer?.branchPoint(node, port);
+  }
+
   /** Rendered polyline of a link (port points included), as routed. Undefined before mount or the first render. */
   getLinkPath(linkId: string): Point[] | undefined {
     this.renderer?.flush();
