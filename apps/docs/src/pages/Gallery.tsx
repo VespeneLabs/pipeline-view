@@ -8,6 +8,7 @@ import {
   VALVES,
   type InstrumentBubbleData,
   gasSymbols,
+  header,
   instrumentBubble,
   pidSymbols,
   processSymbols,
@@ -59,8 +60,13 @@ const BUILDER = 'bubbles';
 const DEVICES = ['discrete', 'shared', 'computer', 'plc'] as const;
 const LOCATIONS = ['field', 'panel', 'behind-panel', 'local-panel', 'behind-local-panel'] as const;
 
-/** What the generic instrument bubble draws from its data: every device in every location, then the rest. */
-const BUBBLE_SECTIONS: { title: string; note: string; items: InstrumentBubbleData[] }[] = [
+/** What data does to a symbol: the generic instrument bubble in every device and location, then the rest. */
+const BUBBLE_SECTIONS: {
+  title: string;
+  note: string;
+  def?: SymbolDef;
+  items: InstrumentBubbleData[];
+}[] = [
   {
     title: 'Device × location',
     note: 'device picks the outline, location the line through it',
@@ -78,20 +84,31 @@ const BUBBLE_SECTIONS: { title: string; note: string; items: InstrumentBubbleDat
       { letters: 'PA', high: 'H', low: 'L', device: 'shared', location: 'panel' },
       { letters: 'AT', loop: 7, high: 'CH₄' },
       { letters: 'FT', loop: 12, mounting: 'inline' },
+      { letters: 'FE', mounting: 'inline', flowElement: true },
       { letters: 'TIC', loop: 30, location: 'panel', mounting: 'none' },
       { letters: 'YC', device: 'plc', location: 'local-panel', mounting: 'none' },
     ],
   },
+  {
+    title: 'Header',
+    note: 'inlet and outlet counts · a block valve on every outlet',
+    def: header as SymbolDef,
+    items: [
+      { inlets: 1, outlets: 4 },
+      { inlets: 1, outlets: 4, valves: true },
+    ],
+  },
 ];
 
-function BubbleCard({ data, showPorts }: { data: InstrumentBubbleData; showPorts: boolean }) {
-  const node = { ...previewNode(instrumentBubble), data };
-  const { width, height } = nodeSize(instrumentBubble, node);
+function BubbleCard(props: { def?: SymbolDef; data: InstrumentBubbleData; showPorts: boolean }) {
+  const { def = instrumentBubble as SymbolDef, data, showPorts } = props;
+  const node = { ...previewNode(def), data };
+  const { width, height } = nodeSize(def, node);
   const code = Object.entries(data)
     .map(([k, v]) => `${k}: ${typeof v === 'string' ? `'${v}'` : v}`)
     .join(', ');
   return (
-    <figure className="symbol-card" data-type={instrumentBubble.type}>
+    <figure className="symbol-card" data-type={def.type}>
       {/* Qualifiers are written outside the symbol's box: don't clip them. */}
       <svg
         className="symbol-art"
@@ -103,9 +120,9 @@ function BubbleCard({ data, showPorts }: { data: InstrumentBubbleData; showPorts
         aria-label={code}
       >
         {/* Trusted markup from @pipeline-view/symbols. */}
-        <g dangerouslySetInnerHTML={{ __html: instrumentBubble.render!({ data }) }} />
+        <g dangerouslySetInnerHTML={{ __html: def.render!({ data }) }} />
         {showPorts &&
-          nodePorts(instrumentBubble, node).map((p) => (
+          nodePorts(def, node).map((p) => (
             <circle key={p.id} className="symbol-port" cx={p.position.x} cy={p.position.y} r={3.5}>
               <title>{`${p.id} · ${p.direction}${p.accepts ? ` · ${p.accepts.join(', ')}` : ''}`}</title>
             </circle>
@@ -169,7 +186,8 @@ export function Gallery() {
         <code>@pipeline-view/symbols</code>, numbered as in the Figma reference, plus the process
         equipment. The extended pack adds {pidSymbols.length} more from the ISA-5.1 and oil-and-gas
         legends, and one symbol, <code>{instrumentBubble.type}</code>, draws every instrument bubble
-        from its data. Dots mark the named ports.
+        from its data; the last tab shows what data does to it and to the header. Dots mark the
+        named ports.
       </p>
       <div className="gallery-toolbar">
         <div className="gallery-packs" role="group" aria-label="Symbol pack">
@@ -188,7 +206,7 @@ export function Gallery() {
             aria-pressed={packId === BUILDER}
             onClick={() => setPackId(BUILDER)}
           >
-            Instrument bubble <span>1</span>
+            Drawn from data <span>2</span>
           </button>
         </div>
         <input
@@ -224,7 +242,7 @@ export function Gallery() {
               </header>
               <div className="gallery-grid">
                 {items.map((d) => (
-                  <BubbleCard key={JSON.stringify(d)} data={d} showPorts={showPorts} />
+                  <BubbleCard key={JSON.stringify(d)} def={s.def} data={d} showPorts={showPorts} />
                 ))}
               </div>
             </section>
