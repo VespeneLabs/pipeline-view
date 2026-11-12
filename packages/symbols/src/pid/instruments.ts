@@ -1,16 +1,5 @@
 import type { SymbolDef } from '@pipeline-view/core';
-import {
-  INSTRUMENTATION,
-  type InstrumentData,
-  type Label,
-  type Part,
-  SIGNAL_KINDS,
-  group,
-  part,
-  port,
-  sym,
-  text,
-} from '../shared';
+import { INSTRUMENTATION, type Part, instrument, port, sym } from '../shared';
 import { circle, inline } from './kit';
 
 // Flow and metering elements. Each sits in the line, 110 px wide.
@@ -179,111 +168,56 @@ export const corrosionCoupon = /* @__PURE__ */ inline(
   { keywords: ['COR', 'corrosion probe'] },
 );
 
-// Instrument bubbles by location (ISA-5.1). The gas pack has the field and main-panel bubbles.
+// Instrument bubbles by location and device (ISA-5.1). The gas pack has the field and main-panel
+// bubbles. Each one is a preset of the same drawing: `device` and `location` in a node's data redraw it.
 
-const RING = 'M1 31A30 30 0 1 0 61 31A30 30 0 1 0 1 31ZM31 61V79';
-const SQUARE = 'M1 1H61V61H1Z';
+export const behindPanelInstrument = /* @__PURE__ */ instrument({
+  type: 'pid/behind-panel-instrument',
+  name: 'Instrument · behind main panel',
+  letters: 'TI',
+  location: 'behind-panel',
+  keywords: ['rear of panel', 'not accessible'],
+});
 
-/** How the text sits in a frame: around a double line, or small enough to fit a diamond. */
-type Layout = 'single' | 'double' | 'compact';
+export const localPanelInstrument = /* @__PURE__ */ instrument({
+  type: 'pid/local-panel-instrument',
+  name: 'Instrument · local panel',
+  letters: 'PIC',
+  location: 'local-panel',
+  keywords: ['secondary panel', 'local control panel'],
+});
 
-/* @__NO_SIDE_EFFECTS__ */
-function drawLocated(
-  shape: Part[],
-  layout: Layout,
-  letters: string,
-  loop: string | undefined,
-): string {
-  const compact = layout === 'compact';
-  const size = compact ? 11 : letters.length <= 3 ? 17 : letters.length === 4 ? 14 : 12;
-  const y = compact ? 26.5 : layout === 'double' ? 23.5 : 26;
-  const labels: Label[] = [{ text: letters, x: 31, y, size }];
-  if (loop) {
-    const loopY = compact ? 42 : layout === 'double' ? 50 : 48;
-    labels.push({ text: loop, x: 31, y: loopY, size: compact ? 10 : 12, weight: 400 });
-  }
-  return group(shape.map((p) => part(p)).join('') + labels.map(text).join(''));
-}
+export const behindLocalPanelInstrument = /* @__PURE__ */ instrument({
+  type: 'pid/behind-local-panel-instrument',
+  name: 'Instrument · behind local panel',
+  letters: 'PI',
+  location: 'behind-local-panel',
+  keywords: ['field cabinet', 'not accessible'],
+});
 
-/** A bubble with a location frame. Tag letters and loop number come from data, like the gas pack's bubbles. */
-/* @__NO_SIDE_EFFECTS__ */
-function located(
-  id: string,
-  name: string,
-  letters: string,
-  shape: Part[],
-  keywords: string[],
-  layout: Layout = 'single',
-): SymbolDef {
-  const svg = drawLocated(shape, layout, letters, undefined);
-  return {
-    type: `pid/${id}`,
-    name,
-    category: INSTRUMENTATION,
-    size: { width: 62, height: 80 },
-    ports: [
-      port('tap', 31, 79, 'bottom'),
-      port('signal', 61, 31, 'right', SIGNAL_KINDS),
-      port('input', 1, 31, 'left', SIGNAL_KINDS),
-    ],
-    svg,
-    render: (ctx) => {
-      const data = ctx.data as InstrumentData;
-      const l = data.letters ? String(data.letters) : letters;
-      const loop = data.loop !== undefined && data.loop !== '' ? String(data.loop) : undefined;
-      return l === letters && loop === undefined ? svg : drawLocated(shape, layout, l, loop);
-    },
-    keywords,
-  };
-}
+export const sharedDisplayInstrument = /* @__PURE__ */ instrument({
+  type: 'pid/shared-display-instrument',
+  name: 'Shared display / control',
+  letters: 'FIC',
+  device: 'shared',
+  location: 'panel',
+  keywords: ['DCS', 'shared control', 'console'],
+});
 
-export const behindPanelInstrument = /* @__PURE__ */ located(
-  'behind-panel-instrument',
-  'Instrument · behind main panel',
-  'TI',
-  [{ d: RING }, { d: 'M1 31H61', dash: '5 4' }],
-  ['rear of panel', 'not accessible'],
-);
+export const computerFunction = /* @__PURE__ */ instrument({
+  type: 'pid/computer-function',
+  name: 'Computer function',
+  letters: 'FY',
+  device: 'computer',
+  location: 'panel',
+  keywords: ['computer', 'calculation'],
+});
 
-export const localPanelInstrument = /* @__PURE__ */ located(
-  'local-panel-instrument',
-  'Instrument · local panel',
-  'PIC',
-  [{ d: RING }, { d: 'M1.2 28H60.8M1.2 34H60.8' }],
-  ['secondary panel', 'local control panel'],
-  'double',
-);
-
-export const behindLocalPanelInstrument = /* @__PURE__ */ located(
-  'behind-local-panel-instrument',
-  'Instrument · behind local panel',
-  'PI',
-  [{ d: RING }, { d: 'M1.2 28H60.8M1.2 34H60.8', dash: '5 4' }],
-  ['field cabinet', 'not accessible'],
-  'double',
-);
-
-export const sharedDisplayInstrument = /* @__PURE__ */ located(
-  'shared-display-instrument',
-  'Shared display / control',
-  'FIC',
-  [{ d: SQUARE }, { d: RING }, { d: 'M1 31H61' }],
-  ['DCS', 'shared control', 'console'],
-);
-
-export const computerFunction = /* @__PURE__ */ located(
-  'computer-function',
-  'Computer function',
-  'FY',
-  [{ d: 'M1 31L16 1H46L61 31L46 61H16ZM31 61V79M1 31H61' }],
-  ['computer', 'calculation'],
-);
-
-export const plcFunction = /* @__PURE__ */ located(
-  'plc-function',
-  'Programmable logic control',
-  'YIC',
-  [{ d: SQUARE }, { d: 'M31 1L61 31L31 61L1 31ZM31 61V79M1 31H61' }],
-  ['PLC', 'logic', 'interlock'],
-  'compact',
-);
+export const plcFunction = /* @__PURE__ */ instrument({
+  type: 'pid/plc-function',
+  name: 'Programmable logic control',
+  letters: 'YIC',
+  device: 'plc',
+  location: 'panel',
+  keywords: ['PLC', 'logic', 'interlock'],
+});

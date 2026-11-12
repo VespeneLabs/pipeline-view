@@ -451,7 +451,7 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
       },
       {
         sig: 'gasSymbols / processSymbols / pidSymbols',
-        doc: 'Built-in packs as arrays: 50 gas symbols, 9 process symbols, and the 165-symbol extended P&ID pack (types prefixed pid/).',
+        doc: 'Built-in packs as arrays: 50 gas symbols, 10 process symbols, and the 165-symbol extended P&ID pack (types prefixed pid/).',
       },
       {
         sig: 'registerGasSymbols(registry?) / registerProcessSymbols(registry?) / registerPidSymbols(registry?)',
@@ -464,6 +464,22 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
       {
         sig: 'ValveData, InstrumentData, PumpData, TankData',
         doc: 'Shapes of the data each symbol binds: open, letters/loop, running, level.',
+      },
+      {
+        sig: 'instrumentBubble (process/instrument)',
+        doc: "Any ISA-5.1 instrument bubble from one symbol. Its data picks letters and loop, device ('discrete' | 'shared' | 'computer' | 'plc': the outline), location ('field' | 'panel' | 'behind-panel' | 'local-panel' | 'behind-local-panel': the line through it), high / low (short texts outside the bubble) and mounting ('tap' | 'inline' | 'none': the size and the process ports; signal and input keep their ids). The bubbles of the gas and extended packs are presets of the same drawing and take the same data, except mounting.",
+      },
+      {
+        sig: 'describeInstrumentLetters(letters): { text, warnings }',
+        doc: 'Reads ISA-5.1 tag letters for an inspector: "PDT" is "Pressure differential transmitter", and letters that do not fit come back as warnings. Nothing is refused: the symbols draw any text. ISA_VARIABLES, ISA_MODIFIERS and ISA_FUNCTIONS are the letter tables behind it.',
+      },
+      {
+        sig: '<SymbolPalette presets={[{ id, type, name, data?, label?, category?, keywords? }]} />',
+        doc: 'Palette entries that create a registered symbol with data of its own, for example the instrument bubble as "PT" or a header with five outlets. They are drawn with their data and found by their name and keywords; nothing is registered for them.',
+      },
+      {
+        sig: 'SYMBOL_INIT_MIME · getEditor(diagram).dropSymbol(type, clientX, clientY, init?)',
+        doc: 'For a palette of your own: next to SYMBOL_MIME, drag data may carry JSON { label?, data? } for the new node, and dropSymbol takes the same as init.',
       },
     ],
   },

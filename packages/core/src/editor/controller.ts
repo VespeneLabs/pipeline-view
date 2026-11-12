@@ -21,6 +21,26 @@ import { moveSegment, removeBend, splitSegment } from './waypoints';
 
 /** DataTransfer type a palette sets to the symbol type when dragging onto the canvas. */
 export const SYMBOL_MIME = 'application/x-pipeline-view-symbol';
+/**
+ * Optional companion of `SYMBOL_MIME`: JSON `{ label?, data? }` for the new node, so a palette entry
+ * can be a symbol with data of its own (a preset). Anything else in it is ignored.
+ */
+export const SYMBOL_INIT_MIME = 'application/x-pipeline-view-symbol-init';
+/** What a palette entry may set on the node it creates. */
+export type SymbolInit = Pick<NodeModel, 'label' | 'data'>;
+
+/** Reads a `SYMBOL_INIT_MIME` payload. Drag data can come from anywhere, so only the known fields are taken. */
+function parseInit(json: string): SymbolInit {
+  const init: SymbolInit = {};
+  try {
+    const v = JSON.parse(json || '{}') as SymbolInit | null;
+    if (typeof v?.label === 'string') init.label = v.label;
+    if (v?.data && typeof v.data === 'object' && !Array.isArray(v.data)) init.data = v.data;
+  } catch {
+    /* not ours */
+  }
+  return init;
+}
 
 export interface EditorControllerOptions {
   /** Rendered polyline of a link (ports included). Without it, only manual links get segment handles. */
@@ -217,9 +237,12 @@ export class EditorController {
     this.linkKind = kind;
   }
 
-  /** Adds a symbol at a screen position (client coordinates), e.g. from a touch palette. */
-  dropSymbol(type: string, clientX: number, clientY: number): string | null {
-    return this.commands.drop(type, this.toDiagram({ clientX, clientY }));
+  /**
+   * Adds a symbol at a screen position (client coordinates), e.g. from a touch palette. `init` gives
+   * the new node a label or data of its own.
+   */
+  dropSymbol(type: string, clientX: number, clientY: number, init?: SymbolInit): string | null {
+    return this.commands.drop(type, this.toDiagram({ clientX, clientY }), init);
   }
 
   // ------------------------------------------------------------------ helpers
@@ -975,8 +998,14 @@ export class EditorController {
     const source = type ? undefined : this.sourceFor(e.dataTransfer);
     if (!type && !source) return;
     e.preventDefault();
-    if (type) this.dropSymbol(type, e.clientX, e.clientY);
-    else {
+    if (type) {
+      this.dropSymbol(
+        type,
+        e.clientX,
+        e.clientY,
+        parseInit(e.dataTransfer.getData(SYMBOL_INIT_MIME)),
+      );
+    } else {
       const node = source!.toNode(e.dataTransfer, this.toDiagram(e));
       if (node) this.commands.tryPlaceNode(node);
     }

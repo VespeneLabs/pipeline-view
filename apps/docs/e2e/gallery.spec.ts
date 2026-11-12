@@ -4,7 +4,7 @@ for (const theme of ['light', 'dark'] as const) {
   test(`symbol gallery (${theme})`, async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`./?theme=${theme}#/gallery`);
-    await expect(page.locator('.symbol-card')).toHaveCount(59);
+    await expect(page.locator('.symbol-card')).toHaveCount(60);
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
     await expect(page).toHaveScreenshot(`gallery-${theme}.png`, { fullPage: true });
   });
@@ -15,6 +15,15 @@ for (const theme of ['light', 'dark'] as const) {
     await page.getByRole('button', { name: /Extended P&ID/ }).click();
     await expect(page.locator('.symbol-card')).toHaveCount(165);
     await expect(page).toHaveScreenshot(`gallery-extended-${theme}.png`, { fullPage: true });
+  });
+
+  test(`symbol gallery, instrument bubble (${theme})`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`./?theme=${theme}#/gallery`);
+    await page.getByRole('button', { name: /Instrument bubble/ }).click();
+    // Every device in every location, then letters, qualifiers and mountings.
+    await expect(page.locator('.symbol-card')).toHaveCount(28);
+    await expect(page).toHaveScreenshot(`gallery-bubble-${theme}.png`, { fullPage: true });
   });
 }
 

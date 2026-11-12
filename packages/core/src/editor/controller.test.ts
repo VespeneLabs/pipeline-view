@@ -237,6 +237,36 @@ describe('EditorController', () => {
     expect(d.store.nodes.get('valve_1')!.position).toEqual({ x: 280, y: 290 });
   });
 
+  it('gives a dropped symbol the label and data of a palette preset, and nothing else', () => {
+    const drop = (init: string) => {
+      const data = new Map<string, string>([
+        ['application/x-pipeline-view-symbol', 'test/valve'],
+        ['application/x-pipeline-view-symbol-init', init],
+      ]);
+      const dataTransfer = { types: [...data.keys()], getData: (t: string) => data.get(t) ?? '' };
+      const e = new Event('drop', { bubbles: true, cancelable: true });
+      Object.assign(e, { dataTransfer, clientX: 300, clientY: 300 });
+      d.view!.root.dispatchEvent(e);
+    };
+    drop(JSON.stringify({ label: 'PT-101', data: { letters: 'PT' }, locked: true, id: 'x' }));
+    const node = d.store.nodes.get('valve_1')!;
+    expect(node.label).toBe('PT-101');
+    expect(node.data).toEqual({ letters: 'PT' });
+    expect(node.locked).toBeUndefined();
+    // Drag data may come from anywhere: a payload that isn't ours still drops the plain symbol.
+    drop('not json');
+    drop(JSON.stringify({ label: 7, data: [1] }));
+    drop('null');
+    for (const id of ['valve_2', 'valve_3', 'valve_4']) {
+      expect(d.store.nodes.get(id)!.label).toBeUndefined();
+      expect(d.store.nodes.get(id)!.data).toBeUndefined();
+    }
+    expect(getEditor(d)!.dropSymbol('test/valve', 100, 100, { data: { open: false } })).toBe(
+      'valve_5',
+    );
+    expect(d.store.nodes.get('valve_5')!.data).toEqual({ open: false });
+  });
+
   it('detaches in view mode', () => {
     const spy = vi.spyOn(d, 'undo');
     d.setMode('view');

@@ -1,4 +1,4 @@
-import { type Diagram, SYMBOL_MIME, type SymbolDef } from '@pipeline-view/core';
+import { type Diagram, SYMBOL_INIT_MIME, SYMBOL_MIME, type SymbolDef } from '@pipeline-view/core';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createRef } from 'react';
 import { renderToString } from 'react-dom/server';
@@ -133,5 +133,102 @@ describe('<SymbolPalette>', () => {
     await act(async () => {});
     fireEvent.click(screen.getByTestId('palette-item-t/gate'));
     expect(onActivate).toHaveBeenLastCalledWith(expect.objectContaining({ type: 't/gate' }), null);
+  });
+
+  describe('presets', () => {
+    // A symbol whose drawing and size follow its data, like an instrument bubble.
+    const tag: SymbolDef = {
+      type: 't/tag',
+      name: 'Tag',
+      category: 'Instrumentation',
+      ref: 31,
+      keywords: ['bubble'],
+      size: (n) => ({ width: n.data?.wide ? 80 : 40, height: 20 }),
+      ports: [],
+      render: ({ data }) => `<text>${String(data.letters ?? '??')}</text>`,
+    };
+    const all = [...symbols, tag];
+    const presets = [
+      { id: 'pt', type: 't/tag', name: 'PT', data: { letters: 'PT' }, keywords: ['pressure'] },
+      { id: 'wide', type: 't/tag', name: 'Analyzer', data: { wide: true }, label: 'AT-1' },
+      { id: 'mine', type: 't/gate', name: 'My gate', category: 'Acme' },
+      { id: 'lost', type: 't/unknown', name: 'Lost' },
+    ];
+
+    it('lists presets in their group after the numbered symbols, drawn with their data', () => {
+      const { container } = render(<SymbolPalette symbols={all} presets={presets} />);
+      const group = container.querySelector('[aria-label="Instrumentation"]')!;
+      expect([...group.querySelectorAll('.pv-palette-name')].map((n) => n.textContent)).toEqual([
+        'Tag',
+        'Analyzer',
+        'PT',
+      ]);
+      expect(screen.getByTestId('palette-preset-pt').querySelector('text')!.textContent).toBe('PT');
+      expect(screen.getByTestId('palette-item-t/tag').querySelector('text')!.textContent).toBe(
+        '??',
+      );
+      // The preview takes the size the data gives the symbol.
+      expect(
+        screen.getByTestId('palette-preset-wide').querySelector('svg')!.getAttribute('viewBox'),
+      ).toBe('-2 -2 84 24');
+      // A category of its own, and no entry for a symbol that isn't there.
+      expect(container.querySelector('[aria-label="Acme"]')!.textContent).toContain('My gate');
+      expect(screen.queryByTestId('palette-preset-lost')).toBeNull();
+    });
+
+    it('finds a preset by its name, its own keywords and its symbol', () => {
+      const { container } = render(<SymbolPalette symbols={all} presets={presets} />);
+      const shown = (q: string) => {
+        fireEvent.change(screen.getByRole('searchbox'), { target: { value: q } });
+        return [...container.querySelectorAll('.pv-palette-name')].map((n) => n.textContent);
+      };
+      expect(shown('pressure')).toEqual(['PT']);
+      expect(shown('analyzer')).toEqual(['Analyzer']);
+      expect(shown('bubble')).toEqual(['Tag', 'Analyzer', 'PT']);
+    });
+
+    it('puts the preset on the drag data next to the symbol type', () => {
+      render(<SymbolPalette symbols={all} presets={presets} />);
+      const drag = (testId: string) => {
+        const data = new Map<string, string>();
+        const dataTransfer = {
+          setData: (k: string, v: string) => data.set(k, v),
+          effectAllowed: 'none',
+        };
+        fireEvent.dragStart(screen.getByTestId(testId), { dataTransfer });
+        return data;
+      };
+      const wide = drag('palette-preset-wide');
+      expect(wide.get(SYMBOL_MIME)).toBe('t/tag');
+      expect(JSON.parse(wide.get(SYMBOL_INIT_MIME)!)).toEqual({
+        label: 'AT-1',
+        data: { wide: true },
+      });
+      expect(drag('palette-item-t/tag').has(SYMBOL_INIT_MIME)).toBe(false);
+    });
+
+    it('inserts a clicked preset with its data and label', async () => {
+      const ref = createRef<Diagram>();
+      render(
+        <PipelineView
+          ref={ref}
+          mode="edit"
+          symbols={all}
+          model={{ version: 1, nodes: [], links: [] }}
+        >
+          <SymbolPalette presets={presets} />
+        </PipelineView>,
+      );
+      await act(async () => {});
+      fireEvent.click(screen.getByTestId('palette-preset-pt'));
+      fireEvent.click(screen.getByTestId('palette-preset-wide'));
+      expect(ref.current!.toJSON().nodes.map((n) => [n.id, n.type, n.label, n.data])).toEqual([
+        ['tag_1', 't/tag', undefined, { letters: 'PT' }],
+        ['tag_2', 't/tag', 'AT-1', { wide: true }],
+      ]);
+      // One undo step per insert.
+      ref.current!.undo();
+      expect(ref.current!.toJSON().nodes).toHaveLength(1);
+    });
   });
 });
