@@ -35,7 +35,12 @@ export const INSTRUMENT_PRESETS: SymbolPreset[] = (
   [
     ['pt', 'PT · field', { letters: 'PT' }, ['pressure transmitter']],
     ['pdt', 'PDT · field', { letters: 'PDT' }, ['differential pressure']],
-    ['ft-inline', 'FT · in the line', { letters: 'FT', mounting: 'inline' }, ['flow meter']],
+    [
+      'ft-inline',
+      'FT · in the line',
+      { letters: 'FT', mounting: 'inline', flowElement: true },
+      ['flow meter'],
+    ],
     ['at', 'AT · CH₄', { letters: 'AT', high: 'CH₄' }, ['analyzer', 'methane']],
     [
       'fic',

@@ -8,6 +8,8 @@ import { inlineInstrument } from './inline-instrument';
 import { instrumentBubble } from './instrument';
 import { header } from './header';
 import { burner } from './burner';
+import { enclosure } from './enclosure';
+import { outletPoint } from './outlet-point';
 
 export {
   conicalTank,
@@ -20,6 +22,8 @@ export {
   instrumentBubble,
   header,
   burner,
+  enclosure,
+  outletPoint,
 };
 export type { PumpData } from './pump';
 export type { TankData } from './tank';
@@ -27,10 +31,12 @@ export type { OffPageData } from './off-page';
 export type { InlineInstrumentData } from './inline-instrument';
 export type { InstrumentBubbleData, InstrumentMounting } from './instrument';
 export type { HeaderData } from './header';
+export type { EnclosureData } from './enclosure';
 
 /**
  * Industry-neutral process symbols: tanks, pump and control valve from the process diagram, plus
- * off-page connectors, an inline instrument, the generic instrument bubble, a variable-port header and a consumer / burner.
+ * off-page connectors, an inline instrument, the generic instrument bubble, a variable-port header, a consumer / burner,
+ * an enclosure with an outlet and a point-of-use outlet.
  */
 export const processSymbols: SymbolDef[] = [
   tank,
@@ -43,4 +49,6 @@ export const processSymbols: SymbolDef[] = [
   instrumentBubble,
   header,
   burner,
+  enclosure,
+  outletPoint,
 ];

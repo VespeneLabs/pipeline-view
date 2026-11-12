@@ -451,7 +451,7 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
       },
       {
         sig: 'gasSymbols / processSymbols / pidSymbols',
-        doc: 'Built-in packs as arrays: 50 gas symbols, 10 process symbols, and the 165-symbol extended P&ID pack (types prefixed pid/).',
+        doc: 'Built-in packs as arrays: 50 gas symbols, 12 process symbols, and the 165-symbol extended P&ID pack (types prefixed pid/).',
       },
       {
         sig: 'registerGasSymbols(registry?) / registerProcessSymbols(registry?) / registerPidSymbols(registry?)',
@@ -467,7 +467,15 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
       },
       {
         sig: 'instrumentBubble (process/instrument)',
-        doc: "Any ISA-5.1 instrument bubble from one symbol. Its data picks letters and loop, device ('discrete' | 'shared' | 'computer' | 'plc': the outline), location ('field' | 'panel' | 'behind-panel' | 'local-panel' | 'behind-local-panel': the line through it), high / low (short texts outside the bubble) and mounting ('tap' | 'inline' | 'none': the size and the process ports; signal and input keep their ids). The bubbles of the gas and extended packs are presets of the same drawing and take the same data, except mounting.",
+        doc: "Any ISA-5.1 instrument bubble from one symbol. Its data picks letters and loop, device ('discrete' | 'shared' | 'computer' | 'plc': the outline), location ('field' | 'panel' | 'behind-panel' | 'local-panel' | 'behind-local-panel': the line through it), high / low (short texts outside the bubble) and mounting ('tap' | 'inline' | 'none': the size and the process ports; signal and input keep their ids). In the line, flowElement: true adds the two bars of a flow element. The bubbles of the gas and extended packs are presets of the same drawing and take the same data, except mounting.",
+      },
+      {
+        sig: 'enclosure (process/enclosure) · outletPoint (process/outlet-point)',
+        doc: "The two ends of a supply line: a cabinet or box that holds a source, with one 'out' port and a tag from data.text (it widens for a long one), and a point-of-use outlet with one 'in' port.",
+      },
+      {
+        sig: 'header: data.valves',
+        doc: 'valves: true draws a block valve on every outlet of process/header, for a valve manifold. Size, ports and port ids stay the same.',
       },
       {
         sig: 'describeInstrumentLetters(letters): { text, warnings }',

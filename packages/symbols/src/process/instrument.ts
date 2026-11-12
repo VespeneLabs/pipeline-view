@@ -21,6 +21,8 @@ export interface InstrumentBubbleData extends InstrumentData {
    * keep their ids in every mounting; the size and the process ports follow it.
    */
   mounting?: InstrumentMounting;
+  /** With 'inline' mounting: draw flow-element marks (two bars) on the pipe, as the inline instrument does. */
+  flowElement?: boolean;
 }
 
 const mountingOf = (data: InstrumentBubbleData | undefined): InstrumentMounting =>
@@ -65,7 +67,7 @@ export const instrumentBubble: SymbolDef<InstrumentBubbleData> = {
   render: ({ data }) => {
     const mounting = mountingOf(data);
     const b = bubbleFor(data, { ...BASE, stem: mounting !== 'none' });
-    if (mounting === 'inline') return drawInline(b, false);
+    if (mounting === 'inline') return drawInline(b, data.flowElement === true);
     return sameBubble(b, BASE) ? svg : drawBubble(b);
   },
   keywords: ['bubble', 'balloon', 'ISA', 'tag', 'indicator', 'transmitter', 'controller', 'switch'],

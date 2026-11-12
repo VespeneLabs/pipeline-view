@@ -30,6 +30,9 @@ new Diagram({ symbols: [gateValve, pump] });
 | Instrument bubbles | `letters`, `loop` | Tag letters (e.g. `PIT`) and loop number |
 | Instrument bubbles | `device`, `location`, `high`, `low` | Outline, line through the bubble, and short texts outside it (see below) |
 | `process/instrument` | `mounting` | On a tap, in the line, or on its own |
+| `process/instrument` (in the line), `process/inline-instrument` | `flowElement: true` | Two bars on the pipe, for a flow element |
+| `process/header` | `inlets`, `outlets`, `valves: true` | Port counts (1–32), and a block valve on every outlet; `valves` changes neither size nor ports |
+| `process/off-page-inlet` / `-outlet`, `process/enclosure` | `text` | Tag inside the shape; it widens for a long one |
 
 Ports have stable ids (for example `in`/`out`, or `suction`/`discharge`), and signal ports accept only `signal`/`electrical`/`pneumatic` links. Browse them in the docs symbol gallery.
 
@@ -43,7 +46,7 @@ An instrument bubble is described by a few independent choices, so one symbol, `
 | `device` | `discrete` (default), `shared`, `computer`, `plc` | Circle, circle in a square, hexagon, diamond in a square |
 | `location` | `field` (default), `panel`, `behind-panel`, `local-panel`, `behind-local-panel` | No line, solid, dashed, double, double dashed |
 | `high`, `low` | short text | Qualifiers outside the bubble at the upper and lower right, for example alarm levels or an analyte. They are written beyond the symbol's box |
-| `mounting` | `tap` (default), `inline`, `none` | Stem to a `tap` port (62 × 80), a pipe through with `in` / `out` ports (80 × 88), or the bubble alone (62 × 62). The `signal` and `input` ports keep their ids |
+| `mounting` | `tap` (default), `inline`, `none` | Stem to a `tap` port (62 × 80), a pipe through with `in` / `out` ports (80 × 88), or the bubble alone (62 × 62). The `signal` and `input` ports keep their ids. In the line, `flowElement: true` adds the two bars of a flow element |
 
 ```ts
 import { instrumentBubble, describeInstrumentLetters } from '@vespenelabs/pipeline-view/symbols';

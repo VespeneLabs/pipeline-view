@@ -18,9 +18,11 @@ import {
   gasSymbols,
   gateValve,
   header,
+  enclosure,
   inlineInstrument,
   instrumentBubble,
   offPageInlet,
+  outletPoint,
   offPageOutlet,
   pidSymbols,
   pressureTransmitter,
@@ -66,7 +68,7 @@ function samples(def: SymbolDef): string[] {
 }
 
 describe('symbol definitions', () => {
-  it('ships 50 gas symbols numbered 01–50 in order, plus 10 process symbols', () => {
+  it('ships 50 gas symbols numbered 01–50 in order, plus 12 process symbols', () => {
     expect(gasSymbols.map((d) => d.ref)).toEqual(Array.from({ length: 50 }, (_, i) => i + 1));
     expect(processSymbols.map((d) => d.type)).toEqual([
       'process/tank',
@@ -79,6 +81,8 @@ describe('symbol definitions', () => {
       'process/instrument',
       'process/header',
       'process/burner',
+      'process/enclosure',
+      'process/outlet-point',
     ]);
   });
 
@@ -259,6 +263,67 @@ describe('round-3 process symbols', () => {
     );
     expect(header.render!({ data: { inlets: 2, outlets: 8 } })).toContain('height="212"');
   });
+
+  it('header: valves on every outlet, with size and ports unchanged', () => {
+    const node = (data: Record<string, unknown>) => ({
+      id: 'h',
+      type: 'process/header',
+      position: { x: 0, y: 0 },
+      data,
+    });
+    const plain = node({ inlets: 1, outlets: 4 });
+    const valved = node({ inlets: 1, outlets: 4, valves: true });
+    expect(nodeSize(header, valved)).toEqual(nodeSize(header, plain));
+    expect(nodePorts(header, valved)).toEqual(nodePorts(header, plain));
+    const svg = header.render!({ data: valved.data });
+    // One valve body per outlet, centred on its stub.
+    const ys = nodePorts(header, valved)
+      .filter((p) => p.role === 'out')
+      .map((p) => p.position.y);
+    for (const y of ys) expect(svg).toContain(`M23 ${y - 6}L37 ${y + 6}V${y - 6}L23 ${y + 6}Z`);
+    expect(svg.match(/L37 /g)).toHaveLength(4);
+    // The body moves left inside the same box to make room; the stubs still reach both edges.
+    expect(svg).toContain('<rect x="5"');
+    expect(svg).toContain(`M19 ${ys[0]}H40`);
+    expect(header.render!({ data: plain.data })).not.toContain('L37 ');
+    // Only `true` turns them on, also on the default counts.
+    expect(header.render!({ data: { valves: 'yes' as unknown as boolean } })).toBe(header.svg);
+    expect(header.render!({ data: { valves: true } })).not.toBe(header.svg);
+  });
+
+  it('enclosure: one outlet with a role, a tag from data that widens the box, escaped', () => {
+    const node = (text?: string): NodeModel => ({
+      id: 'e',
+      type: enclosure.type,
+      position: { x: 0, y: 0 },
+      ...(text === undefined ? {} : { data: { text } }),
+    });
+    expect(nodeSize(enclosure)).toEqual({ width: 72, height: 64 });
+    expect(nodePorts(enclosure)).toEqual([
+      { id: 'out', position: { x: 72, y: 32 }, direction: 'right', role: 'out' },
+    ]);
+    expect(enclosure.render!({ data: {} })).toBe(enclosure.svg);
+    expect(enclosure.svg).not.toContain('<text');
+    const short = enclosure.render!({ data: { text: 'GC-1' } });
+    expect(short).toContain('>GC-1</text>');
+    expect(nodeSize(enclosure, node('GC-1')).width).toBe(72);
+    // A long tag widens the box; the port stays on the end of the stub.
+    const { width } = nodeSize(enclosure, node('CABINET-N2-014'));
+    expect(width).toBeGreaterThan(14 * 8);
+    expect(nodePorts(enclosure, node('CABINET-N2-014'))[0]!.position).toEqual({ x: width, y: 32 });
+    const long = enclosure.render!({ data: { text: 'CABINET-N2-014' } });
+    expect(long).toContain(`H${width}`);
+    expect(long).toContain(`x="${(width - 12 + 1) / 2}"`);
+    expect(enclosure.render!({ data: { text: '<b>' } })).toContain('&lt;b&gt;');
+  });
+
+  it('point-of-use outlet: one inlet with a role, inside its box', () => {
+    expect(nodePorts(outletPoint)).toEqual([
+      { id: 'in', position: { x: 0, y: 12 }, direction: 'left', role: 'in' },
+    ]);
+    expect(nodeSize(outletPoint)).toEqual({ width: 38, height: 24 });
+    expect(outletPoint.svg).toContain('M0 12H14');
+  });
 });
 
 describe('extended P&ID pack', () => {
@@ -372,6 +437,12 @@ describe('generic instrument bubble', () => {
     ]);
     // The pipe runs through, and the bubble's ports move with the bubble.
     expect(draw({ mounting: 'inline' })).toContain('M0 79H80');
+    // Flow-element bars, as on the inline instrument; they belong to the pipe, so only when in the line.
+    expect(draw({ mounting: 'inline' })).not.toContain('M35 71V87');
+    expect(draw({ mounting: 'inline', flowElement: true })).toBe(
+      inlineInstrument.render!({ data: { letters: 'PI', flowElement: true } }),
+    );
+    expect(draw({ flowElement: true })).toBe(instrumentBubble.svg);
     expect(nodePorts(instrumentBubble, inline).find((p) => p.id === 'signal')!.position).toEqual({
       x: 70,
       y: 31,
@@ -401,9 +472,9 @@ describe('registration helpers', () => {
     const registry = new SymbolRegistry();
     registerGasSymbols(registry);
     registerProcessSymbols(registry);
-    expect(registry.list()).toHaveLength(60);
+    expect(registry.list()).toHaveLength(62);
     registerPidSymbols(registry);
-    expect(registry.list()).toHaveLength(225);
+    expect(registry.list()).toHaveLength(227);
     expect(registry.get('pid/insulating-joint')?.name).toBe('Insulating joint');
     expect(registry.get('gas/ball-valve')?.ref).toBe(2);
   });
