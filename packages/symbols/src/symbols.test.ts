@@ -21,15 +21,17 @@ import {
   inlineInstrument,
   offPageInlet,
   offPageOutlet,
+  pidSymbols,
   pressureTransmitter,
   processSymbols,
   pump,
   registerGasSymbols,
+  registerPidSymbols,
   registerProcessSymbols,
   tank,
 } from './index';
 
-const all: SymbolDef[] = [...gasSymbols, ...processSymbols];
+const all: SymbolDef[] = [...gasSymbols, ...processSymbols, ...pidSymbols];
 const CATEGORIES = [VALVES, ACTUATION, EQUIPMENT, INSTRUMENTATION, PIPING];
 
 /** Anything that looks like a literal color: hex, rgb()/hsl(), or a named color in a paint attribute. */
@@ -83,6 +85,15 @@ describe('symbol definitions', () => {
     expect(new Set(types).size).toBe(types.length);
     for (const d of gasSymbols) expect(d.type).toMatch(/^gas\/[a-z0-9]+(?:-[a-z0-9]+)*$/);
     for (const d of processSymbols) expect(d.type).toMatch(/^process\/[a-z0-9-]+$/);
+    for (const d of pidSymbols) expect(d.type).toMatch(/^pid\/[a-z0-9]+(?:-[a-z0-9]+)*$/);
+  });
+
+  it('ships the extended P&ID pack: 165 symbols, unnumbered, spread over the six categories', () => {
+    expect(pidSymbols).toHaveLength(165);
+    expect(pidSymbols.every((d) => d.ref === undefined)).toBe(true);
+    const count = (cat: string) => pidSymbols.filter((d) => d.category === cat).length;
+    expect([...CATEGORIES, PROCESS].map(count)).toEqual([14, 27, 31, 24, 38, 31]);
+    expect(new Set(pidSymbols.map((d) => d.name)).size).toBe(165);
   });
 
   it('uses the Figma section titles as categories, ten symbols each', () => {
@@ -248,12 +259,51 @@ describe('round-3 process symbols', () => {
   });
 });
 
+describe('extended P&ID pack', () => {
+  const byType = (type: string) => pidSymbols.find((d) => d.type === type)!;
+
+  it('fills a two-way valve body when closed, with or without an actuator', () => {
+    for (const type of ['pid/pinch-valve', 'pid/motor-operated-gate-valve', 'pid/four-way-valve']) {
+      const def = byType(type);
+      expect(def.render!({ data: {} })).toBe(def.svg);
+      expect(def.render!({ data: { open: false } })).not.toBe(def.svg);
+    }
+  });
+
+  it('puts the line ports of in-line symbols on one level, at the left and right edges', () => {
+    for (const type of ['pid/turbine-meter', 'pid/insulating-joint', 'pid/spectacle-blind']) {
+      const def = byType(type);
+      const [a, b] = nodePorts(def);
+      expect([a!.id, b!.id]).toEqual(['in', 'out']);
+      expect(a!.position.y).toBe(b!.position.y);
+      expect([a!.position.x, b!.position.x]).toEqual([1, nodeSize(def).width - 1]);
+    }
+  });
+
+  it('takes the letters and loop of a located instrument bubble from data, escaped', () => {
+    const def = byType('pid/shared-display-instrument');
+    expect(def.svg).toContain('>FIC</text>');
+    const svg = def.render!({ data: { letters: 'LIC', loop: 12 } });
+    expect(svg).toContain('>LIC</text>');
+    expect(svg).toContain('>12</text>');
+    expect(def.render!({ data: { letters: '<b>' } })).toContain('&lt;b&gt;');
+  });
+
+  it('limits signal lines to their own link kind', () => {
+    expect(nodePorts(byType('pid/hydraulic-signal'))[0]!.accepts).toEqual(['hydraulic']);
+    expect(nodePorts(byType('pid/heat-traced-line'))[0]!.accepts).toBeUndefined();
+  });
+});
+
 describe('registration helpers', () => {
   it('registers every symbol into a registry', () => {
     const registry = new SymbolRegistry();
     registerGasSymbols(registry);
     registerProcessSymbols(registry);
     expect(registry.list()).toHaveLength(59);
+    registerPidSymbols(registry);
+    expect(registry.list()).toHaveLength(224);
+    expect(registry.get('pid/insulating-joint')?.name).toBe('Insulating joint');
     expect(registry.get('gas/ball-valve')?.ref).toBe(2);
   });
 });

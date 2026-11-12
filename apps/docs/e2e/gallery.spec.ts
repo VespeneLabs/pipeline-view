@@ -8,10 +8,23 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
     await expect(page).toHaveScreenshot(`gallery-${theme}.png`, { fullPage: true });
   });
+
+  test(`symbol gallery, extended pack (${theme})`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`./?theme=${theme}#/gallery`);
+    await page.getByRole('button', { name: /Extended P&ID/ }).click();
+    await expect(page.locator('.symbol-card')).toHaveCount(165);
+    await expect(page).toHaveScreenshot(`gallery-extended-${theme}.png`, { fullPage: true });
+  });
 }
 
 test('gallery filter narrows the symbols', async ({ page }) => {
   await page.goto('./#/gallery');
   await page.getByLabel('Filter symbols').fill('compressor');
   await expect(page.locator('.symbol-card')).toHaveCount(3);
+  // The filter applies to the pack on show.
+  await page.getByRole('button', { name: /Extended P&ID/ }).click();
+  await expect(page.locator('.symbol-card')).toHaveCount(5);
+  await page.getByLabel('Filter symbols').fill('insulating');
+  await expect(page.locator('.symbol-card')).toHaveCount(1);
 });

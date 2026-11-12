@@ -1,6 +1,6 @@
 # @pipeline-view/symbols
 
-P&ID symbol packs for [`@pipeline-view/core`](../core): **50 gas-service symbols** (numbered 01–50 as in the reference sheet: valves, actuation and protection, gas equipment, instrumentation, piping and signals) plus **process equipment** (tank, centrifugal pump, control valve).
+P&ID symbol packs for [`@pipeline-view/core`](../core): **50 gas-service symbols** (numbered 01–50 as in the reference sheet: valves, actuation and protection, gas equipment, instrumentation, piping and signals) plus **process equipment** (tank, centrifugal pump, control valve) and a **165-symbol extended P&ID pack**.
 
 All symbols are stroke-based and draw with `currentColor`, so they follow the `--pv-*` theme tokens. Bound text is escaped. Each symbol is a separate export and tree-shakes on its own.
 
@@ -10,10 +10,10 @@ npm install @pipeline-view/core @pipeline-view/symbols
 
 ```ts
 import { Diagram } from '@pipeline-view/core';
-import { gasSymbols, processSymbols, registerGasSymbols, gateValve, pump } from '@pipeline-view/symbols';
+import { gasSymbols, pidSymbols, processSymbols, registerGasSymbols, gateValve, pump } from '@pipeline-view/symbols';
 
 // Everything, per diagram instance…
-new Diagram({ symbols: [...gasSymbols, ...processSymbols] });
+new Diagram({ symbols: [...gasSymbols, ...processSymbols, ...pidSymbols] });
 // …or globally…
 registerGasSymbols();
 // …or only what you use (smallest bundle):
@@ -30,6 +30,21 @@ new Diagram({ symbols: [gateValve, pump] });
 | Instrument bubbles | `letters`, `loop` | Tag letters (e.g. `PIT`) and loop number |
 
 Ports have stable ids (for example `in`/`out`, or `suction`/`discharge`), and signal ports accept only `signal`/`electrical`/`pneumatic` links. Browse them in the docs symbol gallery.
+
+## Extended P&ID pack
+
+`pidSymbols` (or `registerPidSymbols()`) adds 165 symbols from the ISA-5.1 and common oil-and-gas legends that the 50-symbol reference sheet leaves out. Their types are prefixed `pid/`, and they use the same six palette categories as the other packs.
+
+| Category | Count | What is in it |
+| --- | --- | --- |
+| Valves | 14 | Four-way, three-way, stop check, pinch, knife, slide, eccentric rotary disc, bellows-sealed, rotary, bleeder, double block and bleed, angle blowdown, excess flow, float-operated |
+| Actuation & protection | 27 | Hand, motor, pneumatic, hydraulic, balanced-diaphragm and quarter-turn combinations; fail-open; positioner, handwheels, electro-hydraulic, bellows, partial stroke test, solenoid reset and multi-way solenoid valves; pilot-operated relief |
+| Gas equipment | 31 | Axial, turbine-driven, rotary and liquid ring compressors, blowers, motor, engine, turbine, generator; plate, double-pipe, hairpin, U-tube, kettle and spiral exchangers, heater, condenser, fired heater, boiler; cyclone, gravity and impact separators, filters, vessel internals |
+| Instrumentation | 24 | Turbine, ultrasonic, Coriolis, vortex, venturi, nozzle, V-cone, pitot, rotary and diaphragm meters, rotameter, straightening vanes; level gauge, sight glass, thermowell, sample connection, corrosion coupon; bubbles for behind-panel, local panel, shared display, computer and PLC functions |
+| Piping & signals | 38 | Spectacle blind, blind and open disc, end cap, union, expansion joint, hose, spool, insulating joint, eccentric reducer, vent, drain, breather, steam trap, ejector, valve manifold; strainers, silencers, pulsation dampener, detonation arrestor; threaded, welded and socket-weld connections; hydraulic, capillary, electromagnetic, data-link and mechanical-link lines, minor process, heat-traced and battery-limit lines |
+| Process equipment | 31 | Pump types, vertical, sump and can pumps; roof, floating-roof, double-wall, sphere and spheroid tanks, bin, gas cylinder; cooling towers; tray, packed and contactor columns; dampers |
+
+Two-way valve bodies take `open: false`, and the located instrument bubbles take `letters` and `loop`, like the gas pack. The hydraulic, capillary and mechanical line symbols accept links of the kinds `hydraulic`, `capillary` and `mechanical`; style those kinds in your own CSS.
 
 ## Custom symbols
 

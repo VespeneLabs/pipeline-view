@@ -450,11 +450,11 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
         doc: 'Adds symbols to the global registry. See Custom symbols.',
       },
       {
-        sig: 'gasSymbols / processSymbols',
-        doc: 'Built-in packs as arrays (50 gas symbols, 9 process symbols).',
+        sig: 'gasSymbols / processSymbols / pidSymbols',
+        doc: 'Built-in packs as arrays: 50 gas symbols, 9 process symbols, and the 165-symbol extended P&ID pack (types prefixed pid/).',
       },
       {
-        sig: 'registerGasSymbols(registry?) / registerProcessSymbols(registry?)',
+        sig: 'registerGasSymbols(registry?) / registerProcessSymbols(registry?) / registerPidSymbols(registry?)',
         doc: 'Register a pack globally or into a given registry.',
       },
       {
