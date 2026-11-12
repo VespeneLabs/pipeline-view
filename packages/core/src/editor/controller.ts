@@ -25,7 +25,10 @@ export const SYMBOL_MIME = 'application/x-pipeline-view-symbol';
 export interface EditorControllerOptions {
   /** Rendered polyline of a link (ports included). Without it, only manual links get segment handles. */
   getLinkPath?: (linkId: string) => Point[] | undefined;
-  /** Alignment guide snap distance in screen pixels. 0 disables guides. Default 6. */
+  /**
+   * Alignment guide snap distance in screen pixels. 0 disables guides. Default 6. A dragged branch
+   * point also snaps onto the line straight out of its port within this distance.
+   */
   guideThreshold?: number;
   /** Screen-pixel radius within which a connection snaps onto a compatible port. Default 16. */
   portSnapRadius?: number;
@@ -462,7 +465,12 @@ export class EditorController {
       case 'branch':
         if (!g.started && !far(g.start)) return;
         g.started = true;
-        this.commands.previewBranchPoint(g.node, g.port, p);
+        this.commands.previewBranchPoint(
+          g.node,
+          g.port,
+          p,
+          (this.opts.guideThreshold ?? 6) / this.zoom,
+        );
         break;
     }
     this.redraw();

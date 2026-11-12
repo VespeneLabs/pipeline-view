@@ -525,12 +525,20 @@ export class EditorCommands {
     port: string,
     at: Point | null,
     snap = true,
+    magnet = 0,
   ): { branchPoints: Record<string, Point> | undefined } | null {
     const n = this.store.nodes.get(nodeId);
     if (!n || this.isLocked('node', nodeId)) return null;
     const next = { ...n.branchPoints };
     if (at) {
-      const p = snap && this.diagram.options.grid?.snap ? snapPoint(at, this.gridSize) : at;
+      const p = snap && this.diagram.options.grid?.snap ? snapPoint(at, this.gridSize) : { ...at };
+      // The line straight out of the port wins over the grid across it, so the trunk has no jog when
+      // the port itself is off the grid. Along that line the grid still applies.
+      const from = magnet > 0 ? this.geometry.port(n, port) : undefined;
+      if (from) {
+        const across = from.direction === 'left' || from.direction === 'right' ? 'y' : 'x';
+        if (Math.abs(at[across] - from.point[across]) <= magnet) p[across] = from.point[across];
+      }
       const rel = { x: Math.round(p.x - n.position.x), y: Math.round(p.y - n.position.y) };
       const cur = next[port];
       if (cur && cur.x === rel.x && cur.y === rel.y) return null;
@@ -553,9 +561,12 @@ export class EditorCommands {
     return !!patch;
   }
 
-  /** Previews a branch point while the user drags it. Finish with `commitLinkPath` or `cancelLinkPath`. */
-  previewBranchPoint(nodeId: string, port: string, at: Point): void {
-    const patch = this.branchPatch(nodeId, port, at);
+  /**
+   * Previews a branch point while the user drags it. Finish with `commitLinkPath` or `cancelLinkPath`.
+   * Within `magnet` diagram units of the line straight out of the port, the point snaps onto that line.
+   */
+  previewBranchPoint(nodeId: string, port: string, at: Point, magnet = 0): void {
+    const patch = this.branchPatch(nodeId, port, at, true, magnet);
     if (patch) this.diagram.preview((tx) => tx.updateNode(nodeId, patch));
   }
 
