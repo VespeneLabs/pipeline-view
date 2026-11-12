@@ -1,5 +1,20 @@
 # @vespenelabs/pipeline-view
 
+## 1.15.0
+
+### Minor Changes
+
+- 8b976b0: New extended P&ID symbol pack: `pidSymbols` and `registerPidSymbols()` from `@vespenelabs/pipeline-view/symbols` add 165 symbols (types prefixed `pid/`) from the ISA-5.1 and common oil-and-gas legends that the 50-symbol gas reference sheet leaves out. It covers 14 more valve bodies, 27 actuator combinations and details including pilot-operated relief, 24 instruments (flow and metering elements, field devices, bubbles by location), 38 piping items (specials such as spectacle blind and insulating joint, strainers, silencers, end connections, line and signal types), 31 pieces of gas equipment (compressors, drivers, heat exchangers, separators) and 31 of plant equipment (pumps, tanks, cooling towers, columns, dampers). Every symbol is a separate export and tree-shakes on its own. Two-way valve bodies take `open: false`, and the located instrument bubbles take `letters` and `loop`. The existing packs are unchanged.
+- 4bffea5: One symbol for every instrument bubble, and palette presets.
+  
+  - New `instrumentBubble` (`process/instrument`) in `@vespenelabs/pipeline-view/symbols`, part of `processSymbols`. Its data draws any ISA-5.1 bubble: `letters` and `loop`, `device` (`discrete`, `shared`, `computer`, `plc`), `location` (`field`, `panel`, `behind-panel`, `local-panel`, `behind-local-panel`), `high` / `low` (short texts outside the bubble, for example alarm levels) and `mounting` (`tap`, `inline`, `none`). The mounting sets the size and the process ports; `signal` and `input` keep their ids.
+  - The instrument bubbles of the gas pack, the inline instrument and the located bubbles of the extended pack are now presets of the same drawing: they also take `device`, `location`, `high` and `low`. With their existing data they draw as before, and their ports are unchanged.
+  - New `describeInstrumentLetters(letters)` reads ISA-5.1 tag letters back in English ("PDT" is "Pressure differential transmitter") and returns warnings for letters that don't fit, for use in an inspector. `ISA_VARIABLES`, `ISA_MODIFIERS` and `ISA_FUNCTIONS` are its letter tables.
+  - `<SymbolPalette>` takes `presets`: entries that create a registered symbol with data (and a label) of their own, drawn with that data and found by their own name and keywords.
+  - For palettes of your own: drag data may carry `SYMBOL_INIT_MIME` (JSON `{ label?, data? }`) next to `SYMBOL_MIME`, and `getEditor(diagram).dropSymbol()` takes the same as a fourth argument.
+  
+  `InstrumentData` gained the optional fields above, and the new types `InstrumentDevice`, `InstrumentLocation`, `InstrumentMounting`, `InstrumentBubbleData`, `InstrumentLetters`, `SymbolPreset` and `SymbolInit` are exported.
+
 ## 1.14.0
 
 ### Minor Changes
