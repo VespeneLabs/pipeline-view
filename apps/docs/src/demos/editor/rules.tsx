@@ -1,6 +1,7 @@
 import { nodeSize, type DeleteRequest, type NodeModel } from '@pipeline-view/core';
 import { useDiagram, useDiagramEvent, useSelection } from '@pipeline-view/react';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { InstrumentFields, isBubble } from './instrument';
 import type { ManifoldData } from './manifold';
 
 // ---------------------------------------------------------------------------------------- rules
@@ -210,6 +211,7 @@ export function Inspector() {
           </p>
         </div>
       )}
+      {node && isBubble(node.type) && <InstrumentFields diagram={d} node={node} edit={edit} />}
       <label className="editor-check">
         <input
           type="checkbox"

@@ -19,6 +19,7 @@ import {
   gateValve,
   header,
   inlineInstrument,
+  instrumentBubble,
   offPageInlet,
   offPageOutlet,
   pidSymbols,
@@ -65,7 +66,7 @@ function samples(def: SymbolDef): string[] {
 }
 
 describe('symbol definitions', () => {
-  it('ships 50 gas symbols numbered 01–50 in order, plus 9 process symbols', () => {
+  it('ships 50 gas symbols numbered 01–50 in order, plus 10 process symbols', () => {
     expect(gasSymbols.map((d) => d.ref)).toEqual(Array.from({ length: 50 }, (_, i) => i + 1));
     expect(processSymbols.map((d) => d.type)).toEqual([
       'process/tank',
@@ -75,6 +76,7 @@ describe('symbol definitions', () => {
       'process/off-page-inlet',
       'process/off-page-outlet',
       'process/inline-instrument',
+      'process/instrument',
       'process/header',
       'process/burner',
     ]);
@@ -295,14 +297,113 @@ describe('extended P&ID pack', () => {
   });
 });
 
+describe('generic instrument bubble', () => {
+  const node = (data?: Record<string, unknown>): NodeModel => ({
+    id: 'n',
+    type: instrumentBubble.type,
+    position: { x: 0, y: 0 },
+    ...(data ? { data } : {}),
+  });
+  const draw = (data: Record<string, unknown>) => instrumentBubble.render!({ data });
+  const CIRCLE = 'M31 61C47.5685';
+  const SQUARE = 'M1 1H61V61H1Z';
+
+  it('draws a field-mounted circle on a tap stem by default', () => {
+    expect(draw({})).toBe(instrumentBubble.svg);
+    expect(instrumentBubble.svg).toContain(CIRCLE);
+    expect(instrumentBubble.svg).toContain('M31 61V79');
+    expect(instrumentBubble.svg).not.toContain('M1 31H61');
+    expect(nodeSize(instrumentBubble)).toEqual({ width: 62, height: 80 });
+    expect(nodePorts(instrumentBubble).map((p) => p.id)).toEqual(['tap', 'signal', 'input']);
+  });
+
+  it('draws the outline of each device', () => {
+    expect(draw({ device: 'shared' })).toContain(SQUARE + CIRCLE);
+    expect(draw({ device: 'computer' })).toContain('M1 31L16 1H46L61 31L46 61H16Z');
+    expect(draw({ device: 'plc' })).toContain(SQUARE + 'M31 1L61 31L31 61L1 31Z');
+    expect(draw({ device: 'computer' })).not.toContain(CIRCLE);
+  });
+
+  it('draws the line of each location', () => {
+    expect(draw({ location: 'panel' })).toContain('<path d="M1 31H61"/>');
+    expect(draw({ location: 'behind-panel' })).toContain(
+      '<path d="M1 31H61" stroke-dasharray="5 4"/>',
+    );
+    expect(draw({ location: 'local-panel' })).toContain('<path d="M1.2 28H60.8M1.2 34H60.8"/>');
+    expect(draw({ location: 'behind-local-panel' })).toContain(
+      '<path d="M1.2 28H60.8M1.2 34H60.8" stroke-dasharray="5 4"/>',
+    );
+    // The double line is cut to a diamond's width.
+    expect(draw({ device: 'plc', location: 'local-panel' })).toContain('M4 28H58M4 34H58');
+  });
+
+  it('writes letters, loop and the qualifiers outside the bubble, escaped', () => {
+    const svg = draw({ letters: 'LSHH', loop: 12, high: 'HH', low: '<L>' });
+    expect(svg).toContain('>LSHH</text>');
+    expect(svg).toContain('>12</text>');
+    expect(svg).toContain('<text x="56" y="10" text-anchor="start"');
+    expect(svg).toContain('>HH</text>');
+    expect(svg).toContain('&lt;L&gt;');
+    expect(svg).not.toContain('<L>');
+    // Beyond a square outline, not in its corner.
+    expect(draw({ device: 'shared', high: 'H' })).toContain('<text x="65" y="10"');
+  });
+
+  it('falls back to the defaults for unknown values', () => {
+    expect(draw({ device: 'triangle', location: 'moon', mounting: 'glue' })).toBe(
+      instrumentBubble.svg,
+    );
+    expect(draw({ letters: '', loop: '' })).toBe(instrumentBubble.svg);
+  });
+
+  it('mounting decides the size and the process ports, and keeps the signal port ids', () => {
+    const alone = node({ mounting: 'none' });
+    expect(nodeSize(instrumentBubble, alone)).toEqual({ width: 62, height: 62 });
+    expect(nodePorts(instrumentBubble, alone).map((p) => p.id)).toEqual(['signal', 'input']);
+    expect(draw({ mounting: 'none' })).not.toContain('M31 61V79');
+
+    const inline = node({ mounting: 'inline' });
+    expect(nodeSize(instrumentBubble, inline)).toEqual({ width: 80, height: 88 });
+    expect(nodePorts(instrumentBubble, inline).map((p) => [p.id, p.role])).toEqual([
+      ['in', 'in'],
+      ['out', 'out'],
+      ['signal', undefined],
+      ['input', undefined],
+    ]);
+    // The pipe runs through, and the bubble's ports move with the bubble.
+    expect(draw({ mounting: 'inline' })).toContain('M0 79H80');
+    expect(nodePorts(instrumentBubble, inline).find((p) => p.id === 'signal')!.position).toEqual({
+      x: 70,
+      y: 31,
+    });
+    for (const p of nodePorts(instrumentBubble, inline)) {
+      expect(p.position.x).toBeLessThanOrEqual(80);
+      expect(p.position.y).toBeLessThanOrEqual(88);
+    }
+  });
+
+  it('every bubble symbol is a preset of the same drawing', () => {
+    // A gas transmitter told it sits on a panel draws what the panel symbol draws.
+    expect(
+      pressureTransmitter.render!({ data: { letters: 'FIC', loop: 101, location: 'panel' } }),
+    ).toBe(flowIndicatingController.svg);
+    const shared = pidSymbols.find((d) => d.type === 'pid/shared-display-instrument')!;
+    expect(draw({ letters: 'FIC', device: 'shared', location: 'panel' })).toBe(shared.svg);
+    expect(inlineInstrument.render!({ data: { location: 'panel' } })).toContain('M1 31H61');
+    // Presets keep their own ports whatever the data says.
+    expect(nodePorts(pressureTransmitter).map((p) => p.id)).toEqual(['tap', 'signal']);
+    expect(nodePorts(shared).map((p) => p.id)).toEqual(['tap', 'signal', 'input']);
+  });
+});
+
 describe('registration helpers', () => {
   it('registers every symbol into a registry', () => {
     const registry = new SymbolRegistry();
     registerGasSymbols(registry);
     registerProcessSymbols(registry);
-    expect(registry.list()).toHaveLength(59);
+    expect(registry.list()).toHaveLength(60);
     registerPidSymbols(registry);
-    expect(registry.list()).toHaveLength(224);
+    expect(registry.list()).toHaveLength(225);
     expect(registry.get('pid/insulating-joint')?.name).toBe('Insulating joint');
     expect(registry.get('gas/ball-valve')?.ref).toBe(2);
   });

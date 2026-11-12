@@ -7,6 +7,13 @@ export * from './gas';
 export * from './pid';
 export * from './process';
 export {
+  ISA_FUNCTIONS,
+  ISA_MODIFIERS,
+  ISA_VARIABLES,
+  describeInstrumentLetters,
+  type InstrumentLetters,
+} from './isa';
+export {
   ACTUATION,
   EQUIPMENT,
   INSTRUMENTATION,
@@ -14,6 +21,8 @@ export {
   PROCESS,
   VALVES,
   type InstrumentData,
+  type InstrumentDevice,
+  type InstrumentLocation,
   type ValveData,
 } from './shared';
 
@@ -22,7 +31,7 @@ export function registerGasSymbols(registry: SymbolRegistry = globalSymbols): vo
   registry.register(...gasSymbols);
 }
 
-/** Register the process symbols (tanks, pump, control valve, connectors, inline instrument, header, burner). */
+/** Register the process symbols (tanks, pump, control valve, connectors, instruments, header, burner). */
 export function registerProcessSymbols(registry: SymbolRegistry = globalSymbols): void {
   registry.register(...processSymbols);
 }

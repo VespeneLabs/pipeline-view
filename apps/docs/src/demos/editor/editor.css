@@ -285,3 +285,49 @@ kbd {
   background: var(--pv-issue-error);
   color: #fff;
 }
+
+.editor-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 8px;
+  margin-bottom: 8px;
+}
+.editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.editor-field > span {
+  color: var(--pv-muted);
+  font-size: 11.5px;
+}
+.editor-field input,
+.editor-field select {
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--pv-border);
+  border-radius: 6px;
+  background: var(--pv-bg);
+  color: var(--pv-ink);
+  font: inherit;
+}
+/* The letters field and its reading take the full width. */
+.editor-field:first-child,
+.editor-fields .editor-note {
+  grid-column: 1 / -1;
+}
+.editor-fields .editor-note {
+  margin: 0;
+}
+.editor-reading {
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+.editor-reading em {
+  display: block;
+  color: var(--pv-muted);
+}
+.editor-reading em::before {
+  content: '! ';
+}

@@ -1,7 +1,10 @@
 import {
   nodeSize,
+  previewNode,
+  type DataRecord,
   type Diagram,
   type SymbolDef,
+  SYMBOL_INIT_MIME,
   SYMBOL_MIME,
   getEditor,
   globalSymbols,
@@ -19,9 +22,31 @@ export const DEFAULT_CATEGORY_ORDER = [
   'Process equipment',
 ];
 
+/**
+ * A palette entry that creates a registered symbol with data of its own, for example an instrument
+ * bubble that already reads "PT", or a header with five outlets. Nothing is registered for it.
+ */
+export interface SymbolPreset {
+  /** Unique among the presets. */
+  id: string;
+  /** The registered symbol it creates. A preset of an unknown symbol is left out. */
+  type: string;
+  name: string;
+  /** Data of the new node. The preview is drawn with it. */
+  data?: DataRecord;
+  /** Label of the new node. */
+  label?: string;
+  /** Palette group. Default: the symbol's own category. */
+  category?: string;
+  /** Extra search terms, on top of the symbol's own. */
+  keywords?: string[];
+}
+
 export interface SymbolPaletteProps {
   /** Symbols to show. Default: everything registered on the diagram (global + instance symbols). */
   symbols?: SymbolDef[];
+  /** Entries that create a symbol with data of its own. They follow the numbered symbols of their group, by name. */
+  presets?: SymbolPreset[];
   /** Diagram to drop into. Default: the nearest <PipelineView>. */
   diagram?: Diagram | null;
   /** Extra filter applied before search. */
@@ -73,10 +98,10 @@ export function groupSymbols(
   return out;
 }
 
-/** Static preview markup of a symbol (render() with empty data, or the static svg). */
-function previewMarkup(def: SymbolDef): string {
+/** Static preview markup of a symbol (render() with the preset's data or none, or the static svg). */
+function previewMarkup(def: SymbolDef, data: DataRecord = {}): string {
   try {
-    return def.render ? def.render({ data: {} }) : (def.svg ?? '');
+    return def.render ? def.render({ data }) : (def.svg ?? '');
   } catch {
     return def.svg ?? '';
   }
@@ -92,24 +117,49 @@ export function SymbolPalette(props: SymbolPaletteProps) {
   const diagram = props.diagram ?? ctx;
   const [query, setQuery] = useState('');
   const searchId = useId();
-  const { symbols, filter, categoryOrder, searchable = true } = props;
+  const { symbols, presets, filter, categoryOrder, searchable = true } = props;
 
   // The registry has no change events; it's read again when the diagram (or `symbols`) changes.
   const all = useMemo(
     () => symbols ?? (diagram ? diagram.symbols.list() : globalSymbols.list()),
     [symbols, diagram],
   );
+  // A preset is shown as its symbol under the preset's name, so it groups, sorts and searches like one.
+  const [entries, presetOf] = useMemo(() => {
+    const presetOf = new Map<SymbolDef, SymbolPreset>();
+    const entries = [...all];
+    for (const p of presets ?? []) {
+      const def = all.find((d) => d.type === p.type);
+      if (!def) continue;
+      const entry: SymbolDef = {
+        ...def,
+        name: p.name,
+        category: p.category ?? def.category,
+        keywords: [...(def.keywords ?? []), ...(p.keywords ?? [])],
+        ref: undefined,
+      };
+      presetOf.set(entry, p);
+      entries.push(entry);
+    }
+    return [entries, presetOf] as const;
+  }, [all, presets]);
   const groups = useMemo(
     () =>
       groupSymbols(
-        all.filter((d) => (!filter || filter(d)) && matchesSymbol(d, query)),
+        entries.filter((d) => (!filter || filter(d)) && matchesSymbol(d, query)),
         categoryOrder,
       ),
-    [all, filter, query, categoryOrder],
+    [entries, filter, query, categoryOrder],
   );
+  const initOf = (def: SymbolDef) => {
+    const p = presetOf.get(def);
+    return p && { ...(p.label ? { label: p.label } : {}), ...(p.data ? { data: p.data } : {}) };
+  };
 
   const onDragStart = (e: DragEvent<HTMLElement>, def: SymbolDef) => {
     e.dataTransfer.setData(SYMBOL_MIME, def.type);
+    const init = initOf(def);
+    if (init) e.dataTransfer.setData(SYMBOL_INIT_MIME, JSON.stringify(init));
     e.dataTransfer.setData('text/plain', def.name);
     e.dataTransfer.effectAllowed = 'copy';
   };
@@ -121,7 +171,7 @@ export function SymbolPalette(props: SymbolPaletteProps) {
     const root = diagram?.view?.root;
     if (editor && root) {
       const r = root.getBoundingClientRect();
-      id = editor.dropSymbol(def.type, r.left + r.width / 2, r.top + r.height / 2);
+      id = editor.dropSymbol(def.type, r.left + r.width / 2, r.top + r.height / 2, initOf(def));
     }
     props.onActivate?.(def, id);
   };
@@ -146,33 +196,39 @@ export function SymbolPalette(props: SymbolPaletteProps) {
             {g.category} <span className="pv-palette-count">{g.symbols.length}</span>
           </summary>
           <ul className="pv-palette-grid" aria-label={g.category}>
-            {g.symbols.map((def) => (
-              <li key={def.type}>
-                <button
-                  type="button"
-                  className="pv-palette-item"
-                  draggable
-                  data-symbol-type={def.type}
-                  data-testid={`palette-item-${def.type}`}
-                  title={def.ref !== undefined ? `${def.ref} · ${def.name}` : def.name}
-                  onDragStart={(e) => onDragStart(e, def)}
-                  onClick={() => activate(def)}
-                >
-                  <svg
-                    className="pv-palette-preview"
-                    viewBox={`-2 -2 ${nodeSize(def).width + 4} ${nodeSize(def).height + 4}`}
-                    aria-hidden="true"
-                    focusable="false"
+            {g.symbols.map((def) => {
+              const preset = presetOf.get(def);
+              const size = nodeSize(def, { ...previewNode(def), data: preset?.data });
+              return (
+                <li key={preset ? `preset:${preset.id}` : def.type}>
+                  <button
+                    type="button"
+                    className="pv-palette-item"
+                    draggable
+                    data-symbol-type={def.type}
+                    data-testid={
+                      preset ? `palette-preset-${preset.id}` : `palette-item-${def.type}`
+                    }
+                    title={def.ref !== undefined ? `${def.ref} · ${def.name}` : def.name}
+                    onDragStart={(e) => onDragStart(e, def)}
+                    onClick={() => activate(def)}
                   >
-                    <g
-                      className="pv-symbol"
-                      dangerouslySetInnerHTML={{ __html: previewMarkup(def) }}
-                    />
-                  </svg>
-                  <span className="pv-palette-name">{def.name}</span>
-                </button>
-              </li>
-            ))}
+                    <svg
+                      className="pv-palette-preview"
+                      viewBox={`-2 -2 ${size.width + 4} ${size.height + 4}`}
+                      aria-hidden="true"
+                      focusable="false"
+                    >
+                      <g
+                        className="pv-symbol"
+                        dangerouslySetInnerHTML={{ __html: previewMarkup(def, preset?.data) }}
+                      />
+                    </svg>
+                    <span className="pv-palette-name">{def.name}</span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </details>
       ))}

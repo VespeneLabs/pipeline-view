@@ -27,10 +27,12 @@ export { actionForKey, isEditableTarget, type EditorAction, type KeyLike } from 
 export * from './editor/waypoints';
 export {
   EditorController,
+  SYMBOL_INIT_MIME,
   SYMBOL_MIME,
   attachEditor,
   getEditor,
   type EditorControllerOptions,
+  type SymbolInit,
 } from './editor/controller';
 export {
   nodePorts,

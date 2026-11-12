@@ -15,5 +15,6 @@ export {
   groupSymbols,
   matchesSymbol,
   type SymbolPaletteProps,
+  type SymbolPreset,
 } from './SymbolPalette';
 export { ViewportControls, type ViewportControlsProps } from './ViewportControls';

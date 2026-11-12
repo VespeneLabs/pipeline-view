@@ -7,6 +7,7 @@ import {
   validateModel,
 } from '@pipeline-view/core';
 import {
+  DEFAULT_CATEGORY_ORDER,
   PipelineView,
   SymbolPalette,
   ViewportControls,
@@ -18,6 +19,7 @@ import {
 import { gasSymbols, pidSymbols, processSymbols } from '@pipeline-view/symbols';
 import { useMemo, useRef, useState } from 'react';
 import { WhatToTry } from '../../components/WhatToTry';
+import { INSTRUMENT_PRESETS, PRESET_CATEGORY } from './instrument';
 import { manifold } from './manifold';
 import {
   ConfirmDialog,
@@ -35,6 +37,7 @@ import '../demo.css';
 import './editor.css';
 
 const symbols = [...gasSymbols, ...processSymbols, ...pidSymbols, manifold];
+const CATEGORY_ORDER = [PRESET_CATEGORY, ...DEFAULT_CATEGORY_ORDER];
 const KINDS = ['process', 'signal', 'pneumatic', 'electrical'] as const;
 
 function Toolbar() {
@@ -215,6 +218,11 @@ export function PidEditor() {
             and removing <code>in-3</code> removes P2&apos;s line too (one undo step).
           </>,
           <>
+            Drop <b>PT · field</b> from <b>Instrument presets</b>, then change its letters, device
+            and location in the inspector: one symbol draws every ISA-5.1 bubble from its data, and
+            the letters are read back in words.
+          </>,
+          <>
             Turn on <b>Directed process lines</b>, then drag from one manifold inlet to another: the
             port turns red while you drag, and dropping explains why it was refused.
           </>,
@@ -259,7 +267,7 @@ export function PidEditor() {
         >
           <Toolbar />
           <div className="editor-palette" data-testid="palette">
-            <SymbolPalette />
+            <SymbolPalette presets={INSTRUMENT_PRESETS} categoryOrder={CATEGORY_ORDER} />
           </div>
           <SelectionInfo />
           <div className="editor-side">
