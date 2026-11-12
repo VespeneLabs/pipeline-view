@@ -1,8 +1,10 @@
 import { type SymbolRegistry, globalSymbols } from '@pipeline-view/core';
 import { gasSymbols } from './gas';
+import { pidSymbols } from './pid';
 import { processSymbols } from './process';
 
 export * from './gas';
+export * from './pid';
 export * from './process';
 export {
   ACTUATION,
@@ -23,4 +25,9 @@ export function registerGasSymbols(registry: SymbolRegistry = globalSymbols): vo
 /** Register the process symbols (tanks, pump, control valve, connectors, inline instrument, header, burner). */
 export function registerProcessSymbols(registry: SymbolRegistry = globalSymbols): void {
   registry.register(...processSymbols);
+}
+
+/** Register the extended P&ID pack (165 symbols: more valves, actuators, instruments, piping, equipment). */
+export function registerPidSymbols(registry: SymbolRegistry = globalSymbols): void {
+  registry.register(...pidSymbols);
 }

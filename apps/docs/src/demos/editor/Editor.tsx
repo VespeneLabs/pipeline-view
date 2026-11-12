@@ -15,7 +15,7 @@ import {
   useHistory,
   useSelection,
 } from '@pipeline-view/react';
-import { gasSymbols, processSymbols } from '@pipeline-view/symbols';
+import { gasSymbols, pidSymbols, processSymbols } from '@pipeline-view/symbols';
 import { useMemo, useRef, useState } from 'react';
 import { WhatToTry } from '../../components/WhatToTry';
 import { manifold } from './manifold';
@@ -34,7 +34,7 @@ import { editorStartModel } from './startModel';
 import '../demo.css';
 import './editor.css';
 
-const symbols = [...gasSymbols, ...processSymbols, manifold];
+const symbols = [...gasSymbols, ...processSymbols, ...pidSymbols, manifold];
 const KINDS = ['process', 'signal', 'pneumatic', 'electrical'] as const;
 
 function Toolbar() {

@@ -18,6 +18,36 @@
   font: inherit;
 }
 
+.gallery-packs {
+  display: flex;
+  border: 1px solid var(--pv-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.gallery-packs button {
+  padding: 7px 12px;
+  border: 0;
+  background: var(--pv-bg);
+  color: var(--pv-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.gallery-packs button + button {
+  border-left: 1px solid var(--pv-border);
+}
+
+.gallery-packs button[aria-pressed='true'] {
+  background: var(--docs-accent);
+  color: var(--pv-bg);
+}
+
+.gallery-packs span {
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+
 .gallery-toolbar label {
   display: flex;
   gap: 6px;

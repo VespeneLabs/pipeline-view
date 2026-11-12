@@ -1,6 +1,6 @@
 # @vespenelabs/pipeline-view
 
-Interactive process / P&ID diagrams for SCADA-style live monitors and diagram editors: a framework-agnostic core, 54 P&ID symbols, and React bindings, in one package. It has no runtime dependencies, and React is an optional peer.
+Interactive process / P&ID diagrams for SCADA-style live monitors and diagram editors: a framework-agnostic core, 224 P&ID symbols, and React bindings, in one package. It has no runtime dependencies, and React is an optional peer.
 
 Private package on GitHub Packages. See [Installing from GitHub Packages](https://github.com/VespeneLabs/pipeline-view#installing-from-github-packages) for the `.npmrc` setup, then:
 
