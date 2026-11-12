@@ -164,6 +164,32 @@ describe('branch point handle', () => {
     expect(branch()).toEqual({ out: { x: 220, y: 60 } });
   });
 
+  it('snaps a drag onto the line straight out of the port, in preference to the grid across it', () => {
+    // The port is at y = 120; on a 32 grid the nearest lines are 96 and 128.
+    start({ grid: { size: 32, snap: true, visible: false } }, { x: 160, y: 60 });
+    d.setSelection([{ kind: 'node', id: 'a' }]);
+    drag(q('.pv-branch-handle')!, [160, 160], [230, 124]);
+    // Within 6 px of the port's line: y is the port's, x still follows the grid.
+    expect(branch()).toEqual({ out: { x: 224, y: 20 } });
+    expect(d.getLinkPath('ab')!.slice(0, 2)).toEqual([
+      { x: 40, y: 120 },
+      { x: 224, y: 120 },
+    ]);
+    // Further away the grid decides again.
+    drag(q('.pv-branch-handle')!, [224, 120], [230, 131]);
+    expect(branch()).toEqual({ out: { x: 224, y: 28 } });
+  });
+
+  it('snaps onto the port line without grid snapping too, and not at all from the keyboard', () => {
+    start({}, { x: 160, y: 60 });
+    d.setSelection([{ kind: 'node', id: 'a' }]);
+    drag(q('.pv-branch-handle')!, [160, 160], [231, 115]);
+    expect(branch()).toEqual({ out: { x: 231, y: 20 } });
+    q('.pv-branch-handle')!.focus();
+    key(document.activeElement!, 'ArrowDown');
+    expect(branch()).toEqual({ out: { x: 231, y: 21 } });
+  });
+
   it('moves with the arrow keys while focused, keeps focus, and Delete hands it back to the router', () => {
     start({ grid: { size: 20, snap: true, visible: false } }, { x: 160, y: 20 });
     const moved = vi.fn();
