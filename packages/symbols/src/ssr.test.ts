@@ -20,5 +20,6 @@ describe('symbols in a DOM-less environment', () => {
     for (const def of [...gasSymbols, ...processSymbols, ...pidSymbols]) {
       expect(typeof (def.render?.({ data: {} }) ?? def.svg)).toBe('string');
     }
-  });
+    // The cold import of every pack is slow on a loaded CI runner (about 0.2 s locally).
+  }, 30_000);
 });
