@@ -23,6 +23,7 @@ export {
   type InstrumentData,
   type InstrumentDevice,
   type InstrumentLocation,
+  type LevelData,
   type ValveData,
 } from './shared';
 

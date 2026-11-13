@@ -83,6 +83,43 @@ export function portPoint(
   };
 }
 
+const STEP: Record<PortDirection, Point> = {
+  left: { x: -1, y: 0 },
+  right: { x: 1, y: 0 },
+  top: { x: 0, y: -1 },
+  bottom: { x: 0, y: 1 },
+};
+/** How far out of a port a link is taken to run before it can turn, when comparing a port's places. */
+const PORT_LEAD = 24;
+
+/**
+ * Like `portPoint`, for a link whose other end is at `toward`: of the port's `position` and its
+ * `alternates`, the place a pipe reaches `toward` from most directly. Ties go to the earlier place.
+ */
+export function portPointToward(
+  node: NodeModel,
+  def: SymbolDef | undefined,
+  portId: string,
+  toward: Point,
+): ResolvedPort | undefined {
+  const p = findPort(def, node, portId);
+  if (!p) return undefined;
+  let best: ResolvedPort | undefined;
+  let bestCost = Infinity;
+  for (const place of [p, ...(p.alternates ?? [])]) {
+    const point = localToDiagram(node, def, place.position);
+    const direction = transformDirection(node, place.direction);
+    const cost =
+      Math.abs(toward.x - point.x - STEP[direction].x * PORT_LEAD) +
+      Math.abs(toward.y - point.y - STEP[direction].y * PORT_LEAD);
+    if (cost < bestCost) {
+      bestCost = cost;
+      best = { id: p.id, point, direction };
+    }
+  }
+  return best;
+}
+
 export function resolvePorts(node: NodeModel, def: SymbolDef | undefined): ResolvedPort[] {
   return nodePorts(def, node).map((p) => ({
     id: p.id,
@@ -109,12 +146,53 @@ const LABEL_CHAR_WIDTH = 8.5;
 const LABEL_ASCENT = 13;
 const LABEL_HEIGHT = 17;
 
-/** Where a node's label is drawn (its text baseline centre), or null without a label. */
-export function nodeLabelAnchor(node: NodeModel, def: SymbolDef | undefined): Point | null {
+/** Where a node's label is drawn: its baseline point and which end of the text sits there. */
+export interface LabelPlacement extends Point {
+  anchor: 'start' | 'middle' | 'end';
+}
+
+/** Sides tried by `labelPosition: 'auto'`, in order. */
+const AUTO_SIDES: PortDirection[] = ['bottom', 'top', 'right', 'left'];
+/** Space between a symbol and a label beside it. */
+const LABEL_SIDE_GAP = 6;
+
+/**
+ * Where a node's label is drawn, or null without a label. `labelPosition` (the node's, else the
+ * symbol's) names a side of the node as it is drawn, so it holds at every rotation and flip; 'auto'
+ * takes the first of bottom, top, right, left that none of the node's ports faces. Without it the
+ * label sits at the symbol's `labelAnchor`, or below the node.
+ */
+export function nodeLabelPlacement(
+  node: NodeModel,
+  def: SymbolDef | undefined,
+): LabelPlacement | null {
   if (!node.label) return null;
-  if (def?.labelAnchor) return localToDiagram(node, def, def.labelAnchor);
+  let side = node.labelPosition ?? def?.labelPosition;
+  if (!side && def?.labelAnchor)
+    return { ...localToDiagram(node, def, def.labelAnchor), anchor: 'middle' };
+  if (side === 'auto') {
+    const taken = new Set(nodePorts(def, node).map((p) => transformDirection(node, p.direction)));
+    side = AUTO_SIDES.find((s) => !taken.has(s));
+  }
   const b = nodeBounds(node, def);
-  return { x: b.x + b.width / 2, y: b.y + b.height + LABEL_GAP };
+  const x = b.x + b.width / 2;
+  const y = b.y + b.height / 2 + LABEL_ASCENT - LABEL_HEIGHT / 2;
+  switch (side) {
+    case 'top':
+      return { x, y: b.y - LABEL_GAP + 2 * LABEL_ASCENT - LABEL_HEIGHT, anchor: 'middle' };
+    case 'left':
+      return { x: b.x - LABEL_SIDE_GAP, y, anchor: 'end' };
+    case 'right':
+      return { x: b.x + b.width + LABEL_SIDE_GAP, y, anchor: 'start' };
+    default:
+      return { x, y: b.y + b.height + LABEL_GAP, anchor: 'middle' };
+  }
+}
+
+/** The point a node's label is drawn at (its baseline), or null without a label. See `nodeLabelPlacement`. */
+export function nodeLabelAnchor(node: NodeModel, def: SymbolDef | undefined): Point | null {
+  const at = nodeLabelPlacement(node, def);
+  return at && { x: at.x, y: at.y };
 }
 
 /**
@@ -122,10 +200,11 @@ export function nodeLabelAnchor(node: NodeModel, def: SymbolDef | undefined): Po
  * needs no layout read and works without a DOM. Routing around labels and `getBounds()` both use it.
  */
 export function nodeLabelBox(node: NodeModel, def: SymbolDef | undefined): Rect | null {
-  const at = nodeLabelAnchor(node, def);
+  const at = nodeLabelPlacement(node, def);
   if (!at) return null;
   const width = node.label!.length * LABEL_CHAR_WIDTH;
-  return { x: at.x - width / 2, y: at.y - LABEL_ASCENT, width, height: LABEL_HEIGHT };
+  const x = at.anchor === 'middle' ? at.x - width / 2 : at.anchor === 'end' ? at.x - width : at.x;
+  return { x, y: at.y - LABEL_ASCENT, width, height: LABEL_HEIGHT };
 }
 
 export function unionRects(rects: Iterable<Rect>): Rect | undefined {

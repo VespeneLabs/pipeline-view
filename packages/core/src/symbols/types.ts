@@ -1,7 +1,7 @@
 /**
  * Symbol definition contract (PRD FR-6/7). Implemented by @pipeline-view/symbols and by custom symbols that users register.
  */
-import type { DataRecord, LinkKind, NodeModel, Point, Size } from '../model/types';
+import type { DataRecord, LabelPosition, LinkKind, NodeModel, Point, Size } from '../model/types';
 
 export type PortDirection = 'left' | 'right' | 'top' | 'bottom';
 
@@ -31,6 +31,20 @@ export interface PortDef {
   labelPlacement?: 'inside' | 'above' | 'outside';
   /** Extra offset for `label` in diagram units, applied after placement and rotation. */
   labelOffset?: Point;
+  /**
+   * Other places on the symbol a link may leave this port from, for example a tap that can come off
+   * the top or the bottom of a body. Each link on the port is drawn from the place that faces its
+   * other end best, `position` included, and moves over when the nodes move. Only the drawing
+   * changes: the link still names this port. A host-given branch point (`NodeModel.branchPoints`)
+   * keeps its links on `position`.
+   */
+  alternates?: PortPlace[];
+}
+
+/** A place on a symbol and the direction a pipe leaves it in, in unrotated local coordinates. */
+export interface PortPlace {
+  position: Point;
+  direction: PortDirection;
 }
 
 /**
@@ -84,5 +98,10 @@ export interface SymbolDef<D extends DataRecord = DataRecord> {
   uprightText?: boolean;
   /** Where the label is placed, in local coordinates. The default is bottom-center below the symbol. */
   labelAnchor?: Point;
+  /**
+   * Side of the node its label sits on, for nodes that don't set their own `labelPosition`. It takes
+   * precedence over `labelAnchor`. 'auto' suits symbols whose line may run through them either way.
+   */
+  labelPosition?: LabelPosition;
   keywords?: string[];
 }

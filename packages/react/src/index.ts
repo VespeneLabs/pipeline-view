@@ -18,3 +18,4 @@ export {
   type SymbolPreset,
 } from './SymbolPalette';
 export { ViewportControls, type ViewportControlsProps } from './ViewportControls';
+export { SymbolView, type SymbolViewProps } from './SymbolView';

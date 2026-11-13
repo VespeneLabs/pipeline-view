@@ -10,6 +10,7 @@ import {
   gasSymbols,
   header,
   instrumentBubble,
+  cylinderPack,
   pidSymbols,
   processSymbols,
 } from '@pipeline-view/symbols';
@@ -50,7 +51,7 @@ const PACKS: Pack[] = [
       'Compressors and drivers, heat transfer, separation and vessel internals',
       'Flow and metering elements, field devices and bubbles by location',
       'Piping specials, strainers and silencers, end connections, line and signal types',
-      'Pumps, storage, cooling towers, columns and dampers',
+      'Pumps, storage, cooling towers, columns and dampers · gas supply and points of use',
     ],
   },
 ];
@@ -97,6 +98,12 @@ const BUBBLE_SECTIONS: {
       { inlets: 1, outlets: 4 },
       { inlets: 1, outlets: 4, valves: true },
     ],
+  },
+  {
+    title: 'Fill level',
+    note: 'level from 0 to 1 on cylinders, drums, vessels and storage tanks · no fill while unknown',
+    def: cylinderPack,
+    items: [{ level: 0.25 }, { level: 0.6 }, { level: 1 }],
   },
 ];
 

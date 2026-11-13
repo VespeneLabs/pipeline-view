@@ -147,6 +147,11 @@
 .pv-symbol :is(path, circle, ellipse, rect, line, polyline, polygon) {
   stroke-width: var(--pv-symbol-stroke-width);
 }
+/* A symbol drawn outside the diagram (symbolSvg, <SymbolView>). :where() lets any host rule recolour it. */
+:where(.pv-symbol-view) {
+  color: var(--pv-symbol-stroke, currentColor);
+  overflow: visible;
+}
 .pv-node.pv-selected {
   color: var(--pv-selection);
 }

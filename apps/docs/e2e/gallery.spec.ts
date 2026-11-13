@@ -13,7 +13,7 @@ for (const theme of ['light', 'dark'] as const) {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`./?theme=${theme}#/gallery`);
     await page.getByRole('button', { name: /Extended P&ID/ }).click();
-    await expect(page.locator('.symbol-card')).toHaveCount(165);
+    await expect(page.locator('.symbol-card')).toHaveCount(173);
     await expect(page).toHaveScreenshot(`gallery-extended-${theme}.png`, { fullPage: true });
   });
 
@@ -21,8 +21,8 @@ for (const theme of ['light', 'dark'] as const) {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`./?theme=${theme}#/gallery`);
     await page.getByRole('button', { name: /Drawn from data/ }).click();
-    // Every device in every location, then letters, qualifiers and mountings, then the header variants.
-    await expect(page.locator('.symbol-card')).toHaveCount(31);
+    // Every device in every location, then letters, qualifiers and mountings, the header variants and fill levels.
+    await expect(page.locator('.symbol-card')).toHaveCount(34);
     await expect(page).toHaveScreenshot(`gallery-bubble-${theme}.png`, { fullPage: true });
   });
 }

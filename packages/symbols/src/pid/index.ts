@@ -176,6 +176,16 @@ import {
   parallelBladeDamper,
   opposedBladeDamper,
 } from './plant';
+import {
+  cylinderPack,
+  dewar,
+  tubeTrailer,
+  gasGenerator,
+  ambientVaporizer,
+  analyticalInstrument,
+  weldingTorch,
+  cuttingTorch,
+} from './supply';
 
 export * from './valves';
 export * from './actuated';
@@ -183,6 +193,7 @@ export * from './instruments';
 export * from './piping';
 export * from './equipment';
 export * from './plant';
+export * from './supply';
 
 /**
  * Extended P&ID pack: the symbols of the ISA-5.1 and common oil-and-gas legends that the 50-symbol gas
@@ -355,4 +366,12 @@ export const pidSymbols: SymbolDef[] = [
   damper,
   parallelBladeDamper,
   opposedBladeDamper,
+  cylinderPack,
+  dewar,
+  tubeTrailer,
+  gasGenerator,
+  ambientVaporizer,
+  analyticalInstrument,
+  weldingTorch,
+  cuttingTorch,
 ];

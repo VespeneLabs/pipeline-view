@@ -94,12 +94,12 @@ describe('symbol definitions', () => {
     for (const d of pidSymbols) expect(d.type).toMatch(/^pid\/[a-z0-9]+(?:-[a-z0-9]+)*$/);
   });
 
-  it('ships the extended P&ID pack: 165 symbols, unnumbered, spread over the six categories', () => {
-    expect(pidSymbols).toHaveLength(165);
+  it('ships the extended P&ID pack: 173 symbols, unnumbered, spread over the six categories', () => {
+    expect(pidSymbols).toHaveLength(173);
     expect(pidSymbols.every((d) => d.ref === undefined)).toBe(true);
     const count = (cat: string) => pidSymbols.filter((d) => d.category === cat).length;
-    expect([...CATEGORIES, PROCESS].map(count)).toEqual([14, 27, 31, 24, 38, 31]);
-    expect(new Set(pidSymbols.map((d) => d.name)).size).toBe(165);
+    expect([...CATEGORIES, PROCESS].map(count)).toEqual([14, 27, 33, 24, 38, 37]);
+    expect(new Set(pidSymbols.map((d) => d.name)).size).toBe(173);
   });
 
   it('uses the Figma section titles as categories, ten symbols each', () => {
@@ -128,7 +128,11 @@ describe('symbol definitions', () => {
     it('renders well-formed markup without hard-coded colors', () => {
       for (const markup of samples(def)) {
         expect(markup).not.toMatch(HARD_CODED_COLOR);
-        expect(markup).not.toMatch(/<svg|clip-path|\bid=/);
+        // Inner content only, and nothing that needs an id. The one <svg> allowed is the nested
+        // viewport that cuts a level fill off.
+        const LEVEL =
+          /<svg x="0" y="[\d.]+" width="[\d.]+" height="[\d.]+" viewBox="[\d. ]+"><path [^>]*\/><\/svg>/g;
+        expect(markup.replace(LEVEL, '')).not.toMatch(/<svg|clip-path|\bid=/);
         parse(markup);
       }
     });
@@ -474,8 +478,107 @@ describe('registration helpers', () => {
     registerProcessSymbols(registry);
     expect(registry.list()).toHaveLength(62);
     registerPidSymbols(registry);
-    expect(registry.list()).toHaveLength(227);
+    expect(registry.list()).toHaveLength(235);
     expect(registry.get('pid/insulating-joint')?.name).toBe('Insulating joint');
     expect(registry.get('gas/ball-valve')?.ref).toBe(2);
+  });
+});
+
+describe('container fill level', () => {
+  const byType = (type: string) => all.find((d) => d.type === type)!;
+  const CONTAINERS = [
+    'gas/horizontal-drum',
+    'gas/vertical-vessel',
+    'pid/gas-cylinder',
+    'pid/dome-roof-tank',
+    'pid/cone-roof-tank',
+    'pid/open-top-tank',
+    'pid/internal-floating-roof-tank',
+    'pid/external-floating-roof-tank',
+    'pid/double-wall-tank',
+    'pid/sphere',
+    'pid/spheroid-tank',
+    'pid/cylinder-pack',
+    'pid/dewar',
+    'pid/tube-trailer',
+  ];
+
+  it('draws no fill for an unknown or empty level', () => {
+    for (const type of CONTAINERS) {
+      const def = byType(type);
+      for (const level of [undefined, null, 'n/a', NaN, 0, -1])
+        expect(def.render!({ data: { level } }), type).toBe(def.svg);
+    }
+  });
+
+  it('fills every container from its bottom, under the linework, in the level colour', () => {
+    for (const type of CONTAINERS) {
+      const def = byType(type);
+      const markup = def.render!({ data: { level: 0.5 } });
+      const doc = parse(markup);
+      const fills = [...doc.querySelectorAll('svg > g > svg')];
+      expect(fills.length, type).toBeGreaterThan(0);
+      for (const f of fills) {
+        expect(f.querySelector('path')!.getAttribute('style')).toContain('var(--pv-level-fill');
+        // The viewport shows the shape from the level down, at its own place.
+        expect(f.getAttribute('viewBox')).toBe(
+          `0 ${f.getAttribute('y')} ${f.getAttribute('width')} ${f.getAttribute('height')}`,
+        );
+      }
+      expect(markup.indexOf('<svg')).toBeLessThan(markup.indexOf('<path d="M', 120));
+      expect(markup.replace(/<svg.*?<\/svg>/g, '')).toBe(def.svg);
+    }
+  });
+
+  it('cuts the fill at the level and clamps it to full', () => {
+    const cylinder = byType('pid/gas-cylinder');
+    // The body runs from 11 (full) to 61 (empty).
+    expect(cylinder.render!({ data: { level: 0.5 } })).toContain('y="36" width="38" height="25"');
+    expect(cylinder.render!({ data: { level: 3 } })).toContain('y="11" width="38" height="50"');
+    expect(cylinder.render!({ data: { level: '0.2' } })).toContain('y="51" width="38" height="10"');
+  });
+
+  it('fills each vessel of a pack or trailer on its own', () => {
+    expect(byType('pid/cylinder-pack').render!({ data: { level: 1 } }).match(/<svg/g)).toHaveLength(
+      3,
+    );
+    const trailer = byType('pid/tube-trailer').render!({ data: { level: 0.5 } });
+    expect([...trailer.matchAll(/<svg x="0" y="(\d+)"/g)].map((m) => m[1])).toEqual([
+      '8',
+      '22',
+      '36',
+    ]);
+  });
+});
+
+describe('gas supply and point-of-use symbols', () => {
+  const byType = (type: string) => pidSymbols.find((d) => d.type === type)!;
+  const ports = (type: string) =>
+    nodePorts(byType(type)).map((p) => `${p.id}:${p.role}:${p.direction}`);
+
+  it('gives sources one outlet and consumers their inlets, with roles', () => {
+    for (const type of ['pid/cylinder-pack', 'pid/dewar'])
+      expect(ports(type)).toEqual(['out:out:top']);
+    expect(ports('pid/tube-trailer')).toEqual(['out:out:right']);
+    for (const type of ['pid/gas-generator', 'pid/ambient-vaporizer'])
+      expect(ports(type)).toEqual(['in:in:left', 'out:out:right']);
+    for (const type of ['pid/analytical-instrument', 'pid/welding-torch'])
+      expect(ports(type)).toEqual(['in:in:left']);
+    expect(ports('pid/cutting-torch')).toEqual(['fuel:in:left', 'oxygen:in:left']);
+  });
+
+  it('keeps every port on the symbol edge it leaves from', () => {
+    for (const d of pidSymbols.slice(-8)) {
+      const { width, height } = nodeSize(d);
+      for (const p of nodePorts(d)) {
+        const edge = {
+          left: p.position.x,
+          right: width - p.position.x,
+          top: p.position.y,
+          bottom: height - p.position.y,
+        };
+        expect(edge[p.direction], `${d.type} ${p.id}`).toBe(1);
+      }
+    }
   });
 });

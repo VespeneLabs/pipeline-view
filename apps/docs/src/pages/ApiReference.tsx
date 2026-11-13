@@ -170,6 +170,14 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
         doc: "The point where the links that share one port part, per port, relative to the node's position so it travels with the node. The links run one shared trunk from the port to the point (straight out of the port, then one turn) and leave it in different directions, so the junction dot sits there and stays there when one of the links is re-routed. Without an entry the router decides. An entry is ignored while fewer than two auto-routed links are drawn on the port (manual links and ends attached to another link don't count) or while the trunk would run through a node. It is a node field: saved, undoable, in modelChange.patch, and \"moved\" in getDiff. getBranchPoint(node, port) returns { point, fixed } in diagram coordinates: the host-given point when in effect, else where the router's routes part. In edit mode the ports of selected nodes, and the end ports of selected links, show a diamond handle there (.pv-branch-handle, .pv-fixed when host-given): drag it (grid snapping applies, and within the guide snap distance the point snaps onto the line straight out of the port, so an off-grid port leaves no jog in the trunk), or focus it (Tab) and use the arrow keys (Shift for a grid step); Delete hands the point back to the router and Escape returns focus to the canvas. Each committed move is one undo step, emits branchPointMove { node, port, point, at } (null when cleared) and is announced; branchPointMessages.moved / cleared phrase or localize that. One point per port for now; the value may later also be a list.",
       },
       {
+        sig: "NodeModel.labelPosition?: 'top' | 'bottom' | 'left' | 'right' | 'auto' · SymbolDef.labelPosition",
+        doc: "Which side of the node its label sits on. The side is that of the node as drawn, so it holds at every rotation and flip: left and right labels are written beside the node, start- or end-aligned to it. 'auto' takes the first of bottom, top, right, left that none of the node's ports faces once it is rotated and flipped, so a symbol with a line running through it top to bottom (a rotameter, or a valve turned a quarter) gets its label beside it. The symbol's labelPosition is the default for its nodes and takes precedence over its labelAnchor; without either the label sits below the node as before. Routing around labels, getBounds() and the export frame follow. nodeLabelPlacement(node, def) returns { x, y, anchor }.",
+      },
+      {
+        sig: 'PortDef.alternates?: { position, direction }[]',
+        doc: "Other places on the symbol a link may leave the port from, for example an instrument tap that can come off the top or the bottom of a body. Each link on the port is drawn from the place that faces the node at its other end best, the port's own position included (it wins a tie), and moves over when the nodes move. Only the drawing changes: the link still names the one port, so the model, connection rules and graph helpers are unaffected. A host-given branch point keeps its links on the port's own position. Add alternates to a pack symbol with withPorts(def, [{ ...port, alternates }]); portPointToward(node, def, portId, point) returns the place chosen for a given target.",
+      },
+      {
         sig: 'LinkModel.fromAttach / toAttach: { link, at }',
         doc: 'Draws a link end on another link instead of on its port: link is the host link\'s id and at is the place along its route as a fraction of its length (0 = start, 1 = end). It only changes the drawing. from / to still name the node and port the link logically runs to, so graph helpers, connection rules and the topology part of getDiff are unaffected; the port of an attached end is not marked occupied. The end follows the host link when it re-routes, leaves it at a right angle and gets a junction dot (also with mergeJunctions: false); the link gets data-attached. A link can be attached to an attached link. Deleting the host link removes the attachment from the links on it in the same undo step, and they are drawn from their ports again; reconnecting the host link leaves them alone, so keeping their from / to in step with it is the host\'s job. An attachment to a missing link, or one that closes a loop, is ignored. getDiff counts attaching, detaching and moving along the host as "moved". pointAlong(route, at) and fractionAlong(route, point) convert between fractions and points of a route from getLinkPath().',
       },
@@ -451,7 +459,7 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
       },
       {
         sig: 'gasSymbols / processSymbols / pidSymbols',
-        doc: 'Built-in packs as arrays: 50 gas symbols, 12 process symbols, and the 165-symbol extended P&ID pack (types prefixed pid/).',
+        doc: 'Built-in packs as arrays: 50 gas symbols, 12 process symbols, and the 173-symbol extended P&ID pack (types prefixed pid/).',
       },
       {
         sig: 'registerGasSymbols(registry?) / registerProcessSymbols(registry?) / registerPidSymbols(registry?)',
@@ -484,6 +492,14 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
       {
         sig: '<SymbolPalette presets={[{ id, type, name, data?, label?, category?, keywords? }]} />',
         doc: 'Palette entries that create a registered symbol with data of its own, for example the instrument bubble as "PT" or a header with five outlets. They are drawn with their data and found by their name and keywords; nothing is registered for them.',
+      },
+      {
+        sig: '<SymbolView type | symbol data? status? label? size? width? height? title? /> · symbolSvg(def, { data?, status?, label?, width?, height? })',
+        doc: 'One symbol drawn outside the diagram: inside a node renderer, a legend or a picker. <SymbolView> (from the React entry) takes a registered type (looked up on the nearest <PipelineView>, then globally) or a SymbolDef, draws it with data as a node would be (for example { level: 0.4 }), and emits status as data-status. size is the longer side in px; with width or height alone the other follows the proportions. It is hidden from assistive technology unless title names it, and an unknown type renders nothing. symbolSvg() returns the same as an <svg class="pv-symbol-view"> string for HTML renderers, and symbolMarkup(def, ctx) only the inner markup. Both follow currentColor and the --pv-* properties of where they are placed; strokes scale with the drawing, so add vector-effect: non-scaling-stroke in your CSS for very small sizes.',
+      },
+      {
+        sig: 'data.level on container symbols (LevelData)',
+        doc: 'The cylinder, cylinder pack, dewar, tube trailer, horizontal drum, vertical vessel, the storage tanks, sphere and spheroid of the packs take level from 0 (empty) to 1 (full), like process/tank. A level that is missing, null or not a number is unknown and draws no fill. The fill takes --pv-level-fill and --pv-level-opacity, which can be set per status: .pv-node[data-status="low"] { --pv-level-fill: ... }. Update it through setNodeData(), the live-data path.',
       },
       {
         sig: 'SYMBOL_INIT_MIME · getEditor(diagram).dropSymbol(type, clientX, clientY, init?)',

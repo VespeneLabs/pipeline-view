@@ -2,7 +2,7 @@
 
 TypeScript library for interactive P&ID and process diagrams, built for the gas industry and open to any process industry: SCADA-style live monitors and diagram editors in one component.
 
-- **227 symbols**: the 50 gas-service P&ID symbols (valves, actuators, compressors, vessels, instruments, piping), plus tank, cone-bottom tank, pump, control valve, off-page connectors, inline instrument, a generic instrument bubble that draws every ISA-5.1 device and location from its data, header/manifold (optionally with a valve on every outlet), burner, an enclosure with an outlet and a point-of-use outlet, plus a 165-symbol extended P&ID pack (more valves and actuators, metering elements, piping specials, signal types, exchangers, pumps, tanks, columns), and `registerSymbol()` for your own packs
+- **235 symbols**: the 50 gas-service P&ID symbols (valves, actuators, compressors, vessels, instruments, piping), plus tank, cone-bottom tank, pump, control valve, off-page connectors, inline instrument, a generic instrument bubble that draws every ISA-5.1 device and location from its data, header/manifold (optionally with a valve on every outlet), burner, an enclosure with an outlet and a point-of-use outlet, plus a 173-symbol extended P&ID pack (more valves and actuators, metering elements, piping specials, signal types, exchangers, pumps, tanks, columns, gas supply and points of use), and `registerSymbol()` for your own packs
 - **Orthogonal, node-avoiding pipe routing** with manual waypoints, line jumps and junction dots
 - **Live values** through arbitrary HTML / React overlays, with no transport lock-in
 - **Viewer and editor** modes: palette, connect, rotate, undo/redo, JSON save/load
