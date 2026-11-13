@@ -40,6 +40,45 @@ export interface InstrumentData extends DataRecord {
   low?: string;
 }
 
+/**
+ * Data bound by container symbols (cylinders, drums, vessels, storage tanks): how full the container
+ * is, from 0 (empty) to 1 (full). A level that is missing, null or not a number is unknown and draws
+ * no fill. The fill takes `--pv-level-fill` and `--pv-level-opacity`.
+ */
+export interface LevelData extends DataRecord {
+  level?: number | null;
+}
+
+/** The inside of a container: a closed outline, and the heights its fill starts (level 0) and ends (level 1) at. */
+export interface LevelShape {
+  d: string;
+  top: number;
+  bottom: number;
+}
+
+const LEVEL_STYLE =
+  'stroke="none" style="fill:var(--pv-level-fill,currentColor);fill-opacity:var(--pv-level-opacity,0.18)"';
+
+/**
+ * The fill of `shapes` at `level`, or '' when the level is unknown or zero. Each shape is cut off at
+ * the level by a nested `<svg>` viewport, which needs no ids, so any number of copies can share a page.
+ */
+/* @__NO_SIDE_EFFECTS__ */
+export function levelFill(shapes: LevelShape[], level: unknown, width: number): string {
+  const l = level === null ? NaN : Number(level);
+  if (!(l > 0)) return '';
+  return shapes
+    .map((s) => {
+      const y = Math.round((s.bottom - Math.min(l, 1) * (s.bottom - s.top)) * 100) / 100;
+      const h = Math.round((s.bottom - y) * 100) / 100;
+      return (
+        `<svg x="0" y="${y}" width="${width}" height="${h}" viewBox="0 ${y} ${width} ${h}">` +
+        `<path d="${s.d}" ${LEVEL_STYLE}/></svg>`
+      );
+    })
+    .join('');
+}
+
 export interface Part {
   /** Path data in the symbol's local coordinates. */
   d: string;
@@ -117,16 +156,30 @@ export interface SymbolSpec extends Omit<SymbolDef, 'svg' | 'render' | 'size'> {
   size: [width: number, height: number];
   parts: Part[];
   labels?: Label[];
+  /** The inside of the container, or of each of its vessels. Gives the symbol a fill bound to `data.level`. */
+  level?: LevelShape[];
 }
 
-/** Build a static symbol. Symbols with closable parts also get a render() bound to `data.open`. */
+/**
+ * Build a static symbol. Symbols with closable parts also get a render() bound to `data.open`, and
+ * symbols with a `level` shape one bound to `data.level`.
+ */
 /* @__NO_SIDE_EFFECTS__ */
 export function sym(spec: SymbolSpec): SymbolDef {
-  const { size, parts, labels = [], ...rest } = spec;
-  const draw = (closed: boolean) =>
-    group(parts.map((p) => part(p, closed)).join('') + labels.map(text).join(''));
+  const { size, parts, labels = [], level, ...rest } = spec;
+  const inner = (closed: boolean) =>
+    parts.map((p) => part(p, closed)).join('') + labels.map(text).join('');
+  const draw = (closed: boolean) => group(inner(closed));
   const svg = draw(false);
   const def: SymbolDef = { ...rest, size: { width: size[0], height: size[1] }, svg };
+  if (level) {
+    const lines = inner(false);
+    def.render = ({ data }) => {
+      const fill = levelFill(level, (data as LevelData).level, size[0]);
+      return fill ? group(fill + lines) : svg;
+    };
+    return def;
+  }
   if (parts.some((p) => p.closable)) {
     const closedSvg = draw(true);
     def.render = ({ data }) => ((data as ValveData).open === false ? closedSvg : svg);

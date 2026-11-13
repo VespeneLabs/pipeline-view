@@ -7,7 +7,7 @@
  * replaces a node object on every change, so a cached result can never go stale.
  */
 import type { DataRecord, NodeModel, Size } from '../model/types';
-import type { PortDef, PortDirection, SymbolDef } from './types';
+import type { PortDef, PortDirection, SymbolDef, SymbolRenderContext } from './types';
 
 /** Size used for nodes whose symbol type isn't registered. */
 export const FALLBACK_SIZE: Size = { width: 40, height: 40 };
@@ -79,6 +79,39 @@ export function withPorts<D extends DataRecord = DataRecord>(
         typeof extra === 'function' ? extra(node) : extra,
       ),
   };
+}
+
+/** A symbol's inner SVG markup drawn with the given data: its `render()` when it has one, else its static `svg`. */
+export function symbolMarkup(def: SymbolDef, ctx: Partial<SymbolRenderContext> = {}): string {
+  return def.render ? def.render({ ...ctx, data: ctx.data ?? {} }) : (def.svg ?? '');
+}
+
+export interface SymbolSvgOptions extends Partial<SymbolRenderContext> {
+  /** Drawn width in px. With only one of `width` / `height`, the other follows the symbol's proportions. */
+  width?: number;
+  height?: number;
+}
+
+/**
+ * A symbol as a stand-alone `<svg class="pv-symbol-view">` string, outside any diagram: for an HTML
+ * node renderer, a legend or a list. It is drawn with `data` like a node would be (for example a
+ * fill level), carries `status` as `data-status`, and follows `currentColor` and the `--pv-*`
+ * properties of where it is placed. Symbol markup is trusted code; `status` is escaped.
+ */
+export function symbolSvg(def: SymbolDef, opts: SymbolSvgOptions = {}): string {
+  const { width, height, ...ctx } = opts;
+  const size = nodeSize(def, { ...previewNode(def), data: ctx.data });
+  const k =
+    width !== undefined ? width / size.width : height !== undefined ? height / size.height : 1;
+  const status =
+    ctx.status === undefined
+      ? ''
+      : ` data-status="${ctx.status.replace(/[&<"]/g, (c) => `&#${c.charCodeAt(0)};`)}"`;
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" class="pv-symbol-view" viewBox="0 0 ${size.width} ${size.height}" ` +
+    `width="${width ?? size.width * k}" height="${height ?? size.height * k}" overflow="visible" aria-hidden="true"${status}>` +
+    `${symbolMarkup(def, ctx)}</svg>`
+  );
 }
 
 /** Drops ports with a duplicate id (the first one wins) and warns once per symbol type. */

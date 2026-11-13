@@ -40,8 +40,11 @@ export {
   findPort,
   previewNode,
   sidePorts,
+  symbolMarkup,
+  symbolSvg,
   withPorts,
   type SidePortsOptions,
+  type SymbolSvgOptions,
 } from './symbols/resolve';
 export { migrateModel } from './model/migrate';
 export {

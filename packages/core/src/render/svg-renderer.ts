@@ -16,14 +16,16 @@ import { createRoutingWorker, type RoutingWorker } from '../routing/worker-clien
 import { DEFAULT_CULL_THRESHOLD } from './culling';
 import {
   nodeBounds,
-  nodeLabelAnchor,
+  nodeLabelPlacement,
   nodeLabelBox,
   nodeTransform,
   portPoint,
+  portPointToward,
+  type ResolvedPort,
   resolvePorts,
   symbolSize,
 } from '../diagram/geometry';
-import { nodePorts, nodeSize } from '../symbols/resolve';
+import { findPort, nodePorts, nodeSize } from '../symbols/resolve';
 import type { PortDef, PortDirection } from '../symbols/types';
 import { arrowsPath, linkPath, ticksPath } from './paths';
 import { LinkLabelLayout } from './link-labels';
@@ -277,8 +279,8 @@ export class SvgRenderer {
     const waits = new Set(attached);
     for (const id of ids) {
       const l = store.links.get(id)!;
-      const from = this.endpoint(l.from);
-      const to = this.endpoint(l.to);
+      const from = this.endpoint(l, 'from');
+      const to = this.endpoint(l, 'to');
       if (waits.has(id)) {
         this.routes.set(id, [from.point, to.point]);
         this.pendingWorker.add(id);
@@ -665,10 +667,11 @@ export class SvgRenderer {
       return;
     }
     if (!el.label) {
-      el.label = this.svg('text', { class: 'pv-label', 'text-anchor': 'middle' }) as SVGTextElement;
+      el.label = this.svg('text', { class: 'pv-label' }) as SVGTextElement;
       el.g.append(el.label);
     }
-    const at = nodeLabelAnchor(n, def)!;
+    const at = nodeLabelPlacement(n, def)!;
+    el.label.setAttribute('text-anchor', at.anchor);
     el.label.setAttribute('x', String(at.x));
     el.label.setAttribute('y', String(at.y));
     if (el.label.textContent !== n.label) el.label.textContent = n.label;
@@ -676,10 +679,23 @@ export class SvgRenderer {
 
   // ---- links ---------------------------------------------------------------
 
-  private endpoint(end: LinkModel['from']) {
+  /**
+   * Where a link end meets its node. On a port with `alternates` that is the place facing the node at
+   * the link's other end.
+   */
+  private endpoint(l: LinkModel, which: 'from' | 'to') {
+    const end = l[which];
     const n = this.diagram.store.nodes.get(end.node)!;
     const def = this.def(n);
-    const p = portPoint(n, def, end.port);
+    const other = this.diagram.store.nodes.get(l[which === 'from' ? 'to' : 'from'].node);
+    let p: ResolvedPort | undefined;
+    if (other && other !== n && findPort(def, n, end.port)?.alternates) {
+      const ob = nodeBounds(other, this.def(other));
+      p = portPointToward(n, def, end.port, {
+        x: ob.x + ob.width / 2,
+        y: ob.y + ob.height / 2,
+      });
+    } else p = portPoint(n, def, end.port);
     if (p) return { point: p.point, direction: p.direction, nodeId: n.id };
     const b = nodeBounds(n, def);
     return {
@@ -809,7 +825,7 @@ export class SvgRenderer {
 
   /** The point a link's end is drawn at, before routing: its attach point, branch point or port. */
   private endPoint(l: LinkModel, end: 'from' | 'to'): Point {
-    return this.attachPoint(l, end)?.point ?? this.fanOf(l, end)?.at ?? this.endpoint(l[end]).point;
+    return this.attachPoint(l, end)?.point ?? this.fanOf(l, end)?.at ?? this.endpoint(l, end).point;
   }
 
   /** How each link of a fan leaves the branch point (see `branchDirections`). */
@@ -891,8 +907,8 @@ export class SvgRenderer {
       direction: this.fanDirections(fan).get(l.id)!,
       nodeId: `${l.id}\u0000${end}`,
     });
-    const from: RouteEndpoint | null = a ? null : fa ? part(fa, 'from') : this.endpoint(l.from);
-    const to: RouteEndpoint | null = b ? null : fb ? part(fb, 'to') : this.endpoint(l.to);
+    const from: RouteEndpoint | null = a ? null : fa ? part(fa, 'from') : this.endpoint(l, 'from');
+    const to: RouteEndpoint | null = b ? null : fb ? part(fb, 'to') : this.endpoint(l, 'to');
     const leave = (
       own: NonNullable<typeof a>,
       other: Point,
@@ -1316,7 +1332,11 @@ function groupCrossings(crossings: Crossing[]): Map<string, Point[]> {
 
 const portSignature = (ports: PortDef[]) =>
   ports
-    .map((p) => `${p.id}@${p.position.x},${p.position.y}:${p.direction}:${p.label ?? ''}`)
+    .map(
+      (p) =>
+        `${p.id}@${p.position.x},${p.position.y}:${p.direction}:${p.label ?? ''}` +
+        (p.alternates ?? []).map((a) => `/${a.position.x},${a.position.y}:${a.direction}`).join(''),
+    )
     .join('|');
 const sameSize = (a: { width: number; height: number }, b: { width: number; height: number }) =>
   a.width === b.width && a.height === b.height;

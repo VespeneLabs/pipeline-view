@@ -1,5 +1,5 @@
 import type { SymbolDef } from '@pipeline-view/core';
-import { PROCESS, type Part, port, sym } from '../shared';
+import { type LevelShape, PROCESS, type Part, port, sym } from '../shared';
 import { circle, inline } from './kit';
 
 // Pumps. The process pack has the centrifugal pump with a running state.
@@ -116,10 +116,18 @@ export const verticalCanPump = /* @__PURE__ */ sym({
 
 const SHELL = 'M11 21V71H71V21M1 31H11M71 63H81';
 const OPEN_SHELL = 'M11 7V71H71V7M1 31H11M71 63H81';
+const OPEN_INSIDE: LevelShape = { d: 'M11 7H71V71H11Z', top: 7, bottom: 71 };
 
 /* @__NO_SIDE_EFFECTS__ */
-function tankOf(id: string, name: string, paths: string[], keywords: string[]): SymbolDef {
+function tankOf(
+  id: string,
+  name: string,
+  paths: string[],
+  keywords: string[],
+  level: LevelShape = { d: 'M11 21H71V71H11Z', top: 21, bottom: 71 },
+): SymbolDef {
   return sym({
+    level: [level],
     type: `pid/${id}`,
     name,
     category: PROCESS,
@@ -152,6 +160,7 @@ export const openTopTank = /* @__PURE__ */ tankOf(
   'Open top tank',
   [OPEN_SHELL],
   ['open tank', 'pit'],
+  OPEN_INSIDE,
 );
 
 export const internalFloatingRoofTank = /* @__PURE__ */ tankOf(
@@ -166,6 +175,7 @@ export const externalFloatingRoofTank = /* @__PURE__ */ tankOf(
   'External floating roof tank',
   [OPEN_SHELL, 'M11 29H19V23H63V29H71'],
   ['EFR', 'floating roof'],
+  OPEN_INSIDE,
 );
 
 export const doubleWallTank = /* @__PURE__ */ tankOf(
@@ -173,6 +183,7 @@ export const doubleWallTank = /* @__PURE__ */ tankOf(
   'Double wall tank',
   [SHELL, DOME, 'M17 27H65V65H17V27Z'],
   ['full containment', 'LNG', 'cryogenic'],
+  { d: 'M17 27H65V65H17Z', top: 27, bottom: 65 },
 );
 
 export const sphere = /* @__PURE__ */ sym({
@@ -182,8 +193,11 @@ export const sphere = /* @__PURE__ */ sym({
   size: [82, 72],
   ports: [port('in', 41, 1, 'top'), port('out', 41, 71, 'bottom')],
   parts: [{ d: circle(41, 32, 31) }, { d: 'M23 57V71M59 57V71M17 71H65M41 63V71' }],
+  level: [{ d: circle(41, 32, 31), top: 1, bottom: 63 }],
   keywords: ['tank', 'storage', 'Horton sphere', 'LPG'],
 });
+
+const SPHEROID = 'M6 37A35 24 0 1 0 76 37A35 24 0 1 0 6 37Z';
 
 export const spheroidTank = /* @__PURE__ */ sym({
   type: 'pid/spheroid-tank',
@@ -191,10 +205,8 @@ export const spheroidTank = /* @__PURE__ */ sym({
   category: PROCESS,
   size: [82, 72],
   ports: [port('in', 41, 1, 'top'), port('out', 81, 37, 'right')],
-  parts: [
-    { d: 'M6 37A35 24 0 1 0 76 37A35 24 0 1 0 6 37Z' },
-    { d: 'M41 13V1M76 37H81M17 54.5V71M65 54.5V71M11 71H71' },
-  ],
+  parts: [{ d: SPHEROID }, { d: 'M41 13V1M76 37H81M17 54.5V71M65 54.5V71M11 71H71' }],
+  level: [{ d: SPHEROID, top: 13, bottom: 61 }],
   keywords: ['tank', 'storage', 'onion tank', 'spheroid'],
 });
 
@@ -215,6 +227,7 @@ export const gasCylinder = /* @__PURE__ */ sym({
   size: [38, 62],
   ports: [port('out', 19, 1, 'top')],
   parts: [{ d: 'M9 23C9 15 13 13 15 11V5H23V11C25 13 29 15 29 23V61H9V23ZM19 5V1' }],
+  level: [{ d: 'M9 23C9 15 13 13 15 11H23C25 13 29 15 29 23V61H9Z', top: 11, bottom: 61 }],
   keywords: ['gas bottle', 'cylinder', 'calibration gas', 'nitrogen'],
 });
 

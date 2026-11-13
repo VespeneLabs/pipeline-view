@@ -26,6 +26,13 @@ export interface Rect extends Point, Size {}
 
 export type Rotation = 0 | 90 | 180 | 270;
 
+/**
+ * Which side of a node its label sits on. The side is that of the node as drawn, whatever its
+ * rotation and flip. 'auto' takes the first of bottom, top, right, left that none of the node's
+ * ports faces once it is rotated and flipped, so the label stays off a line running through the symbol.
+ */
+export type LabelPosition = 'top' | 'bottom' | 'left' | 'right' | 'auto';
+
 /** Free-form record that the host app owns. The library never interprets it except through bindings. */
 export type DataRecord = Record<string, unknown>;
 
@@ -39,6 +46,11 @@ export interface NodeModel<D extends DataRecord = DataRecord> {
   flipX?: boolean;
   flipY?: boolean;
   label?: string;
+  /**
+   * Side of the node the label sits on. Omitted: the symbol's `labelPosition`, else its `labelAnchor`,
+   * else below the node.
+   */
+  labelPosition?: LabelPosition;
   /** Free-form status. It is emitted as the data-status attribute and nothing more (FR-19). */
   status?: string;
   /**

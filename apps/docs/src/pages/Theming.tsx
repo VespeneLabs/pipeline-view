@@ -93,9 +93,9 @@ const TOKENS: Token[] = [
     name: '--pv-level-fill',
     light: 'var(--pv-line)',
     dark: 'var(--pv-line)',
-    use: 'Tank level fill',
+    use: 'Level fill of tanks, cylinders, drums and vessels (set it per data-status to colour by state)',
   },
-  { name: '--pv-level-opacity', light: '0.18', dark: '0.28', use: 'Tank level fill opacity' },
+  { name: '--pv-level-opacity', light: '0.18', dark: '0.28', use: 'Level fill opacity' },
   { name: '--pv-ink', light: '#192d38', dark: '#e3ebef', use: 'Labels', swatch: true },
   { name: '--pv-muted', light: '#596c77', dark: '#93a6b1', use: 'Secondary text', swatch: true },
   {

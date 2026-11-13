@@ -1,6 +1,6 @@
 # @pipeline-view/symbols
 
-P&ID symbol packs for [`@pipeline-view/core`](../core): **50 gas-service symbols** (numbered 01–50 as in the reference sheet: valves, actuation and protection, gas equipment, instrumentation, piping and signals) plus **process equipment** (tank, centrifugal pump, control valve) and a **165-symbol extended P&ID pack**.
+P&ID symbol packs for [`@pipeline-view/core`](../core): **50 gas-service symbols** (numbered 01–50 as in the reference sheet: valves, actuation and protection, gas equipment, instrumentation, piping and signals) plus **process equipment** (tank, centrifugal pump, control valve) and a **173-symbol extended P&ID pack**.
 
 All symbols are stroke-based and draw with `currentColor`, so they follow the `--pv-*` theme tokens. Bound text is escaped. Each symbol is a separate export and tree-shakes on its own.
 
@@ -27,6 +27,7 @@ new Diagram({ symbols: [gateValve, pump] });
 | Valves with a closable body | `open: false` | Body drawn filled (closed) |
 | `process/pump` | `running: true` | Impeller filled |
 | `process/tank` | `level: 0..1` | Fill level, styled by `--pv-level-fill` and `--pv-level-opacity` |
+| containers of the gas and extended packs | `level: 0..1` | The same fill on `gas/horizontal-drum`, `gas/vertical-vessel`, `pid/gas-cylinder`, `pid/cylinder-pack`, `pid/dewar`, `pid/tube-trailer`, the `pid/` storage tanks, `pid/sphere` and `pid/spheroid-tank`. Missing, `null` or not a number: unknown, no fill |
 | Instrument bubbles | `letters`, `loop` | Tag letters (e.g. `PIT`) and loop number |
 | Instrument bubbles | `device`, `location`, `high`, `low` | Outline, line through the bubble, and short texts outside it (see below) |
 | `process/instrument` | `mounting` | On a tap, in the line, or on its own |
@@ -69,16 +70,16 @@ The bubbles of the gas and extended packs (`gas/pressure-transmitter`, `pid/shar
 
 ## Extended P&ID pack
 
-`pidSymbols` (or `registerPidSymbols()`) adds 165 symbols from the ISA-5.1 and common oil-and-gas legends that the 50-symbol reference sheet leaves out. Their types are prefixed `pid/`, and they use the same six palette categories as the other packs.
+`pidSymbols` (or `registerPidSymbols()`) adds 173 symbols from the ISA-5.1 and common oil-and-gas legends that the 50-symbol reference sheet leaves out. Their types are prefixed `pid/`, and they use the same six palette categories as the other packs.
 
 | Category | Count | What is in it |
 | --- | --- | --- |
 | Valves | 14 | Four-way, three-way, stop check, pinch, knife, slide, eccentric rotary disc, bellows-sealed, rotary, bleeder, double block and bleed, angle blowdown, excess flow, float-operated |
 | Actuation & protection | 27 | Hand, motor, pneumatic, hydraulic, balanced-diaphragm and quarter-turn combinations; fail-open; positioner, handwheels, electro-hydraulic, bellows, partial stroke test, solenoid reset and multi-way solenoid valves; pilot-operated relief |
-| Gas equipment | 31 | Axial, turbine-driven, rotary and liquid ring compressors, blowers, motor, engine, turbine, generator; plate, double-pipe, hairpin, U-tube, kettle and spiral exchangers, heater, condenser, fired heater, boiler; cyclone, gravity and impact separators, filters, vessel internals |
+| Gas equipment | 33 | Axial, turbine-driven, rotary and liquid ring compressors, blowers, motor, engine, turbine, generator; plate, double-pipe, hairpin, U-tube, kettle and spiral exchangers, heater, condenser, fired heater, boiler; cyclone, gravity and impact separators, filters, vessel internals; on-site gas generator, ambient vaporizer |
 | Instrumentation | 24 | Turbine, ultrasonic, Coriolis, vortex, venturi, nozzle, V-cone, pitot, rotary and diaphragm meters, rotameter, straightening vanes; level gauge, sight glass, thermowell, sample connection, corrosion coupon; bubbles for behind-panel, local panel, shared display, computer and PLC functions |
 | Piping & signals | 38 | Spectacle blind, blind and open disc, end cap, union, expansion joint, hose, spool, insulating joint, eccentric reducer, vent, drain, breather, steam trap, ejector, valve manifold; strainers, silencers, pulsation dampener, detonation arrestor; threaded, welded and socket-weld connections; hydraulic, capillary, electromagnetic, data-link and mechanical-link lines, minor process, heat-traced and battery-limit lines |
-| Process equipment | 31 | Pump types, vertical, sump and can pumps; roof, floating-roof, double-wall, sphere and spheroid tanks, bin, gas cylinder; cooling towers; tray, packed and contactor columns; dampers |
+| Process equipment | 37 | Pump types, vertical, sump and can pumps; roof, floating-roof, double-wall, sphere and spheroid tanks, bin, gas cylinder; cooling towers; tray, packed and contactor columns; dampers; cylinder pack, dewar, tube trailer; analytical instrument, welding and cutting torch |
 
 Two-way valve bodies take `open: false`, and the located instrument bubbles take `letters`, `loop` and the other bubble fields, like the gas pack. The hydraulic, capillary and mechanical line symbols accept links of the kinds `hydraulic`, `capillary` and `mechanical`; style those kinds in your own CSS.
 
