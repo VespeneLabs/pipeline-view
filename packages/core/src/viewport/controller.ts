@@ -13,6 +13,8 @@ export interface ViewportHost {
   /** While locked, user pan and zoom are ignored (FR-47). */
   isLocked(): boolean;
   getMode(): DiagramMode;
+  /** What a primary-button drag does in view mode (`DiagramOptions.primaryDrag`). */
+  primaryDrag(): 'select' | 'pan';
   minZoom: number;
   maxZoom: number;
 }
@@ -24,11 +26,13 @@ export const DRAG_THRESHOLD = 4;
 
 export class ViewportController {
   private readonly pointers = new Map<number, Point>();
-  private pan: { start: Point; vp: Viewport; moved: boolean } | null = null;
+  private pan: { start: Point; vp: Viewport; moved: boolean; right: boolean } | null = null;
   private pinch: { dist: number; mid: Point; vp: Viewport } | null = null;
   private spaceDown = false;
   /** True if the last primary press turned into a pan. Click handlers check it to avoid selecting after a drag. */
   suppressClick = false;
+  /** True if the last right-button press turned into a pan, so it must not open a context menu. */
+  rightPanned = false;
   private readonly cleanup: (() => void)[] = [];
 
   constructor(private readonly host: ViewportHost) {
@@ -63,17 +67,20 @@ export class ViewportController {
 
   private canPan(e: PointerEvent): boolean {
     if (this.host.isLocked()) return false;
-    if (e.button === 1) return true;
+    // The middle and right buttons pan in both modes, from anywhere.
+    if (e.button === 1 || e.button === 2) return true;
     if (e.button !== 0) return false;
     if (this.spaceDown) return true;
     const t = e.target as Element | null;
     // A draggable annotation owns its primary press (see AnnotationDrag), in view mode too.
     if (t?.closest?.('[data-draggable]')) return false;
-    if (this.host.getMode() === 'view') return true;
+    const touch = e.pointerType === 'touch';
+    // View mode: a finger always pans; a mouse or pen pans unless the primary drag selects (ViewMarquee).
+    if (this.host.getMode() === 'view') return touch || this.host.primaryDrag() === 'pan';
     // Edit mode: the editor owns mouse presses (marquee, node drag). Touch on the empty background pans,
     // except while a symbol is being placed (FR-50), when a touch drag moves the preview.
     if (this.host.root.classList.contains('pv-placing')) return false;
-    return e.pointerType === 'touch' && !t?.closest?.(ITEM_SELECTOR);
+    return touch && !t?.closest?.(ITEM_SELECTOR);
   }
 
   private onDown = (e: PointerEvent) => {
@@ -86,6 +93,7 @@ export class ViewportController {
       this.pan = null;
       this.suppressClick = false;
     }
+    this.rightPanned = false;
     this.pointers.set(e.pointerId, p);
     if (this.pointers.size === 2 && !this.host.isLocked()) {
       this.pan = null;
@@ -93,7 +101,7 @@ export class ViewportController {
       return;
     }
     if (this.pointers.size > 2 || !this.canPan(e)) return;
-    this.pan = { start: p, vp: this.host.getViewport(), moved: false };
+    this.pan = { start: p, vp: this.host.getViewport(), moved: false, right: e.button === 2 };
     // No capture yet: capturing on pointerdown retargets the following click to the root in real
     // browsers, so a plain click on a node would never reach it. Capture once the press becomes a drag.
   };
@@ -119,6 +127,7 @@ export class ViewportController {
       }
     }
     pan.moved = true;
+    if (pan.right) this.rightPanned = true;
     this.suppressClick = true;
     this.host.root.classList.add('pv-panning');
     this.host.applyViewport({ ...pan.vp, x: pan.vp.x + dx, y: pan.vp.y + dy });
@@ -131,7 +140,9 @@ export class ViewportController {
       if (this.pointers.size === 0) this.host.settle();
       // Continue as a one-finger pan from the remaining pointer.
       const [rest] = this.pointers.values();
-      this.pan = rest ? { start: rest, vp: this.host.getViewport(), moved: true } : null;
+      this.pan = rest
+        ? { start: rest, vp: this.host.getViewport(), moved: true, right: false }
+        : null;
       return;
     }
     if (this.pointers.size === 0) {
@@ -184,6 +195,11 @@ export class ViewportController {
     );
     if (zoom !== vp.zoom) this.host.applyViewport(zoomAround(vp, zoom, this.local(e)));
   };
+
+  /** Whether a right-button drag pans now. If so, the browser's context menu must stay closed for it. */
+  rightDragPans(): boolean {
+    return !this.host.isLocked();
+  }
 
   private onKey = (e: KeyboardEvent) => {
     if (e.code !== 'Space') return;

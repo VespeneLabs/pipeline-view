@@ -52,7 +52,7 @@ describe('viewportChange.final (FR-47)', () => {
       root.dispatchEvent(
         new PointerEvent(type, {
           bubbles: true,
-          button: 0,
+          button: 2, // a right-button drag pans in both modes
           pointerId: 1,
           isPrimary: true,
           clientX: x,

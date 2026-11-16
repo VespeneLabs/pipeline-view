@@ -364,7 +364,7 @@
   stroke-dasharray: 4 3;
   pointer-events: none;
 }
-.pv-editor .pv-marquee {
+.pv-marquee {
   fill: var(--pv-selection);
   fill-opacity: 0.08;
   stroke: var(--pv-selection);

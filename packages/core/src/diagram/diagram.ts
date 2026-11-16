@@ -41,6 +41,7 @@ import { SvgRenderer } from '../render/svg-renderer';
 import { OverlayRenderer } from '../render/overlay';
 import { attachPointerEvents } from '../render/input';
 import { AnnotationDrag } from '../render/annotation-drag';
+import { ViewMarquee } from '../render/view-marquee';
 import { KeyboardNavigation } from '../render/a11y';
 import { CullingController } from '../render/culling';
 import { DiffLayer } from '../render/diff';
@@ -137,6 +138,7 @@ export class Diagram implements DiagramApi {
   overlay: OverlayRenderer | undefined;
   private detachPointerEvents: (() => void) | undefined;
   private annotationDrag: AnnotationDrag | undefined;
+  private viewMarquee: ViewMarquee | undefined;
   /** @internal Culling and level of detail for large diagrams (FR-55). Created on mount. */
   culling: CullingController | undefined;
   /** @internal Keyboard focus navigation. Created on mount. */
@@ -195,6 +197,7 @@ export class Diagram implements DiagramApi {
       settle: () => this.applyViewport(this.viewport, true),
       isLocked: () => this.viewportLocked,
       getMode: () => this.mode,
+      primaryDrag: () => this.options.primaryDrag ?? 'select',
       minZoom: this.minZoom,
       maxZoom: this.maxZoom,
     });
@@ -207,6 +210,7 @@ export class Diagram implements DiagramApi {
     this.overlay = new OverlayRenderer(this, view);
     this.detachPointerEvents = attachPointerEvents(this, view);
     this.annotationDrag = new AnnotationDrag(this, view);
+    this.viewMarquee = new ViewMarquee(this, view);
     // In the DOM from the start: live regions added together with their first message may go unread.
     const live = (this.liveRegion = container.ownerDocument.createElement('div'));
     live.className = 'pv-live';
@@ -1187,6 +1191,7 @@ export class Diagram implements DiagramApi {
     this.issueLayer?.destroy();
     this.detachPointerEvents?.();
     this.annotationDrag?.destroy();
+    this.viewMarquee?.destroy();
     this.overlay?.destroy();
     this.renderer?.destroy();
     this.viewportController?.destroy();
