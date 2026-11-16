@@ -111,7 +111,7 @@ afterEach(() => {
 
 describe('annotation drag: opt-in', () => {
   it('is off by default: no draggable slots, and the press pans as before', () => {
-    setup();
+    setup({ primaryDrag: 'pan' });
     expect(reading().hasAttribute('data-draggable')).toBe(false);
     expect(reading().hasAttribute('tabindex')).toBe(false);
     drag(reading(), 40, 0);

@@ -230,7 +230,8 @@ describe('viewport API', () => {
 describe('input', () => {
   beforeEach(() => d.mount(container));
 
-  it('pans with a primary drag in view mode, past the click threshold', () => {
+  it("pans with a primary drag in view mode with primaryDrag: 'pan', past the click threshold", () => {
+    d.options.primaryDrag = 'pan';
     pointer('pointerdown', { clientX: 100, clientY: 100 });
     pointer('pointermove', { clientX: 102, clientY: 101 });
     expect(d.getViewport()).toMatchObject({ x: 0, y: 0 });
@@ -255,7 +256,40 @@ describe('input', () => {
     expect(d.getViewport().x).toBe(40);
   });
 
+  it('by default a primary mouse drag does not pan in view mode, but a touch drag does', () => {
+    pointer('pointerdown', { clientX: 0, clientY: 0 });
+    pointer('pointermove', { clientX: 50, clientY: 0 });
+    pointer('pointerup', { clientX: 50, clientY: 0 });
+    expect(d.getViewport().x).toBe(0);
+    pointer('pointerdown', { pointerType: 'touch', clientX: 0, clientY: 0 });
+    pointer('pointermove', { pointerType: 'touch', clientX: 50, clientY: 0 });
+    pointer('pointerup', { pointerType: 'touch', clientX: 50, clientY: 0 });
+    expect(d.getViewport().x).toBe(50);
+  });
+
+  it('pans with the right button in view and edit mode, from an item too, unless locked', () => {
+    const item = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    item.dataset.nodeId = 'a';
+    d.view!.layers.nodes.append(item);
+    const rightDrag = (dx: number) => {
+      pointer('pointerdown', { target: item, button: 2, clientX: 0, clientY: 0 });
+      pointer('pointermove', { target: item, button: -1, buttons: 2, clientX: dx, clientY: 0 });
+      pointer('pointerup', { target: item, button: 2, clientX: dx, clientY: 0 });
+    };
+    rightDrag(40);
+    expect(d.getViewport().x).toBe(40);
+    expect(d.viewportController!.rightPanned).toBe(true);
+    d.setMode('edit');
+    rightDrag(30);
+    expect(d.getViewport().x).toBe(70);
+    d.lockViewport(true);
+    rightDrag(30);
+    expect(d.getViewport().x).toBe(70);
+    expect(d.viewportController!.rightPanned).toBe(false);
+  });
+
   it('resets suppressClick on the next primary press even if it does not pan', () => {
+    d.options.primaryDrag = 'pan';
     pointer('pointerdown', { clientX: 0, clientY: 0 });
     pointer('pointermove', { clientX: 50, clientY: 0 });
     pointer('pointerup');
@@ -266,6 +300,7 @@ describe('input', () => {
   });
 
   it('drops pointers whose pointerup was missed, so the next press is not a pinch', () => {
+    d.options.primaryDrag = 'pan';
     pointer('pointerdown', { clientX: 0, clientY: 0 });
     // pointerup happened outside the root and never arrived.
     pointer('pointerdown', { pointerId: 1, clientX: 100, clientY: 100 });
@@ -277,6 +312,7 @@ describe('input', () => {
     const capture = vi
       .spyOn(withCapture(d.view!.root), 'setPointerCapture')
       .mockImplementation(() => {});
+    d.options.primaryDrag = 'pan';
     pointer('pointerdown', { clientX: 0, clientY: 0 });
     pointer('pointerup', { clientX: 1, clientY: 0 });
     expect(capture).not.toHaveBeenCalled();

@@ -350,6 +350,10 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
         doc: 'final is true once a pan, zoom or animation has settled: save the view then, not on every frame.',
       },
       {
+        sig: "primaryDrag: 'select' | 'pan'",
+        doc: "What a left-button drag does in view mode. 'select' (the default): a drag that starts on the background draws a selection box, and Shift adds to the selection. 'pan': any drag moves the view, as before 1.18. In both modes the middle and right buttons, Space + drag and a touch drag pan. A right click that doesn't move still raises contextMenu, on the release; the browser's own menu stays closed over the diagram unless the viewport is locked.",
+      },
+      {
         sig: 'lockViewport(locked) / isViewportLocked()',
         doc: 'Stops user pan and zoom (also keyboard zoom); programmatic setViewport still applies. The root gets data-viewport-locked.',
       },

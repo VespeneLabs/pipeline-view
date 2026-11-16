@@ -188,6 +188,14 @@ export interface DiagramOptions {
   grid?: { size: number; snap: boolean; visible: boolean };
   minZoom?: number;
   maxZoom?: number;
+  /**
+   * What a drag with the primary (left) mouse button does in view mode. `'select'` (the default): a
+   * drag that starts on the background draws a selection box, and Shift adds to the selection.
+   * `'pan'`: any drag moves the viewport, as it did before 1.18. In both modes the middle and right
+   * buttons, Space + drag and a touch drag pan; a right click that doesn't move still raises
+   * `contextMenu`.
+   */
+  primaryDrag?: 'select' | 'pan';
   routing?: RouterOptions;
   /**
    * Route links around node labels too, not only around node bodies (default true). The label's box

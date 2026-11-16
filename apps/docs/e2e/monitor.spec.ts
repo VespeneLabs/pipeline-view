@@ -88,3 +88,44 @@ test('reading cards can be dragged in view mode as display state', async ({ page
   expect(await position(id)).toEqual(start);
   await expect.poll(async () => (await slot.boundingBox())!.x).toBeCloseTo(box.x, 0);
 });
+
+test('the right button pans, and a left drag on the background selects with a box', async ({
+  page,
+}) => {
+  await page.goto('./?static#/monitor');
+  const read = <T>(expr: string) =>
+    page.evaluate<T>(`(() => { const d = window.__diagram; return ${expr}; })()`);
+  await expect(page.locator('[data-node-id="P03"]')).toBeVisible();
+  await read('(window.__menus = 0, d.on("contextMenu", () => window.__menus++), 0)');
+  const box = (await page.getByTestId('monitor-canvas').boundingBox())!;
+  const corner = { x: box.x + 6, y: box.y + 6 };
+  const before = await read<{ x: number; y: number }>('d.getViewport()');
+
+  // Right drag: the view moves, and neither the browser's menu nor contextMenu gets in the way.
+  await page.mouse.move(corner.x, corner.y);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(corner.x + 40, corner.y + 20, { steps: 4 });
+  await page.mouse.move(corner.x + 80, corner.y + 30, { steps: 4 });
+  await page.mouse.up({ button: 'right' });
+  const panned = await read<{ x: number; y: number }>('d.getViewport()');
+  expect(panned.x).toBeCloseTo(before.x + 80, 0);
+  expect(panned.y).toBeCloseTo(before.y + 30, 0);
+  expect(await read<number>('window.__menus')).toBe(0);
+
+  // A right click that doesn't move still raises contextMenu, once.
+  await page.mouse.click(corner.x, corner.y, { button: 'right' });
+  expect(await read<number>('window.__menus')).toBe(1);
+
+  // Left drag across the whole canvas: a selection box, no pan, and what is under it selected.
+  await page.mouse.move(corner.x, corner.y);
+  await page.mouse.down();
+  await page.mouse.move(corner.x + 200, corner.y + 200, { steps: 4 });
+  await expect(page.locator('.pv-marquee')).toBeVisible();
+  await page.mouse.move(box.x + box.width - 6, box.y + box.height - 6, { steps: 4 });
+  await page.mouse.up();
+  await expect(page.locator('.pv-marquee')).toHaveCount(0);
+  expect(await read<{ x: number; y: number }>('d.getViewport()')).toEqual(panned);
+  const selection = await read<{ kind: string }[]>('d.getSelection()');
+  expect(selection.length).toBeGreaterThan(1);
+  expect(selection.every((i) => i.kind === 'node')).toBe(true);
+});
