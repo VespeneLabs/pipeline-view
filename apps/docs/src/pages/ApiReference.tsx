@@ -117,7 +117,7 @@ const SECTIONS: { title: string; intro?: string; entries: Entry[] }[] = [
       },
       {
         sig: 'grid: { size, snap, visible }',
-        doc: 'Editor grid; visible draws it with --pv-grid.',
+        doc: "Editor grid; visible draws it with --pv-grid. While you drag nodes, alignment guides beat the grid, and a port beats both: when a moved node's port comes within the guide snap distance of the line straight out of the port it is linked to (ports facing each other, auto routing, no branch point), the node snaps so that the pipe runs straight, and a guide shows along it.",
       },
       { sig: 'minZoom, maxZoom', doc: 'Zoom limits.' },
       { sig: 'routing: { clearance?, spacing?, bendPenalty? }', doc: 'Orthogonal router tuning.' },

@@ -41,8 +41,25 @@ export interface Clipboard {
 export interface MoveOptions {
   /** Snap the lead node's position to the grid (defaults to `options.grid.snap`). */
   snap?: boolean;
-  /** Distance in diagram units within which alignment guides snap. 0 disables guides. Default 6. */
+  /**
+   * Distance in diagram units within which alignment guides snap. 0 disables guides. Default 6.
+   * The same distance lines up the ports of a link between a moved and a fixed node, so the pipe
+   * can run straight.
+   */
   guideThreshold?: number;
+}
+
+/**
+ * A link between a moved and a fixed node whose ports face each other along one axis. When the moved
+ * port lines up with the fixed one on the other axis, the pipe can run straight.
+ */
+interface PortPair {
+  /** 'y' for ports facing left/right (they align on y), 'x' for ports facing up/down. */
+  axis: 'x' | 'y';
+  /** The moved port at the start of the drag. */
+  start: Point;
+  /** The fixed port. */
+  target: Point;
 }
 
 interface MoveSession {
@@ -51,6 +68,7 @@ interface MoveSession {
   lead: string;
   others: Rect[];
   linkBase: Map<string, Point[]>;
+  ports: PortPair[];
 }
 
 const clone = <T>(v: T): T => structuredClone(v);
@@ -142,6 +160,7 @@ export class EditorCommands {
       lead,
       others,
       linkBase: this.manualLinkBase(valid),
+      ports: this.portPairs(moving),
     };
   }
 
@@ -166,6 +185,19 @@ export class EditorCommands {
       if (a.guides.some((g) => g.orientation === 'horizontal'))
         delta = { ...delta, y: rawDelta.y + a.dy };
       guides = a.guides;
+      // Ports of the moved nodes' links win over box guides: a straight pipe matters more.
+      const snapped: ('x' | 'y')[] = [];
+      for (const axis of ['x', 'y'] as const) {
+        const d = portSnap(s.ports, rawDelta, axis, threshold);
+        if (d === null) continue;
+        delta = { ...delta, [axis]: rawDelta[axis] + d };
+        snapped.push(axis);
+      }
+      for (const axis of snapped) {
+        const orientation = axis === 'y' ? 'horizontal' : 'vertical';
+        guides = guides.filter((g) => g.orientation !== orientation);
+        guides.push(...portGuides(s.ports, delta, axis));
+      }
     }
     this.diagram.preview((tx) => this.applyMove(tx, s.ids, s.start, delta, s.linkBase));
     return guides;
@@ -181,6 +213,31 @@ export class EditorCommands {
     if (!this.move) return;
     this.move = null;
     this.diagram.cancelPreview();
+  }
+
+  /**
+   * Links between a moved node and a fixed one, with auto routing, whose two ports face each other
+   * along one axis. Links drawn from a branch point or onto another link are left out: their pipe
+   * does not start at the port.
+   */
+  private portPairs(moving: Set<string>): PortPair[] {
+    const out: PortPair[] = [];
+    const horizontal = (d: PortDirection) => d === 'left' || d === 'right';
+    for (const l of this.store.links.values()) {
+      if (l.routing === 'manual' || l.fromAttach || l.toAttach) continue;
+      const fromMoves = moving.has(l.from.node);
+      if (fromMoves === moving.has(l.to.node)) continue;
+      const [mine, far] = fromMoves ? [l.from, l.to] : [l.to, l.from];
+      const mn = this.store.nodes.get(mine.node);
+      const fn = this.store.nodes.get(far.node);
+      if (!mn || !fn || mn.branchPoints?.[mine.port] || fn.branchPoints?.[far.port]) continue;
+      const a = this.geometry.port(mn, mine.port);
+      const b = this.geometry.port(fn, far.port);
+      if (!a || !b || horizontal(a.direction) !== horizontal(b.direction)) continue;
+      if (a.direction === b.direction) continue;
+      out.push({ axis: horizontal(a.direction) ? 'y' : 'x', start: a.point, target: b.point });
+    }
+    return out;
   }
 
   private unionBounds(s: MoveSession, delta: Point): Rect {
@@ -700,4 +757,38 @@ export function uniqueId(base: string, taken: (id: string) => boolean): string {
     const id = `${base}_${i}`;
     if (!taken(id)) return id;
   }
+}
+
+/** The smallest shift on `axis` (within `threshold`) that lines a moved port up with its fixed one. */
+function portSnap(
+  pairs: PortPair[],
+  delta: Point,
+  axis: 'x' | 'y',
+  threshold: number,
+): number | null {
+  let best: number | null = null;
+  for (const p of pairs) {
+    if (p.axis !== axis) continue;
+    const d = p.target[axis] - (p.start[axis] + delta[axis]);
+    if (Math.abs(d) <= threshold && (best === null || Math.abs(d) < Math.abs(best))) best = d;
+  }
+  return best;
+}
+
+/** A guide along each straight pipe between a moved port and its fixed one at `delta`. */
+function portGuides(pairs: PortPair[], delta: Point, axis: 'x' | 'y'): Guide[] {
+  const along = axis === 'y' ? 'x' : 'y';
+  const out: Guide[] = [];
+  for (const p of pairs) {
+    if (p.axis !== axis || Math.abs(p.start[axis] + delta[axis] - p.target[axis]) > 1e-6) continue;
+    const a = p.start[along] + delta[along];
+    const b = p.target[along];
+    out.push({
+      orientation: axis === 'y' ? 'horizontal' : 'vertical',
+      pos: p.target[axis],
+      from: Math.min(a, b),
+      to: Math.max(a, b),
+    });
+  }
+  return out;
 }

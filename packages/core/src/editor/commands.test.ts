@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Diagram } from '../diagram/diagram';
 import type { DiagramOptions } from '../diagram/types';
-import type { DiagramModel, NodeModel } from '../model/types';
+import type { DiagramModel, LinkModel, NodeModel } from '../model/types';
 import type { PortDef, SymbolDef } from '../symbols/types';
 import { EditorCommands, type EditorGeometry } from './commands';
 
@@ -110,6 +110,127 @@ describe('move', () => {
       { x: 120, y: 10 },
       { x: 120, y: 110 },
     ]);
+  });
+});
+
+describe('port alignment while moving', () => {
+  // A tank whose outlet sits low on its right side, and a valve whose inlet is at mid height:
+  // box edges and centres never line the two ports up.
+  const tank: SymbolDef = {
+    type: 'test/tank',
+    name: 'Tank',
+    category: 'Tanks',
+    size: { width: 60, height: 80 },
+    ports: [
+      { id: 'out', position: { x: 60, y: 53 }, direction: 'right' },
+      { id: 'top', position: { x: 30, y: 0 }, direction: 'top' },
+      { id: 'bottom', position: { x: 30, y: 80 }, direction: 'bottom' },
+    ],
+  };
+  const defs: Record<string, SymbolDef> = { 'test/tank': tank, 'test/valve': valve };
+  const geo: EditorGeometry = {
+    bounds: (n) => ({
+      ...n.position,
+      ...(defs[n.type]!.size as { width: number; height: number }),
+    }),
+    port: (n, id) => {
+      const p = (defs[n.type]!.ports as PortDef[]).find((q) => q.id === id);
+      return (
+        p && {
+          point: { x: n.position.x + p.position.x, y: n.position.y + p.position.y },
+          direction: p.direction,
+        }
+      );
+    },
+  };
+  function scene(link: Partial<LinkModel> = {}, options: DiagramOptions = {}) {
+    const d = new Diagram({ symbols: [valve, tank], ...options });
+    d.load({
+      version: 2,
+      nodes: [
+        { id: 't', type: 'test/tank', position: { x: 0, y: 0 } },
+        { id: 'v', type: 'test/valve', position: { x: 200, y: 0 } },
+        { id: 'w', type: 'test/tank', position: { x: 500, y: -200 } },
+      ],
+      links: [
+        {
+          id: 'l',
+          from: { node: 't', port: 'out' },
+          to: { node: 'v', port: 'in' },
+          kind: 'process',
+          ...link,
+        },
+      ],
+      annotations: [],
+    });
+    return { d, ed: new EditorCommands(d, geo) };
+  }
+
+  it('lines the moved port up with the fixed one and draws a guide along the pipe', () => {
+    const { d, ed } = scene();
+    ed.beginMove(['v'], 'v');
+    // The valve inlet would be at y = 30; the tank outlet is at y = 53.
+    ed.dragMove({ x: 0, y: 20 });
+    expect(node(d, 'v').position).toEqual({ x: 200, y: 20 });
+    // Inlet at 58: 5 below the outlet, so it snaps up to it.
+    const guides = ed.dragMove({ x: 0, y: 48 });
+    expect(node(d, 'v').position).toEqual({ x: 200, y: 43 });
+    expect(guides).toEqual([{ orientation: 'horizontal', pos: 53, from: 60, to: 200 }]);
+    ed.endMove();
+    expect(node(d, 'v').position).toEqual({ x: 200, y: 43 });
+  });
+
+  it('wins over the grid and over box guides on its axis', () => {
+    const { d, ed } = scene({}, { grid: { size: 10, snap: true, visible: true } });
+    ed.beginMove(['v'], 'v');
+    // The grid and the box guide (valve top 44 on tank centre 40) both say y = 40; the port says 43.
+    ed.dragMove({ x: 3, y: 44 });
+    expect(node(d, 'v').position).toEqual({ x: 200, y: 43 });
+    // No box guide in reach; the grid says 50, the port 43.
+    ed.dragMove({ x: 3, y: 47 });
+    expect(node(d, 'v').position).toEqual({ x: 200, y: 43 });
+    // Moving the tank instead: its outlet lines up with the valve inlet (y = 10).
+    ed.cancelMove();
+    ed.beginMove(['t'], 't');
+    ed.dragMove({ x: 2, y: -40 });
+    expect(node(d, 't').position).toEqual({ x: 0, y: -43 });
+  });
+
+  it('lines up ports that face each other vertically on x', () => {
+    const { d, ed } = scene({
+      from: { node: 't', port: 'top' },
+      to: { node: 'w', port: 'bottom' },
+    });
+    ed.beginMove(['w'], 'w');
+    // w's bottom port at x = 530 - 503 + 4 = 31 sits 1 off the tank's top port (x = 30).
+    const guides = ed.dragMove({ x: -499, y: 0 });
+    expect(node(d, 'w').position.x).toBe(0);
+    expect(guides).toContainEqual({ orientation: 'vertical', pos: 30, from: -120, to: 0 });
+  });
+
+  it('does not snap ports that face the same way', () => {
+    const { d, ed } = scene({ from: { node: 't', port: 'top' }, to: { node: 'w', port: 'top' } });
+    ed.beginMove(['w'], 'w');
+    ed.dragMove({ x: -470, y: 0 });
+    expect(node(d, 'w').position.x).toBe(30);
+  });
+
+  it('ignores manual links, links between two moved nodes, and branch points', () => {
+    const cases: [Partial<LinkModel>, string[]][] = [
+      [{ routing: 'manual', waypoints: [] }, ['v']],
+      [{}, ['v', 't']],
+    ];
+    for (const [link, ids] of cases) {
+      const { d, ed } = scene(link);
+      ed.beginMove(ids, 'v');
+      ed.dragMove({ x: 0, y: 48 });
+      expect(node(d, 'v').position).toEqual({ x: 200, y: 48 });
+    }
+    const { d, ed } = scene();
+    d.update((tx) => tx.updateNode('t', { branchPoints: { out: { x: 100, y: 50 } } }));
+    ed.beginMove(['v'], 'v');
+    ed.dragMove({ x: 0, y: 48 });
+    expect(node(d, 'v').position).toEqual({ x: 200, y: 48 });
   });
 });
 
